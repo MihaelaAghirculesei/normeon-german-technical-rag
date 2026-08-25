@@ -1,0 +1,50 @@
+#!/bin/sh
+# Pre-push safety gate.
+#
+#   1. Blocks any direct push to `main` -- the only way to get code into
+#      main is: push a branch, open a PR, merge once CI is green.
+#   2. For every other push, runs the same checks as CI (ruff, mypy,
+#      full pytest suite) and aborts the push if any of them fail, so
+#      nothing that would show a red X on GitHub ever leaves this machine.
+#
+# Installed via: git config core.hooksPath scripts/hooks
+# Bypassing this with `git push --no-verify` defeats the whole point --
+# don't.
+
+protected_branch="main"
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+venv_python="$repo_root/backend/.venv/Scripts/python.exe"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    branch=$(printf '%s' "$remote_ref" | sed -n 's#^refs/heads/##p')
+    if [ "$branch" = "$protected_branch" ]; then
+        current_branch=$(git rev-parse --abbrev-ref HEAD)
+        echo ""
+        echo "Direct push to '$protected_branch' is blocked."
+        echo "Push your branch and open a PR instead:"
+        echo "  git push -u origin $current_branch"
+        echo "  gh pr create --base main"
+        echo ""
+        exit 1
+    fi
+done
+
+if [ ! -f "$venv_python" ]; then
+    echo "Backend venv not found at backend/.venv -- cannot verify checks before push."
+    echo "Create it first: cd backend && python -m venv .venv && .venv/Scripts/pip install -e \".[dev]\""
+    exit 1
+fi
+
+echo "Running pre-push checks (ruff, mypy, pytest) -- mirrors CI..."
+cd "$repo_root/backend" || exit 1
+
+echo "-> ruff"
+"$venv_python" -m ruff check . || { echo "ruff failed -- push aborted."; exit 1; }
+
+echo "-> mypy"
+"$venv_python" -m mypy src || { echo "mypy failed -- push aborted."; exit 1; }
+
+echo "-> pytest (full suite, incl. integration tests -- needs Docker running)"
+"$venv_python" -m pytest || { echo "pytest failed -- push aborted."; exit 1; }
+
+echo "All checks passed -- push allowed."
