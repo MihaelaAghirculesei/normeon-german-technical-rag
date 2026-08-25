@@ -36,6 +36,18 @@ curl localhost:8010/health
 (Ports are offset from the defaults — 8010/5433/8081 — to avoid clashing
 with other local projects. See `docker-compose.yml`.)
 
+One-time setup after cloning:
+
+```
+git config core.hooksPath scripts/hooks
+```
+
+This enables a pre-push hook that blocks direct pushes to `main` and
+runs the same ruff/mypy/pytest checks as CI before every push, so
+nothing that would fail CI ever gets pushed. Workflow: branch → push
+branch → open a PR → merge only once CI is green. Don't bypass the
+hook with `--no-verify`.
+
 ## Documentation
 
 - `docs/adr/` — Architecture Decision Records
