@@ -17,5 +17,8 @@ node_modules/
 .idea/
 *.swp
 
+# local working notes / AI-session continuity — never published
+CLAUDE.md
+
 eval/reports/*.json
 eval/reports/*.html
