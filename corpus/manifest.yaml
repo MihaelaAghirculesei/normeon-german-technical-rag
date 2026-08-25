@@ -1,0 +1,8 @@
+# Corpus manifest — every document in corpus/ must have an entry here.
+# Only public, redistributable German technical documents. No DIN/ISO
+# (paywalled, not redistributable), no company Lastenhefte.
+#
+# status: planned   -> not downloaded yet
+#         present    -> file exists in corpus/ and matches this entry
+
+documents: []
