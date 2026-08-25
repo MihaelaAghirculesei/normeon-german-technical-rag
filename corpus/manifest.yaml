@@ -2,7 +2,81 @@
 # Only public, redistributable German technical documents. No DIN/ISO
 # (paywalled, not redistributable), no company Lastenhefte.
 #
-# status: planned   -> not downloaded yet
-#         present    -> file exists in corpus/ and matches this entry
+# status: present  -> file exists in corpus/ and matches this entry
+#         blocked  -> source identified, automated download blocked, see note
 
-documents: []
+documents:
+  - filename: StVZO.pdf
+    title: "Straßenverkehrs-Zulassungs-Ordnung"
+    doc_type: norm
+    language: de
+    source_url: "https://www.gesetze-im-internet.de/stvzo_2012/StVZO.pdf"
+    license: "Amtliches Werk (§ 5 UrhG) — gemeinfrei"
+    version_label: "Stand 2024-06-10"
+    retrieved: "2026-08-25"
+    status: present
+
+  - filename: FZV.pdf
+    title: "Fahrzeug-Zulassungsverordnung"
+    doc_type: norm
+    language: de
+    source_url: "https://www.gesetze-im-internet.de/fzv_2023/FZV.pdf"
+    license: "Amtliches Werk (§ 5 UrhG) — gemeinfrei"
+    version_label: "Stand 2026-05-12"
+    retrieved: "2026-08-25"
+    status: present
+
+  - filename: Lastenheft-EPS-v1.2.docx
+    title: "Lastenheft — Elektrisches Servolenksystem (EPS)"
+    doc_type: lastenheft
+    language: de
+    source_url: null
+    license: "Synthetisch, für dieses Projekt verfasst (siehe generate_lastenheft.py)"
+    version_label: "v1.2"
+    valid_from: "2024-01-01"
+    valid_until: "2025-12-31"
+    retrieved: "2026-08-25"
+    status: present
+    note: >
+      Enthält denselben Anforderungscode LH-3.2.1 wie v2.0, mit
+      abweichendem Wert (300 N statt 250 N) — bewusst für den
+      conflict-Testfall in der Evaluationssuite (Woche 4).
+
+  - filename: Lastenheft-EPS-v2.0.docx
+    title: "Lastenheft — Elektrisches Servolenksystem (EPS)"
+    doc_type: lastenheft
+    language: de
+    source_url: null
+    license: "Synthetisch, für dieses Projekt verfasst (siehe generate_lastenheft.py)"
+    version_label: "v2.0"
+    valid_from: "2026-01-01"
+    valid_until: null
+    retrieved: "2026-08-25"
+    status: present
+
+  - filename: UN-R79-Lenkanlagen.pdf
+    title: "UN-Regelung Nr. 79 — Lenkanlagen (konsolidierte Fassung, Änderungsserie 03)"
+    doc_type: norm
+    language: de
+    source_url: "https://eur-lex.europa.eu/legal-content/DE/TXT/PDF/?uri=CELEX:42018X1947&from=RO"
+    license: "Amtliches Werk der EU — frei zugänglich"
+    version_label: null
+    retrieved: null
+    status: blocked
+    note: >
+      EUR-Lex liefert diese URL nur über eine JS/AWS-WAF-Challenge aus
+      (HTTP 202 + x-amzn-waf-action: challenge) — curl/Skript-Zugriff
+      funktioniert nicht. Manuell im Browser öffnen und als PDF in
+      corpus/ ablegen, dann status auf "present" setzen und retrieved
+      nachtragen. Blockiert nicht den Rest von Tag 1.
+
+  - filename: UN-R155-Cybersicherheit.pdf
+    title: "UN-Regelung Nr. 155 — Cybersicherheit und Cybersicherheits-Managementsystem"
+    doc_type: norm
+    language: de
+    source_url: "https://eur-lex.europa.eu/legal-content/DE/TXT/PDF/?uri=OJ%3AL_202500005"
+    license: "Amtliches Werk der EU — frei zugänglich"
+    version_label: null
+    retrieved: null
+    status: blocked
+    note: "Gleiche Ursache wie UN-R79-Lenkanlagen.pdf — siehe oben."
