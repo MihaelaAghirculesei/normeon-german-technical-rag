@@ -19,6 +19,7 @@ dependencies = [
     "tenacity",
     "pymupdf~=1.25",
     "sentence-transformers~=3.3",
+    "python-multipart~=0.0.12",
 ]
 
 [project.optional-dependencies]
