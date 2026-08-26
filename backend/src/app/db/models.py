@@ -41,6 +41,7 @@ class Document(Base):
     valid_until: Mapped[date | None]
     page_count: Mapped[int | None]
     uploaded_by: Mapped[str | None]
+    status: Mapped[str] = mapped_column(server_default="pending")
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 
