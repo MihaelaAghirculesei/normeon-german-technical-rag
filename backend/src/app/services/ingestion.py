@@ -56,12 +56,15 @@ async def get_or_create_document(
 async def process_document(
     session: AsyncSession, embedder: EmbeddingAdapter, document: Document, content: bytes
 ) -> None:
-    """The slow half: parse -> chunk (both strategies) -> embed only the
-    chunks actually inserted this run. Safe to call repeatedly on the same
-    document: a `ready` document is a no-op, and one stuck mid-pipeline
+    """The slow half: parse -> chunk (both strategies) -> embed every chunk
+    that has no embedding yet for this model. Safe to call repeatedly on the
+    same document: a `ready` document is a no-op, and one stuck mid-pipeline
     (pending/parsing/embedding/failed) resumes rather than restarting, since
     chunk_hash / (chunk_id, model) uniqueness makes re-inserting an
-    already-inserted chunk or embedding a no-op.
+    already-inserted chunk or embedding a no-op, and embedding is driven off
+    "chunks still missing an embedding" rather than "chunks inserted this
+    run" -- so a document interrupted partway through embedding finishes its
+    remaining chunks instead of being marked ready with gaps.
 
     Status transitions each commit on their own, rather than the whole run
     being one transaction, so GET /documents/{id} can observe live progress
@@ -82,17 +85,14 @@ async def process_document(
             tmp_path.unlink(missing_ok=True)
         document.page_count = max((b.page for b in parsed.blocks), default=0)
 
-        new_chunk_rows: list[Chunk] = []
         for strategy in ALL_STRATEGIES:
-            domain_chunks = strategy.chunk(parsed)
-            new_chunk_rows.extend(
-                await _insert_chunks(session, document, strategy.name, domain_chunks)
-            )
+            await _insert_chunks(session, document, strategy.name, strategy.chunk(parsed))
 
         document.status = "embedding"
         await session.commit()
 
-        await _embed_and_store(session, embedder, new_chunk_rows)
+        pending = await _chunks_missing_embeddings(session, document, embedder.name)
+        await _embed_and_store(session, embedder, pending)
 
         document.status = "ready"
         await session.commit()
@@ -151,19 +151,15 @@ async def _insert_chunks(
     document: Document,
     strategy_name: str,
     domain_chunks: list[DomainChunk],
-) -> list[Chunk]:
+) -> None:
     if not domain_chunks:
-        return []
+        return
 
     rows = [_chunk_row(document, strategy_name, dc) for dc in domain_chunks]
-    stmt = (
-        pg_insert(Chunk)
-        .values(rows)
-        .on_conflict_do_nothing(index_elements=["document_id", "strategy", "chunk_hash"])
-        .returning(Chunk.id)
+    stmt = pg_insert(Chunk).values(rows).on_conflict_do_nothing(
+        index_elements=["document_id", "strategy", "chunk_hash"]
     )
-    result = await session.execute(stmt)
-    newly_inserted_ids = set(result.scalars().all())
+    await session.execute(stmt)
 
     # Resolve parent_ordinal -> parent_id now that every chunk of this
     # strategy has a real id -- including ones inserted in an earlier,
@@ -184,10 +180,20 @@ async def _insert_chunks(
             )
     await session.commit()
 
-    if not newly_inserted_ids:
-        return []
-    newly_inserted = await session.scalars(select(Chunk).where(Chunk.id.in_(newly_inserted_ids)))
-    return list(newly_inserted)
+
+async def _chunks_missing_embeddings(
+    session: AsyncSession, document: Document, model: str
+) -> list[Chunk]:
+    """Every chunk of this document without an embedding row for `model`,
+    ordered so batching is deterministic. On a fresh document this is all of
+    its chunks; on a resumed one it is only the chunks not yet embedded."""
+    result = await session.scalars(
+        select(Chunk)
+        .outerjoin(Embedding, (Embedding.chunk_id == Chunk.id) & (Embedding.model == model))
+        .where(Chunk.document_id == document.id, Embedding.chunk_id.is_(None))
+        .order_by(Chunk.strategy, Chunk.ordinal)
+    )
+    return list(result)
 
 
 async def _embed_and_store(
