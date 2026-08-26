@@ -4,8 +4,9 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 3 of 30. Backend skeleton, DB schema + migrations, structured
-German PDF parsing (title detection, section trees, table extraction).
+Status: Day 4 of 30. Backend skeleton, DB schema + migrations, structured
+German PDF parsing, and two chunking strategies (fixed-window and
+structural, compared experimentally later).
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
