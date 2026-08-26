@@ -7,13 +7,14 @@ import asyncio
 from pathlib import Path
 
 import pymupdf
+import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
-from app.db.models import Chunk, Embedding, Tenant
+from app.db.models import Chunk, Document, Embedding, Tenant
 from app.services.ingestion import ingest_document
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "migrations"
@@ -140,5 +141,75 @@ async def _ingest_once_and_check_strategies(database_url: str, tmp_path: Path) -
     async with session_factory() as session:
         strategies = await session.scalars(select(Chunk.strategy).distinct())
         assert set(strategies) == {"fixed_500", "structural"}
+
+    await engine.dispose()
+
+
+class _EmbedderFailingOnSecondBatch:
+    """Succeeds on the first batch, then raises -- simulates a process that
+    dies (or a machine that sleeps) partway through embedding a document."""
+
+    name = "fake"
+    dim = EMBEDDING_DIM
+
+    def __init__(self) -> None:
+        self.batches = 0
+
+    def embed_passages(self, texts: list[str]) -> list[list[float]]:
+        self.batches += 1
+        if self.batches >= 2:
+            raise RuntimeError("simulated interruption during embedding")
+        return [[0.0] * self.dim for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0] * self.dim
+
+
+def test_ingestion_resumes_embedding_after_an_interrupted_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.services.ingestion.EMBEDDING_BATCH_SIZE", 2)
+    with PostgresContainer("pgvector/pgvector:pg18", driver="asyncpg") as pg:
+        database_url = pg.get_connection_url()
+        command.upgrade(_alembic_config(database_url), "head")
+        asyncio.run(_interrupt_then_resume(database_url, tmp_path))
+
+
+async def _interrupt_then_resume(database_url: str, tmp_path: Path) -> None:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    content = _build_test_pdf(tmp_path)
+
+    async with session_factory() as session:
+        tenant = Tenant(name="Demo Tenant")
+        session.add(tenant)
+        await session.commit()
+        tenant_id = tenant.id
+
+    async with session_factory() as session:
+        with pytest.raises(RuntimeError, match="simulated interruption"):
+            await ingest_document(
+                session, _EmbedderFailingOnSecondBatch(), tenant_id, "test.pdf", "norm", content
+            )
+
+    async with session_factory() as session:
+        document = await session.scalar(select(Document))
+        assert document is not None and document.status == "failed"
+        total_chunks = await session.scalar(select(func.count()).select_from(Chunk))
+        embedded = await session.scalar(select(func.count()).select_from(Embedding))
+        assert total_chunks is not None and total_chunks > 2
+        assert embedded == 2  # only the first batch was committed
+
+    async with session_factory() as session:
+        document, already_ingested = await ingest_document(
+            session, _FakeEmbedder(), tenant_id, "test.pdf", "norm", content
+        )
+        assert already_ingested is False
+        assert document.status == "ready"
+
+    async with session_factory() as session:
+        total_chunks = await session.scalar(select(func.count()).select_from(Chunk))
+        embedded = await session.scalar(select(func.count()).select_from(Embedding))
+        assert embedded == total_chunks
 
     await engine.dispose()
