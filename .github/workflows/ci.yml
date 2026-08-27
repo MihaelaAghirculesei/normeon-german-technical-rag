@@ -16,6 +16,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      # sentence-transformers pulls in torch, whose default Linux wheel
+      # bundles the CUDA runtime (~2.5 GB of nvidia-* packages). CI has no
+      # GPU and never loads a real model, so install the CPU-only build
+      # first and let the editable install find the requirement satisfied.
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
