@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, Response, UploadFile
 from pydantic import BaseModel
 
 from app.adapters.embedding.base import EmbeddingAdapter
@@ -26,6 +26,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     session: DbSession,
     embedder: EmbedderDep,
+    response: Response,
     tenant_id: Annotated[UUID, Form()],
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
@@ -34,7 +35,11 @@ async def upload_document(
     document, already_ingested = await get_or_create_document(
         session, tenant_id, file.filename or "unnamed", doc_type, content
     )
-    if not already_ingested:
+    if already_ingested:
+        # Nothing was created, so 201 would be a lie -- report the existing
+        # resource with a plain 200 instead.
+        response.status_code = 200
+    else:
         background_tasks.add_task(_process_in_background, document.id, content, embedder)
     return DocumentStatusResponse(
         document_id=document.id,
