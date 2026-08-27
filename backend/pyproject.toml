@@ -18,6 +18,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "tenacity",
     "pymupdf~=1.25",
+    "sentence-transformers~=3.3",
+    "python-multipart~=0.0.12",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,10 @@ python_version = "3.13"
 strict = true
 mypy_path = "src"
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = "sentence_transformers.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
