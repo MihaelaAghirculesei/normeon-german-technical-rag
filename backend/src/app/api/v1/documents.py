@@ -18,10 +18,16 @@ class DocumentStatusResponse(BaseModel):
     document_id: UUID
     filename: str
     status: str
-    already_ingested: bool = False
 
 
-@router.post("", response_model=DocumentStatusResponse, status_code=201)
+class DocumentUploadResponse(DocumentStatusResponse):
+    # Only meaningful as the answer to an upload: it says whether this
+    # request created the document or found an existing one. Reporting it
+    # on a plain status read would always be a confusing "false".
+    already_ingested: bool
+
+
+@router.post("", response_model=DocumentUploadResponse, status_code=201)
 async def upload_document(
     background_tasks: BackgroundTasks,
     session: DbSession,
@@ -30,7 +36,7 @@ async def upload_document(
     tenant_id: Annotated[UUID, Form()],
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
-) -> DocumentStatusResponse:
+) -> DocumentUploadResponse:
     content = await file.read()
     document, already_ingested = await get_or_create_document(
         session, tenant_id, file.filename or "unnamed", doc_type, content
@@ -41,7 +47,7 @@ async def upload_document(
         response.status_code = 200
     else:
         background_tasks.add_task(_process_in_background, document.id, content, embedder)
-    return DocumentStatusResponse(
+    return DocumentUploadResponse(
         document_id=document.id,
         filename=document.filename,
         status=document.status,

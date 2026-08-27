@@ -126,7 +126,10 @@ def test_getting_a_document_returns_its_current_status(client_factory: Any) -> N
     response = client.get(f"/api/v1/documents/{DOCUMENT_ID}")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "embedding"
+    body = response.json()
+    assert body["status"] == "embedding"
+    # already_ingested belongs to the upload response only.
+    assert "already_ingested" not in body
 
 
 def test_getting_an_unknown_document_returns_a_typed_404(client_factory: Any) -> None:
