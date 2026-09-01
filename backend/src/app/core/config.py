@@ -17,5 +17,13 @@ class Settings(BaseSettings):
     embedding_api_base_url: str | None = None
     embedding_api_key: str | None = None
 
+    # Retrieval. `retrieval_strategy` picks which chunking to search over
+    # (the two are ingested side by side); the eval matrix in Week 4 flips
+    # it. `hnsw_ef_search` is pgvector's per-session recall/latency knob --
+    # below ~20 recall collapses, above ~100 costs latency for nothing.
+    retrieval_strategy: Literal["fixed_500", "structural"] = "structural"
+    retrieval_top_k: int = 10
+    hnsw_ef_search: int = 40
+
 
 settings = Settings()
