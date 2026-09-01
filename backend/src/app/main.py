@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import documents, health
+from app.api.v1 import documents, health, search
 from app.core.config import settings
 from app.core.errors import NormeonError
 from app.core.logging import configure_logging
@@ -18,3 +18,4 @@ async def normeon_error_handler(request: Request, exc: NormeonError) -> JSONResp
 
 app.include_router(health.router)
 app.include_router(documents.router)
+app.include_router(search.router)
