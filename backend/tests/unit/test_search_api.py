@@ -90,8 +90,31 @@ def client_with_retriever(monkeypatch: pytest.MonkeyPatch) -> Any:
             )
             return hits
 
+        async def fake_hybrid_search(
+            session: Any,
+            embedder: Any,
+            *,
+            tenant_id: uuid.UUID,
+            question: str,
+            strategy: str | None,
+            top_k: int | None,
+            ef_search: int | None,
+        ) -> list[RetrievedChunk]:
+            calls.append(
+                {
+                    "fn": "hybrid_search",
+                    "tenant_id": tenant_id,
+                    "question": question,
+                    "strategy": strategy,
+                    "top_k": top_k,
+                    "ef_search": ef_search,
+                }
+            )
+            return hits
+
         monkeypatch.setattr(search, "vector_search", fake_vector_search)
         monkeypatch.setattr(search, "fts_search", fake_fts_search)
+        monkeypatch.setattr(search, "hybrid_search", fake_hybrid_search)
         app.dependency_overrides[get_session] = lambda: object()
         app.dependency_overrides[get_embedder] = _FakeEmbedder
         return TestClient(app), calls
@@ -178,12 +201,38 @@ def test_search_mode_fts_routes_to_full_text_search(client_with_retriever: Any) 
     ]
 
 
+def test_search_mode_hybrid_routes_to_hybrid_search(client_with_retriever: Any) -> None:
+    client, calls = client_with_retriever([_hit(0.5)])
+
+    response = client.post(
+        "/api/v1/search",
+        json={
+            "question": "Welche Lenkkraft nennt LH-3.2.1?",
+            "tenant_id": str(TENANT_ID),
+            "mode": "hybrid",
+            "k": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "fn": "hybrid_search",
+            "tenant_id": TENANT_ID,
+            "question": "Welche Lenkkraft nennt LH-3.2.1?",
+            "strategy": None,
+            "top_k": 20,
+            "ef_search": None,
+        }
+    ]
+
+
 def test_search_rejects_an_unknown_mode(client_with_retriever: Any) -> None:
     client, _ = client_with_retriever([])
 
     response = client.post(
         "/api/v1/search",
-        json={"question": "x", "tenant_id": str(TENANT_ID), "mode": "hybrid"},
+        json={"question": "x", "tenant_id": str(TENANT_ID), "mode": "keyword"},
     )
 
     assert response.status_code == 422

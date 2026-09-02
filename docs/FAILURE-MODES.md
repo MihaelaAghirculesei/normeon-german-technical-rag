@@ -48,6 +48,34 @@ Day 8. `normalize_de` canonicalises requirement codes and norm references
 *should* be reliable at — exact reference lookup — is not defeated by
 tokenisation.
 
+## Hybrid retrieval (RRF fusion)
+
+`hybrid_search` fuses the vector, full-text and trigram rankings with
+Reciprocal Rank Fusion: `score(d) = Σ_i w_i / (k + rank_i(d))`.
+
+### RRF sees rank, not confidence
+
+Fusion uses each hit's *position* in its branch, not its branch score. A
+vector hit at cosine `0.92` and one at `0.55` contribute the same amount
+if both are rank 1. So a branch that is confidently right and a branch
+that is weakly guessing count equally per position; the only lever is the
+per-branch weight, which is global, not per-query.
+
+### Consensus can outweigh a single strong signal
+
+A chunk found by one branch only is capped at that branch's contribution
+(`w_i / (k + rank)` ≈ `0.016` at rank 1 with the default `k = 60`), while
+a chunk sitting at rank 3 in two branches scores ≈ `0.031`. This is
+usually the behaviour we want, but it can push down a chunk that only the
+vector branch recognised as on-topic when the lexical branches had
+nothing relevant to say.
+
+**Mitigation / status.** `k` and the three branch weights
+(`rrf_k`, `rrf_weight_vector` / `_fts` / `_trgm` in `core/config.py`) are
+deliberately parameters, not constants. Their defaults (`k = 60`, equal
+weights) are placeholders; the Week 4 experiment matrix tunes them
+against the 50-question eval set, and the numbers land here.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:
