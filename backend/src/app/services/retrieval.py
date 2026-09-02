@@ -1,9 +1,10 @@
-"""Retrieval pipeline. For now a single stage -- vector k-NN -- but this is
-where FTS (Day 7), RRF fusion (Day 8) and reranking (Day 9) will be
-composed into one instrumented function.
+"""Retrieval pipeline. Two stages so far -- vector k-NN and German
+full-text -- kept as separate callables; RRF fusion (Day 8) and reranking
+(Day 9) will compose them into one instrumented function.
 """
 
 import asyncio
+from typing import Any
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
@@ -15,10 +16,27 @@ from app.core.config import settings
 from app.db.models import EMBEDDING_DIM
 from app.db.queries import load_sql
 from app.domain.models import RetrievedChunk
+from app.domain.normalization import extract_code, normalize_de
 
 _VECTOR_SEARCH_SQL = text(load_sql("vector_search")).bindparams(
     bindparam("qvec", type_=Vector(EMBEDDING_DIM)),
 )
+_FTS_SEARCH_SQL = text(load_sql("fts_search"))
+_TRGM_SEARCH_SQL = text(load_sql("trgm_search"))
+
+
+def _row_to_chunk(row: Any) -> RetrievedChunk:
+    return RetrievedChunk(
+        chunk_id=row.chunk_id,
+        document_id=row.document_id,
+        filename=row.filename,
+        content=row.content,
+        page_from=row.page_from,
+        page_to=row.page_to,
+        section_path=row.section_path,
+        heading=row.heading,
+        score=float(row.score),
+    )
 
 
 async def vector_search(
@@ -89,17 +107,54 @@ async def vector_search_by_vector(
             "k": k,
         },
     )
-    return [
-        RetrievedChunk(
-            chunk_id=row.chunk_id,
-            document_id=row.document_id,
-            filename=row.filename,
-            content=row.content,
-            page_from=row.page_from,
-            page_to=row.page_to,
-            section_path=row.section_path,
-            heading=row.heading,
-            score=float(row.score),
+    return [_row_to_chunk(row) for row in result]
+
+
+async def fts_search(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    question: str,
+    strategy: str | None = None,
+    k: int | None = None,
+) -> list[RetrievedChunk]:
+    """German full-text search for this tenant, ranked by `ts_rank_cd`.
+
+    The question goes through the same `normalize_de` as the indexed text,
+    so a requirement code or norm reference written differently in the
+    query still lands on the token that ingestion stored.
+
+    When the question looks like it names a code (`extract_code`), a
+    trigram `word_similarity` branch runs as well and its chunks are
+    appended (deduped) after the full-text hits -- extra recall for a
+    lightly misspelled or oddly spaced code. This is a plain concatenation,
+    not a score-aware merge; true cross-branch fusion is Day 8's RRF.
+    """
+    strategy = strategy or settings.retrieval_strategy
+    k = k if k is not None else settings.retrieval_top_k
+
+    params = {
+        "q": normalize_de(question),
+        "tenant_id": tenant_id,
+        "strategy": strategy,
+        "k": k,
+    }
+    result = await session.execute(_FTS_SEARCH_SQL, params)
+    hits = [_row_to_chunk(row) for row in result]
+
+    code = extract_code(question)
+    if code is not None:
+        await session.execute(
+            text(
+                "SET LOCAL pg_trgm.word_similarity_threshold = "
+                f"{float(settings.trgm_code_threshold)}"
+            )
         )
-        for row in result
-    ]
+        trgm_result = await session.execute(
+            _TRGM_SEARCH_SQL,
+            {"code": code, "tenant_id": tenant_id, "strategy": strategy, "k": k},
+        )
+        seen = {hit.chunk_id for hit in hits}
+        hits.extend(_row_to_chunk(row) for row in trgm_result if row.chunk_id not in seen)
+
+    return hits[:k]

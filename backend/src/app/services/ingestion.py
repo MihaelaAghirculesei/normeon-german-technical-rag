@@ -14,6 +14,7 @@ from app.adapters.parsing.pdf import parse_pdf
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
+from app.domain.normalization import normalize_de
 
 EMBEDDING_BATCH_SIZE = 32
 
@@ -139,9 +140,9 @@ def _chunk_row(document: Document, strategy_name: str, dc: DomainChunk) -> dict[
         "char_start": 0,
         "char_end": len(dc.content),
         "content": dc.content,
-        # Placeholder until Day 7's normalize_de lands; the tsvector column
-        # is generated from this so ingestion must not leave it null.
-        "content_norm": dc.content.lower(),
+        # Feeds the `tsv` generated column (to_tsvector('german', ...)).
+        # Same function normalises the query side, so the two agree.
+        "content_norm": normalize_de(dc.content),
         "token_count": dc.token_count,
     }
 
