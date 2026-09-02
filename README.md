@@ -4,13 +4,15 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 8 of 30. Backend skeleton, DB schema + migrations, structured
+Status: Day 9 of 30. Backend skeleton, DB schema + migrations, structured
 German PDF parsing, two chunking strategies (fixed-window and structural,
 compared experimentally later), an idempotent ingestion pipeline with a
 pluggable e5 embedding adapter (local or API), tenant-scoped vector k-NN
 search over the HNSW index, German full-text search with requirement-code
-normalisation and a trigram fallback, and hybrid retrieval fusing the
-three branches with Reciprocal Rank Fusion.
+normalisation and a trigram fallback, hybrid retrieval fusing the three
+branches with Reciprocal Rank Fusion, and a full retrieval pipeline
+(hybrid → cross-encoder rerank → token-budget context selection) with
+per-phase timings.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
