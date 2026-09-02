@@ -29,5 +29,19 @@ class Settings(BaseSettings):
     # `:code <% content_norm`. 0.5 tolerates a little spacing/spelling drift.
     trgm_code_threshold: float = 0.5
 
+    # Hybrid retrieval (Day 8): fuse the vector, full-text and trigram
+    # rankings with Reciprocal Rank Fusion. `hybrid_candidate_k` is how
+    # many hits to pull from each branch before fusing; `hybrid_top_k` how
+    # many fused hits to keep (the Day 9 reranker narrows further, so this
+    # stays wide). `rrf_k` dampens the weight of top ranks -- 60 is the
+    # RRF paper's value. The three weights scale each branch's
+    # contribution; all four are experiment-matrix variables in Week 4.
+    hybrid_candidate_k: int = 40
+    hybrid_top_k: int = 40
+    rrf_k: int = 60
+    rrf_weight_vector: float = 1.0
+    rrf_weight_fts: float = 1.0
+    rrf_weight_trgm: float = 1.0
+
 
 settings = Settings()
