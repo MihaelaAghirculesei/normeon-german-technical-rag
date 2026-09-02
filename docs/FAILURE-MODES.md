@@ -76,6 +76,47 @@ deliberately parameters, not constants. Their defaults (`k = 60`, equal
 weights) are placeholders; the Week 4 experiment matrix tunes them
 against the 50-question eval set, and the numbers land here.
 
+## Reranking + context selection
+
+`retrieve_context` runs the hybrid candidates through a cross-encoder
+(`bge-reranker-v2-m3`) and then fills a token budget, skipping a
+`section_path` already represented.
+
+### The cross-encoder truncates long chunks
+
+The reranker model has a fixed maximum input length (~512 tokens for the
+`(query, chunk)` pair). A structural chunk near the 800-token ceiling is
+truncated before scoring, so its tail never influences its rerank score —
+the relevant sentence may be the part that got cut.
+
+### Section dedup is first-chunk-wins
+
+Context selection keeps only the first chunk of any `section_path`. If the
+answer is split across two adjacent chunks of one long section, the
+second is dropped even when it would have fit the budget.
+
+### The token budget is approximate
+
+The 4000-"token" budget counts whitespace words, not the generator's
+subword tokens (German runs ~1.3× more subword tokens than words). It is
+a relevance/diversity cap, not a hard context-window guarantee — the
+generation day will need its own real-tokenizer check.
+
+**Cost — the cross-encoder is not viable live on the dev box.**
+`scripts/try_rerank.py` measured `bge-reranker-v2-m3` at **~10 s per
+`(query, chunk)` pair** on this CPU (xlm-roberta-large, fp32, a RAM-tight
+machine also running the DB). Over the 40 hybrid candidates that is ~7
+minutes per request — the plan's "~1.5 s for 40 pairs" assumes a smaller
+or GPU-served reranker. So on this hardware the practical config is
+`reranker_provider = "noop"` (or a much smaller `hybrid_candidate_k`);
+`cross_encoder` stays the real implementation for the Week 4 matrix,
+which will need a GPU or a served reranker. The pipeline itself is
+correct — `retrieve_context` and the adapters are covered by tests with
+a fast fake reranker, and the cross-encoder's *ranking* on real chunks
+is sound (it lifted the substantive § 41 braking rule over § 42 for
+"Bremse Anhänger", § 36 tyres from #3 to a near-tie for #1 for "Reifen
+Profiltiefe").
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:
