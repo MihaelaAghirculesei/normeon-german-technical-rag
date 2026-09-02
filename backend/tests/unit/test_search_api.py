@@ -61,6 +61,7 @@ def client_with_retriever(monkeypatch: pytest.MonkeyPatch) -> Any:
         ) -> list[RetrievedChunk]:
             calls.append(
                 {
+                    "fn": "vector_search",
                     "tenant_id": tenant_id,
                     "question": question,
                     "strategy": strategy,
@@ -70,7 +71,27 @@ def client_with_retriever(monkeypatch: pytest.MonkeyPatch) -> Any:
             )
             return hits
 
+        async def fake_fts_search(
+            session: Any,
+            *,
+            tenant_id: uuid.UUID,
+            question: str,
+            strategy: str | None,
+            k: int | None,
+        ) -> list[RetrievedChunk]:
+            calls.append(
+                {
+                    "fn": "fts_search",
+                    "tenant_id": tenant_id,
+                    "question": question,
+                    "strategy": strategy,
+                    "k": k,
+                }
+            )
+            return hits
+
         monkeypatch.setattr(search, "vector_search", fake_vector_search)
+        monkeypatch.setattr(search, "fts_search", fake_fts_search)
         app.dependency_overrides[get_session] = lambda: object()
         app.dependency_overrides[get_embedder] = _FakeEmbedder
         return TestClient(app), calls
@@ -111,6 +132,7 @@ def test_search_forwards_overrides_to_the_retriever(client_with_retriever: Any) 
 
     assert calls == [
         {
+            "fn": "vector_search",
             "tenant_id": TENANT_ID,
             "question": "LH-3.2.1",
             "strategy": "fixed_500",
@@ -118,6 +140,53 @@ def test_search_forwards_overrides_to_the_retriever(client_with_retriever: Any) 
             "ef_search": 80,
         }
     ]
+
+
+def test_search_defaults_to_vector_mode(client_with_retriever: Any) -> None:
+    client, calls = client_with_retriever([])
+
+    client.post(
+        "/api/v1/search",
+        json={"question": "Lenkkraft", "tenant_id": str(TENANT_ID)},
+    )
+
+    assert calls[0]["fn"] == "vector_search"
+
+
+def test_search_mode_fts_routes_to_full_text_search(client_with_retriever: Any) -> None:
+    client, calls = client_with_retriever([_hit(0.4)])
+
+    response = client.post(
+        "/api/v1/search",
+        json={
+            "question": "Welche Anforderungen stellt LH-3.2.1?",
+            "tenant_id": str(TENANT_ID),
+            "mode": "fts",
+            "k": 5,
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "fn": "fts_search",
+            "tenant_id": TENANT_ID,
+            "question": "Welche Anforderungen stellt LH-3.2.1?",
+            "strategy": None,
+            "k": 5,
+        }
+    ]
+
+
+def test_search_rejects_an_unknown_mode(client_with_retriever: Any) -> None:
+    client, _ = client_with_retriever([])
+
+    response = client.post(
+        "/api/v1/search",
+        json={"question": "x", "tenant_id": str(TENANT_ID), "mode": "hybrid"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_search_leaves_unset_params_as_none_for_the_service_to_default(
