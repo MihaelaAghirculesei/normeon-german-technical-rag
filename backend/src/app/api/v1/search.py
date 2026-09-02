@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession, EmbedderDep
-from app.services.retrieval import fts_search, vector_search
+from app.services.retrieval import fts_search, hybrid_search, vector_search
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
@@ -21,10 +21,10 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 class SearchRequest(BaseModel):
     question: str = Field(min_length=1)
     tenant_id: UUID
-    mode: Literal["vector", "fts"] = "vector"
+    mode: Literal["vector", "fts", "hybrid"] = "vector"
     strategy: Literal["fixed_500", "structural"] | None = None
-    k: int | None = Field(default=None, ge=1, le=100)
-    ef_search: int | None = Field(default=None, ge=1, le=1000)  # vector mode only
+    k: int | None = Field(default=None, ge=1, le=100)  # hits to return
+    ef_search: int | None = Field(default=None, ge=1, le=1000)  # vector / hybrid only
 
 
 class SearchHit(BaseModel):
@@ -56,6 +56,16 @@ async def search(
             question=payload.question,
             strategy=payload.strategy,
             k=payload.k,
+        )
+    elif payload.mode == "hybrid":
+        chunks = await hybrid_search(
+            session,
+            embedder,
+            tenant_id=payload.tenant_id,
+            question=payload.question,
+            strategy=payload.strategy,
+            top_k=payload.k,
+            ef_search=payload.ef_search,
         )
     else:
         chunks = await vector_search(
