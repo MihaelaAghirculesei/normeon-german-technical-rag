@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     retrieval_strategy: Literal["fixed_500", "structural"] = "structural"
     retrieval_top_k: int = 10
     hnsw_ef_search: int = 40
+    # Cutoff for the trigram fallback branch that runs when a query names a
+    # code ("LH-3.2.1", "UN R79"): pg_trgm.word_similarity_threshold for
+    # `:code <% content_norm`. 0.5 tolerates a little spacing/spelling drift.
+    trgm_code_threshold: float = 0.5
 
 
 settings = Settings()

@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession, EmbedderDep
-from app.services.retrieval import vector_search
+from app.services.retrieval import fts_search, vector_search
 
 router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
@@ -21,9 +21,10 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 class SearchRequest(BaseModel):
     question: str = Field(min_length=1)
     tenant_id: UUID
+    mode: Literal["vector", "fts"] = "vector"
     strategy: Literal["fixed_500", "structural"] | None = None
     k: int | None = Field(default=None, ge=1, le=100)
-    ef_search: int | None = Field(default=None, ge=1, le=1000)
+    ef_search: int | None = Field(default=None, ge=1, le=1000)  # vector mode only
 
 
 class SearchHit(BaseModel):
@@ -48,15 +49,24 @@ async def search(
     payload: SearchRequest, session: DbSession, embedder: EmbedderDep
 ) -> SearchResponse:
     started = time.perf_counter()
-    chunks = await vector_search(
-        session,
-        embedder,
-        tenant_id=payload.tenant_id,
-        question=payload.question,
-        strategy=payload.strategy,
-        k=payload.k,
-        ef_search=payload.ef_search,
-    )
+    if payload.mode == "fts":
+        chunks = await fts_search(
+            session,
+            tenant_id=payload.tenant_id,
+            question=payload.question,
+            strategy=payload.strategy,
+            k=payload.k,
+        )
+    else:
+        chunks = await vector_search(
+            session,
+            embedder,
+            tenant_id=payload.tenant_id,
+            question=payload.question,
+            strategy=payload.strategy,
+            k=payload.k,
+            ef_search=payload.ef_search,
+        )
     took_ms = (time.perf_counter() - started) * 1000
     return SearchResponse(
         hits=[SearchHit(**asdict(chunk)) for chunk in chunks],
