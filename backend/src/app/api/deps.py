@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.embedding.e5_api import ApiE5Embedder
 from app.adapters.embedding.e5_local import LocalE5Embedder
+from app.adapters.reranker.base import Reranker
+from app.adapters.reranker.cross_encoder import CrossEncoderReranker
+from app.adapters.reranker.noop import NoopReranker
 from app.core.config import settings
 from app.db.session import get_session
 
@@ -30,3 +33,16 @@ def get_embedder() -> EmbeddingAdapter:
 
 
 EmbedderDep = Annotated[EmbeddingAdapter, Depends(get_embedder)]
+
+
+@lru_cache
+def get_reranker() -> Reranker:
+    """Cached so the cross-encoder is built once per process, not per
+    request (the spec's "singleton for the app's lifetime"). The model
+    itself still loads lazily inside the adapter on first use."""
+    if settings.reranker_provider == "noop":
+        return NoopReranker()
+    return CrossEncoderReranker(settings.reranker_model)
+
+
+RerankerDep = Annotated[Reranker, Depends(get_reranker)]

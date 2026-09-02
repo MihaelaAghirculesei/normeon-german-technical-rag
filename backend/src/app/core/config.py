@@ -43,5 +43,16 @@ class Settings(BaseSettings):
     rrf_weight_fts: float = 1.0
     rrf_weight_trgm: float = 1.0
 
+    # Reranking + context selection (Day 9). The reranker re-scores the
+    # hybrid candidates jointly against the query; `reranker_provider =
+    # "noop"` is the matrix's "off" cell. `rerank_top_k` is how many
+    # survive the rerank. Context selection then fills a token budget
+    # (not a fixed chunk count), skipping a `section_path` already
+    # represented. All four are experiment-matrix variables in Week 4.
+    reranker_provider: Literal["noop", "cross_encoder"] = "cross_encoder"
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_top_k: int = 8
+    context_token_budget: int = 4000
+
 
 settings = Settings()
