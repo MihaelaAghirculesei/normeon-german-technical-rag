@@ -11,9 +11,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_embedder, get_session
+from app.api.deps import get_embedder, get_reranker, get_session
 from app.api.v1 import search
-from app.domain.models import RetrievedChunk
+from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.main import app
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -112,11 +112,40 @@ def client_with_retriever(monkeypatch: pytest.MonkeyPatch) -> Any:
             )
             return hits
 
+        async def fake_retrieve_context(
+            session: Any,
+            embedder: Any,
+            reranker: Any,
+            *,
+            tenant_id: uuid.UUID,
+            question: str,
+            strategy: str | None,
+            rerank_top_k: int | None,
+        ) -> RetrievalResult:
+            calls.append(
+                {
+                    "fn": "retrieve_context",
+                    "tenant_id": tenant_id,
+                    "question": question,
+                    "strategy": strategy,
+                    "rerank_top_k": rerank_top_k,
+                }
+            )
+            return RetrievalResult(
+                context=hits,
+                reranked=hits,
+                timing=PipelineTiming(
+                    hybrid_ms=12.0, rerank_ms=1500.0, select_ms=0.1, total_ms=1512.1
+                ),
+            )
+
         monkeypatch.setattr(search, "vector_search", fake_vector_search)
         monkeypatch.setattr(search, "fts_search", fake_fts_search)
         monkeypatch.setattr(search, "hybrid_search", fake_hybrid_search)
+        monkeypatch.setattr(search, "retrieve_context", fake_retrieve_context)
         app.dependency_overrides[get_session] = lambda: object()
         app.dependency_overrides[get_embedder] = _FakeEmbedder
+        app.dependency_overrides[get_reranker] = lambda: object()
         return TestClient(app), calls
 
     yield make
@@ -225,6 +254,52 @@ def test_search_mode_hybrid_routes_to_hybrid_search(client_with_retriever: Any) 
             "ef_search": None,
         }
     ]
+
+
+def test_search_mode_pipeline_routes_to_retrieve_context_and_returns_timing(
+    client_with_retriever: Any,
+) -> None:
+    client, calls = client_with_retriever([_hit(0.9), _hit(0.6, section="5.1.3")])
+
+    response = client.post(
+        "/api/v1/search",
+        json={
+            "question": "Welche Lenkkraft ist zulaessig?",
+            "tenant_id": str(TENANT_ID),
+            "mode": "pipeline",
+            "k": 8,
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "fn": "retrieve_context",
+            "tenant_id": TENANT_ID,
+            "question": "Welche Lenkkraft ist zulaessig?",
+            "strategy": None,
+            "rerank_top_k": 8,
+        }
+    ]
+    body = response.json()
+    assert [h["score"] for h in body["hits"]] == [0.9, 0.6]
+    assert body["timing"] == {
+        "hybrid_ms": 12.0,
+        "rerank_ms": 1500.0,
+        "select_ms": 0.1,
+        "total_ms": 1512.1,
+    }
+
+
+def test_search_non_pipeline_modes_have_no_timing(client_with_retriever: Any) -> None:
+    client, _ = client_with_retriever([_hit(0.5)])
+
+    response = client.post(
+        "/api/v1/search",
+        json={"question": "Lenkkraft", "tenant_id": str(TENANT_ID), "mode": "hybrid"},
+    )
+
+    assert response.json()["timing"] is None
 
 
 def test_search_rejects_an_unknown_mode(client_with_retriever: Any) -> None:
