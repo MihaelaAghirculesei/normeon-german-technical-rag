@@ -1,0 +1,29 @@
+# 15 hand-written retrieval probe queries over the dev corpus
+# (StVZO.pdf + FZV.pdf). One question per line; blank lines and lines
+# starting with '#' are ignored. This is the ancestor of the Week 4
+# evaluation suite -- for now it only feeds scripts/run_eval_queries.py,
+# which runs each question through the full pipeline and prints a table.
+# Later this file grows an expected-section column per question.
+
+# --- keyword / section-name queries -------------------------------------
+Welche Bremswirkung muss die Betriebsbremse eines Kraftfahrzeugs erreichen?
+Hoechstzulaessige Abmessungen von Fahrzeugen und Fahrzeugkombinationen
+Mindestprofiltiefe der Reifen von Personenkraftwagen
+Vorschriften fuer Scheinwerfer fuer Fern- und Abblendlicht
+Einrichtungen fuer Schallzeichen am Kraftfahrzeug
+
+# --- natural-language paraphrases (compounds, synonyms) ----------------
+Anforderungen an Sicherheitsgurte und Rueckhalteeinrichtungen fuer Kinder
+Welche Anhaengelast darf hinter einem Pkw gezogen werden?
+Welche Lichtfarbe ist fuer die Nebelschlussleuchte vorgeschrieben?
+Wie viele Rueckspiegel muss ein Lastkraftwagen haben?
+Wann muss ein Fahrzeug zur Hauptuntersuchung vorgefuehrt werden?
+Welche Anforderungen gelten fuer den Geschwindigkeitsmesser?
+
+# --- registration (FZV) ------------------------------------------------
+Ausgestaltung und Anbringung des amtlichen Kennzeichens
+Welche Unterlagen sind fuer den Antrag auf Zulassung erforderlich?
+
+# --- code / norm reference -------------------------------------------
+Regelungen im Zusammenhang mit ECE-R 83
+Zulaessiges Gesamtgewicht und Achslast von Anhaengern
