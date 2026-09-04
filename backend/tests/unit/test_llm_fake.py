@@ -1,0 +1,58 @@
+"""Unit tests for the deterministic FakeLlmClient (asyncio_mode = auto)."""
+
+from app.adapters.llm.fake import FakeLlmClient
+
+
+async def test_cites_the_markers_present_in_the_user_message() -> None:
+    client = FakeLlmClient()
+
+    resp = await client.complete(
+        system="x",
+        user="[S1] Quelle: a.pdf\n...\n\n[S2] Quelle: b.pdf\n...",
+        temperature=0.0,
+        max_tokens=100,
+    )
+
+    assert resp.model == "fake"
+    assert "[S1]" in resp.text and "[S2]" in resp.text
+    assert resp.text != "NICHT_GEFUNDEN"
+
+
+async def test_is_deterministic() -> None:
+    client = FakeLlmClient()
+    kw = {"system": "x", "user": "[S1] foo", "temperature": 0.0, "max_tokens": 100}
+
+    first = await client.complete(**kw)
+    second = await client.complete(**kw)
+
+    assert first == second
+
+
+async def test_no_markers_means_nicht_gefunden() -> None:
+    client = FakeLlmClient()
+
+    resp = await client.complete(
+        system="x", user="Quellen: (keine)\n\nFrage: ...", temperature=0.0, max_tokens=100
+    )
+
+    assert resp.text == "NICHT_GEFUNDEN"
+
+
+async def test_repeated_markers_are_deduped_in_the_reply() -> None:
+    client = FakeLlmClient()
+
+    resp = await client.complete(
+        system="x", user="[S1] a [S1] b [S2] c", temperature=0.0, max_tokens=100
+    )
+
+    assert resp.text.count("[S2]") == 1
+
+
+async def test_canned_reply_overrides_everything() -> None:
+    client = FakeLlmClient(canned="NICHT_GEFUNDEN")
+
+    resp = await client.complete(
+        system="x", user="[S1] [S2] [S3]", temperature=0.0, max_tokens=100
+    )
+
+    assert resp.text == "NICHT_GEFUNDEN"
