@@ -8,6 +8,7 @@ from typing import Any
 
 from app.adapters.llm.base import LlmResponse
 from app.adapters.llm.fake import FakeLlmClient
+from app.core.metrics import hallucinated_citation_total
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services import generation
 
@@ -66,6 +67,7 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
         "strategy": "structural",
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
+    assert [c.marker for c in result.citations] == ["S1", "S2"]
     assert result.prompt_name == "answer_de.v1"
     assert len(result.prompt_sha256) == 64
     assert result.model == "fake"
@@ -105,17 +107,58 @@ async def test_empty_retrieval_yields_no_sources_and_nicht_gefunden(
 ) -> None:
     _stub_retrieval(monkeypatch, [])
 
-    # With no chunks the context block is empty, which the prompt tells the
-    # model to answer with NICHT_GEFUNDEN. FakeLlmClient scans the whole
-    # rendered prompt for [S..] markers and would "cite" the ones in the
-    # instructions, so pin its reply to what a real model returns here.
+    # With no chunks the context block between "Quellen:" and "Frage:" is
+    # empty, so FakeLlmClient (which only scans that block, not the whole
+    # prompt) naturally answers NICHT_GEFUNDEN -- no canned= needed.
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(canned="NICHT_GEFUNDEN"),
+        object(), object(), object(), FakeLlmClient(),
         tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
     )
 
     assert result.sources == []
+    assert result.citations == []
     assert result.answer == "NICHT_GEFUNDEN"
+
+
+async def test_an_invented_citation_marker_is_dropped_and_counted(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            return LlmResponse(text="Es gilt Regel A [S1] und angeblich [S9].", model="spy")
+
+    before = hallucinated_citation_total.value
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _Spy(),
+        tenant_id=TENANT, question="Frage?",
+    )
+
+    assert "[S9]" not in result.answer
+    assert "[S1]" in result.answer
+    assert [c.marker for c in result.citations] == ["S1"]
+    assert hallucinated_citation_total.value == before + 1
+
+
+async def test_claims_with_zero_valid_citations_become_an_abstention(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    result = await generation.generate_answer(
+        object(), object(), object(),
+        FakeLlmClient(canned="Angeblich gilt Regel Z [S9]."),
+        tenant_id=TENANT, question="Frage?",
+    )
+
+    assert result.answer == "NICHT_GEFUNDEN"
+    assert result.citations == []
 
 
 async def test_prompt_name_override_is_honoured(monkeypatch: Any) -> None:
