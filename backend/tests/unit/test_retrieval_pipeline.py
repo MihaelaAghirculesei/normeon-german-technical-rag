@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from app.domain.models import RetrievedChunk
-from app.services import retrieval
-from app.services.retrieval import _select_context, retrieve_context
+from app.services.retrieval import pipeline
+from app.services.retrieval.pipeline import _select_context, retrieve_context
 
 TENANT = uuid.uuid4()
 
@@ -110,7 +110,7 @@ def stub_hybrid(monkeypatch: pytest.MonkeyPatch) -> list[RetrievedChunk]:
         fake_hybrid_search.kwargs = kwargs  # type: ignore[attr-defined]
         return hits
 
-    monkeypatch.setattr(retrieval, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(pipeline, "hybrid_search", fake_hybrid_search)
     return hits
 
 
@@ -172,7 +172,7 @@ async def test_retrieve_context_forwards_strategy_and_candidate_k_to_hybrid(
         candidate_k=25,
     )
 
-    kwargs = retrieval.hybrid_search.kwargs  # type: ignore[attr-defined]
+    kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
     assert kwargs["strategy"] == "fixed_500"
     assert kwargs["candidate_k"] == 25
     assert kwargs["tenant_id"] == TENANT
