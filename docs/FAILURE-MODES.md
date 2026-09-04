@@ -117,6 +117,39 @@ is sound (it lifted the substantive § 41 braking rule over § 42 for
 "Bremse Anhänger", § 36 tyres from #3 to a near-tie for #1 for "Reifen
 Profiltiefe").
 
+## Generation / citation validation
+
+`domain/citations.extract_and_validate` checks that every `[S..]` marker
+the model wrote is one it was actually offered. That is a *presence*
+check, not a *correctness* check.
+
+### A citation can be present and still wrong
+
+Citing a real, offered `[S1]` proves the marker exists — not that the
+sentence in front of it is actually supported by `S1`'s content. A model
+can attach a correct-looking marker to a claim that chunk does not
+support (misattribution) or that is a subtly wrong paraphrase of it. The
+validator cannot see that; only a stricter grounding check (e.g. an
+LLM-judge pass in the Week 4 evaluation) can.
+
+**Mitigation / status.** Out of scope for a marker-presence check by
+construction. The Week 4 evaluation suite's faithfulness judge is where
+this gets measured; `extract_and_validate` is the cheap, reliable first
+filter (catches every fabricated *reference*, i.e. a marker pointing at
+nothing) that a semantic check would sit behind, not replace.
+
+### The fake LLM needed a real fix, not a per-test workaround
+
+`FakeLlmClient` originally scanned the *whole* rendered prompt for
+`[S\d+]` markers. The prompt's own rule text unconditionally contains
+the literal `[S1], [S2], ...`, so whenever real retrieval returned zero
+or exactly one chunk, the fake "cited" a marker that was never actually
+offered — indistinguishable from a real hallucinated citation once
+`extract_and_validate` existed to catch it. Fixed by scanning only the
+context block between the prompt's `Quellen:` and `Frage:` markers
+(`adapters/llm/fake.py`); this is inherent coupling of a test double to
+the one prompt family it approximates, not a citation-validation gap.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:
