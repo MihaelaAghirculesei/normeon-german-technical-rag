@@ -54,5 +54,22 @@ class Settings(BaseSettings):
     rerank_top_k: int = 8
     context_token_budget: int = 4000
 
+    # Generation (Day 11). The answer prompt is a versioned file in
+    # backend/prompts/, loaded by `answer_prompt_name`; its sha256 is
+    # logged with every answer. The LLM seam is deliberately thin -- one
+    # OpenAI-compatible wire format reaches most hosted models -- with the
+    # multi-provider Protocol, retries and cost tracking deferred to
+    # Day 13/15. `llm_provider = "fake"` is the offline default: a
+    # deterministic canned answer, no network, no key. `openai_compatible`
+    # needs `llm_api_base_url` (+ usually `llm_api_key`) and `llm_model`.
+    llm_provider: Literal["fake", "openai_compatible"] = "fake"
+    llm_model: str = ""
+    llm_api_base_url: str | None = None
+    llm_api_key: str | None = None
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 800
+    llm_timeout_s: float = 30.0
+    answer_prompt_name: str = "answer_de.v1"
+
 
 settings = Settings()
