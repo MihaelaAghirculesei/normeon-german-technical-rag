@@ -7,9 +7,11 @@ sees or produces page numbers: the response carries the `marker ->
 page/section/document` mapping the backend held back, which is what makes
 the citations verifiable.
 
-Citation validation (dropping invented markers, abstaining on zero valid
-citations) is Day 12; the pre-generation confidence gate is Day 13;
-streaming is Day 14.
+`sources` lists everything the model was offered (Giorno 11); `citations`
+(Giorno 12) is the validated subset it actually cited -- an invented
+marker never reaches this list, and `domain.citations.extract_and_validate`
+has already turned a claim with zero valid citations into an abstention.
+The pre-generation confidence gate is Day 13; streaming is Day 14.
 """
 
 from __future__ import annotations
@@ -43,6 +45,17 @@ class SourceOut(BaseModel):
     heading: str | None
 
 
+class CitationOut(BaseModel):
+    marker: str
+    chunk_id: UUID
+    document_id: UUID
+    filename: str
+    page_from: int
+    page_to: int
+    section_path: str | None
+    snippet: str
+
+
 class RetrievalTimingOut(BaseModel):
     hybrid_ms: float
     rerank_ms: float
@@ -53,6 +66,7 @@ class RetrievalTimingOut(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceOut]
+    citations: list[CitationOut]
     prompt_name: str
     prompt_sha256: str
     model: str
@@ -90,6 +104,19 @@ async def chat(
                 heading=s.heading,
             )
             for s in result.sources
+        ],
+        citations=[
+            CitationOut(
+                marker=c.marker,
+                chunk_id=c.chunk_id,
+                document_id=c.document_id,
+                filename=c.filename,
+                page_from=c.page_from,
+                page_to=c.page_to,
+                section_path=c.section_path,
+                snippet=c.snippet,
+            )
+            for c in result.citations
         ],
         prompt_name=result.prompt_name,
         prompt_sha256=result.prompt_sha256,
