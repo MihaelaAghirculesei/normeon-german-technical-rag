@@ -163,6 +163,14 @@ async def _run(database_url: str, tmp_path: Path) -> None:
         assert src.filename == "a.pdf"
         assert src.document_id == doc_a_id
 
+    # every marker the fake actually cited was validated: no invented
+    # marker survives, and each citation resolves to the same real chunk
+    assert result.citations, "expected at least one validated citation"
+    assert {c.marker for c in result.citations} == markers_in_answer
+    for citation in result.citations:
+        assert citation.document_id == doc_a_id
+        assert citation.snippet
+
     # --- tenant isolation: tenant B never sees tenant A's document -------
     async with session_factory() as session:
         cross = await generate_answer(

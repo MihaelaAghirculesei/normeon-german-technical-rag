@@ -56,3 +56,34 @@ async def test_canned_reply_overrides_everything() -> None:
     )
 
     assert resp.text == "NICHT_GEFUNDEN"
+
+
+async def test_markers_mentioned_only_in_the_prompt_rules_are_ignored() -> None:
+    """Regression: the real answer_de.v1 prompt's own rule text says
+    "...mit den Quellenmarkierungen [S1], [S2], ..." unconditionally. With
+    only one real source, scanning the whole message used to make this
+    "cite" a [S2] that was never offered."""
+    client = FakeLlmClient()
+    user = (
+        "Belege jede Aussage mit den Markierungen [S1], [S2], ...\n\n"
+        "Quellen:\n[S1] Quelle: a.pdf | Seite 1\ntext\n\n"
+        "Frage: Was gilt?\n\n"
+        "Antwort:"
+    )
+
+    resp = await client.complete(system="x", user=user, temperature=0.0, max_tokens=100)
+
+    assert "[S1]" in resp.text
+    assert "[S2]" not in resp.text
+
+
+async def test_an_empty_context_block_between_quellen_and_frage_is_nicht_gefunden() -> None:
+    client = FakeLlmClient()
+    user = (
+        "Belege jede Aussage mit den Markierungen [S1], [S2], ...\n\n"
+        "Quellen:\n\n\nFrage: Was gilt?\n\nAntwort:"
+    )
+
+    resp = await client.complete(system="x", user=user, temperature=0.0, max_tokens=100)
+
+    assert resp.text == "NICHT_GEFUNDEN"

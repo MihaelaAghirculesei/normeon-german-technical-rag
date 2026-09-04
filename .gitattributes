@@ -1,1 +1,8 @@
 scripts/hooks/* text eol=lf
+# Prompt files are read with `load_prompt` (services/prompts.py) and their
+# sha256 is logged with every answer; Python's text-mode read normalises
+# CRLF -> LF, so a CRLF checkout on Windows made the byte-for-byte test in
+# test_prompts.py fail even though load_prompt itself worked fine. Force
+# LF at checkout so the sha256 (and the raw-bytes test) is the same on
+# every machine.
+backend/prompts/*.txt text eol=lf
