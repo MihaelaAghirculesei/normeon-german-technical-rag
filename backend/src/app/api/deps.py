@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.embedding.e5_api import ApiE5Embedder
 from app.adapters.embedding.e5_local import LocalE5Embedder
+from app.adapters.llm.base import LlmClient
+from app.adapters.llm.fake import FakeLlmClient
+from app.adapters.llm.openai_compatible import OpenAICompatibleClient
 from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
 from app.adapters.reranker.noop import NoopReranker
@@ -46,3 +49,25 @@ def get_reranker() -> Reranker:
 
 
 RerankerDep = Annotated[Reranker, Depends(get_reranker)]
+
+
+@lru_cache
+def get_llm_client() -> LlmClient:
+    """Cached for the process. `fake` needs nothing (deterministic, no
+    network); `openai_compatible` needs a base URL and a model -- any
+    server speaking POST /chat/completions."""
+    if settings.llm_provider == "fake":
+        return FakeLlmClient()
+    if not settings.llm_api_base_url or not settings.llm_model:
+        raise RuntimeError(
+            "llm_api_base_url and llm_model must be set when llm_provider=openai_compatible"
+        )
+    return OpenAICompatibleClient(
+        base_url=settings.llm_api_base_url,
+        api_key=settings.llm_api_key,
+        model=settings.llm_model,
+        timeout=settings.llm_timeout_s,
+    )
+
+
+LlmClientDep = Annotated[LlmClient, Depends(get_llm_client)]
