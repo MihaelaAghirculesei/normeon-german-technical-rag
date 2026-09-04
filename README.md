@@ -4,7 +4,7 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 10 of 30. Retrieval is feature-complete: structured German
+Status: Day 11 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -12,7 +12,11 @@ with requirement-code normalisation and a trigram fallback, hybrid
 retrieval fusing the three branches with Reciprocal Rank Fusion
 (ADR 0002), and a single instrumented pipeline (hybrid → cross-encoder
 rerank → token-budget context selection) exposed at `POST /api/v1/search`
-with per-phase timings. Generation is next.
+with per-phase timings. Generation has begun: a versioned German answer
+prompt, a context builder that assigns stable `[S1]` markers and keeps
+the marker → page/section mapping backend-side, and a non-streaming
+`POST /api/v1/chat` over a thin LLM seam (OpenAI-compatible client, or a
+deterministic fake for offline runs).
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
