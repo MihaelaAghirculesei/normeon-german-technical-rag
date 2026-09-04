@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_embedder, get_llm_client, get_reranker, get_session
 from app.api.v1 import chat
+from app.domain.citations import Citation
 from app.domain.context import Source
 from app.domain.models import PipelineTiming
 from app.main import app
@@ -36,10 +37,27 @@ def _source(marker: str, page: int) -> Source:
     )
 
 
-def _answer(text: str = "Laut [S1] gilt die Regel. [S1]") -> AnswerResult:
+def _citation(marker: str, page: int) -> Citation:
+    return Citation(
+        marker=marker,
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        filename="StVZO.pdf",
+        page_from=page,
+        page_to=page,
+        section_path="50",
+        snippet="Scheinwerfer muessen ...",
+    )
+
+
+def _answer(
+    text: str = "Laut [S1] gilt die Regel. [S1]",
+    citations: list[Citation] | None = None,
+) -> AnswerResult:
     return AnswerResult(
         answer=text,
         sources=[_source("S1", 14), _source("S2", 15)],
+        citations=citations if citations is not None else [_citation("S1", 14)],
         prompt_name="answer_de.v1",
         prompt_sha256="a" * 64,
         model="fake",
@@ -142,11 +160,29 @@ def test_chat_forwards_question_tenant_and_strategy(client_with_generator: Any) 
     ]
 
 
+def test_chat_response_carries_validated_citations(client_with_generator: Any) -> None:
+    client, _ = client_with_generator(_answer(citations=[_citation("S1", 14)]))
+
+    body = client.post(
+        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
+    ).json()
+
+    assert len(body["citations"]) == 1
+    citation = body["citations"][0]
+    assert citation["marker"] == "S1"
+    assert citation["page_from"] == 14 and citation["page_to"] == 14
+    assert citation["filename"] == "StVZO.pdf"
+    assert citation["section_path"] == "50"
+    assert citation["snippet"] == "Scheinwerfer muessen ..."
+    assert "chunk_id" in citation and "document_id" in citation
+
+
 def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any) -> None:
     client, _ = client_with_generator(
         AnswerResult(
             answer="NICHT_GEFUNDEN",
             sources=[],
+            citations=[],
             prompt_name="answer_de.v1",
             prompt_sha256="b" * 64,
             model="fake",
@@ -163,6 +199,7 @@ def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any
 
     assert body["answer"] == "NICHT_GEFUNDEN"
     assert body["sources"] == []
+    assert body["citations"] == []
 
 
 def test_chat_rejects_a_blank_question(client_with_generator: Any) -> None:
