@@ -1,7 +1,10 @@
-"""Debug endpoint for raw vector retrieval. Not part of the answer flow --
-it exists to inspect what the retriever returns for a question, and it's
-useful enough in the demo (showing the raw hits before generation) to keep
-around.
+"""POST /api/v1/search -- the retrieval endpoint.
+
+`mode="pipeline"` is the real contract the generation layer will call:
+tenant-scoped hybrid retrieval + RRF -> rerank -> token-budget context,
+returning the chunks with full citation metadata and per-phase timings.
+`mode="vector" | "fts" | "hybrid"` expose the individual stages for
+inspection and for the demo (showing raw hits before generation).
 """
 
 import time
