@@ -1,13 +1,16 @@
 """``generate_answer`` -- the non-streaming answer path (plan, Giorno 11)::
 
     retrieve_context  ->  build_context  ->  render the versioned prompt
-      ->  LlmClient.complete  ->  answer + the marker -> source map
+      ->  LlmClient.complete  ->  extract_and_validate  ->  answer +
+      valid citations + the marker -> source map
 
-What Day 11 does *not* do: it does not validate the model's citation
-markers (Day 12) and it does not apply a confidence threshold before
-calling the model (Day 13). It does record which prompt produced the
-answer -- name and content hash -- so any logged answer traces back to
-its exact instructions.
+Citation validation (Giorno 12, ``domain.citations.extract_and_validate``)
+drops any marker the model invented, and turns an answer with claims but
+zero valid citations into an abstention -- never a failed request. It
+does not yet apply a confidence threshold *before* calling the model
+(Day 13). It does record which prompt produced the answer -- name and
+content hash -- so any logged answer traces back to its exact
+instructions.
 """
 
 from __future__ import annotations
@@ -23,6 +26,8 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.llm.base import LlmClient
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
+from app.core.metrics import hallucinated_citation_total
+from app.domain.citations import Citation, extract_and_validate
 from app.domain.context import Source, build_context
 from app.domain.models import PipelineTiming
 from app.services.prompts import load_prompt
@@ -43,6 +48,7 @@ _log = structlog.get_logger(__name__)
 class AnswerResult:
     answer: str
     sources: list[Source]
+    citations: list[Citation]
     prompt_name: str
     prompt_sha256: str
     model: str
@@ -85,19 +91,31 @@ async def generate_answer(
     )
     generation_ms = round((time.perf_counter() - started) * 1000, 1)
 
+    answer, citations, invented_markers = extract_and_validate(completion.text, sources)
+    if invented_markers:
+        hallucinated_citation_total.inc(len(invented_markers))
+        _log.warning(
+            "citation.invented_markers_dropped",
+            markers=invented_markers,
+            prompt_name=prompt.name,
+            model=completion.model,
+        )
+
     _log.info(
         "answer.generated",
         prompt_name=prompt.name,
         prompt_sha256=prompt.sha256,
         model=completion.model,
         n_sources=len(sources),
+        n_citations=len(citations),
         retrieval_ms=retrieval.timing.total_ms,
         generation_ms=generation_ms,
     )
 
     return AnswerResult(
-        answer=completion.text,
+        answer=answer,
         sources=list(sources.values()),
+        citations=citations,
         prompt_name=prompt.name,
         prompt_sha256=prompt.sha256,
         model=completion.model,
