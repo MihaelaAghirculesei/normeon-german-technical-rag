@@ -56,6 +56,7 @@ def _citation(marker: str, page: int) -> Citation:
 def _answer(
     text: str = "Laut [S1] gilt die Regel. [S1]",
     citations: list[Citation] | None = None,
+    cost_usd: float | None = None,
 ) -> AnswerResult:
     return AnswerResult(
         answer=text,
@@ -70,6 +71,7 @@ def _answer(
         generation_ms=3.2,
         prompt_tokens=None,
         completion_tokens=None,
+        cost_usd=cost_usd,
     )
 
 
@@ -121,6 +123,17 @@ def test_chat_returns_answer_sources_and_prompt_identity(client_with_generator: 
     assert body["model"] == "fake"
     assert body["retrieval_timing"]["total_ms"] == 16.0
     assert body["generation_ms"] == 3.2
+    assert body["cost_usd"] is None
+
+
+def test_chat_response_carries_a_priced_cost(client_with_generator: Any) -> None:
+    client, _ = client_with_generator(_answer(cost_usd=0.00045))
+
+    body = client.post(
+        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
+    ).json()
+
+    assert body["cost_usd"] == 0.00045
 
 
 def test_chat_response_carries_the_backend_held_page_mapping(
@@ -193,6 +206,7 @@ def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any
             generation_ms=0.1,
             prompt_tokens=None,
             completion_tokens=None,
+            cost_usd=None,
         )
     )
 
