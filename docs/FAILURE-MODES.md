@@ -150,6 +150,52 @@ context block between the prompt's `Quellen:` and `Frage:` markers
 (`adapters/llm/fake.py`); this is inherent coupling of a test double to
 the one prompt family it approximates, not a citation-validation gap.
 
+## Abstention and conflict detection (Day 13)
+
+### The confidence threshold's scale depends on the reranker
+
+`min_rerank_score_for_answer` compares against `retrieve_context`'s top
+reranked chunk score, but that score's scale is whatever the configured
+`reranker_provider` produces: `cross_encoder`'s raw logits are an
+unbounded real number (roughly -10..10 for `bge-reranker-v2-m3`,
+uncalibrated), while `noop` just passes through the hybrid stage's
+RRF-fused score, which is *always* a small positive number regardless of
+true relevance (`w / (k + rank)`, see the RRF entry above). A threshold
+tuned for one is meaningless for the other -- with `noop` a real
+NICHT_GEFUNDEN case still clears any reasonable threshold above zero,
+because RRF never really says "not confident", only "not top-ranked".
+
+**Mitigation / status.** Same "Week 4 matrix variable" status as `rrf_k`
+and the rerank weights: `min_rerank_score_for_answer` needs per-reranker
+tuning against the eval set, not a single one-size value. The gate is
+correct in what it does (skip the LLM call below the configured number);
+what number is meaningful is a `reranker_provider`-specific question.
+
+### Version-conflict detection is keyed on the requirement code, not the document
+
+The spec's scenario ("chunks from two `version_label`s of the same
+document") does not map onto this schema directly: `version_label` is a
+per-`Document` value, so every chunk under one `document_id` already
+shares it -- grouping by `document_id` could never find a conflict. The
+corpus's own synthetic conflict case (`Lastenheft-EPS-v1.2.docx` /
+`-v2.0.docx`, both restating requirement code `LH-3.2.1` with different
+values, see `corpus/manifest.yaml`) is two *different* `Document` rows
+that are versions of one another -- nothing in the schema ties them
+together except that shared code. So `domain/conflicts.
+find_version_conflicts` groups by requirement code
+(`domain.normalization.extract_all_codes`) extracted from chunk content,
+not by document identity.
+
+**Consequence.** A real disagreement between two document versions that
+does *not* restate a matching requirement-code-shaped token in both
+chunks' text is invisible to this check -- e.g. prose that changes a
+requirement without repeating its code, or two versions that use
+different code spellings normalisation doesn't unify. Fixing this
+properly needs an explicit "these Document rows are versions of one
+another" link in the schema (a `document_group`/`supersedes` field),
+which is out of scope for Day 13; revisit if the Week 4 conflict eval
+case needs more recall than the code-matching heuristic gives it.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:

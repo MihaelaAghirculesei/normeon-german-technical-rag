@@ -15,6 +15,13 @@ Point it at a real model by setting, in the environment or .env:
 
 Acceptance bar (plan, Giorno 11): a question yields a German answer with
 `[S1]` markers, and every marker maps to a real page/section.
+
+Since Day 13, the Katar question may abstain *before* the LLM is even
+called (`abstained_pre_generation`, `generation_ms == 0`) if the top
+reranked chunk's score is below `min_rerank_score_for_answer` --
+otherwise it still reaches the LLM and, with the fake provider, "cites"
+whatever irrelevant chunks were retrieved rather than truly abstaining
+(see docs/FAILURE-MODES.md, "Abstention and conflict detection").
 """
 
 import argparse
