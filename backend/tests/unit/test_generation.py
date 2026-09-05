@@ -4,10 +4,12 @@ touched; the LLM is the FakeLlmClient (or a spy).
 """
 
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.adapters.llm.base import LlmResponse
 from app.adapters.llm.fake import FakeLlmClient
+from app.core.errors import LlmTimeoutError
 from app.core.metrics import hallucinated_citation_total
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services import generation
@@ -275,3 +277,194 @@ async def test_a_single_version_label_adds_no_conflict_instruction(
     )
 
     assert "unterschiedlichen Versionen" not in captured["system"]
+
+
+# --- generate_answer_stream (Giorno 14) -------------------------------------
+
+
+class _RefusingStreamLlm:
+    """Same idea as _RefusingLlm, for the streaming path: proves the
+    pre-generation gate never even calls `stream`."""
+
+    name = "refusing"
+
+    def stream(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> AsyncGenerator[str]:
+        raise AssertionError("the LLM should not have been called")
+
+
+class _StreamSpy:
+    """Yields the given chunks and records the system/user it was called
+    with; a stand-in for a real streaming LlmClient."""
+
+    name = "spy"
+
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = chunks
+        self.captured: dict[str, str] = {}
+
+    async def stream(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> AsyncGenerator[str]:
+        self.captured["system"] = system
+        self.captured["user"] = user
+        for chunk in self._chunks:
+            yield chunk
+
+
+class _FailingStreamLlm:
+    name = "spy"
+
+    async def stream(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> AsyncGenerator[str]:
+        yield "partial "
+        raise LlmTimeoutError("boom")
+
+
+class _FinallyTrackingLlm:
+    """Its `stream` sets `closed = True` in a `finally`, so closing the
+    generator early (a client disconnect) can be proven to cascade all
+    the way down to it -- "annulla il task LLM" from the plan."""
+
+    name = "spy"
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def stream(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> AsyncGenerator[str]:
+        try:
+            yield "a"
+            yield "b"
+        finally:
+            self.closed = True
+
+
+async def test_stream_emits_events_in_the_documented_order(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1"), _chunk("5.2")])
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), FakeLlmClient(),
+            tenant_id=TENANT, question="Welche Lenkkraft?", strategy="structural",
+        )
+    ]
+
+    kinds = [e.event for e in events]
+    assert kinds[:4] == ["stage", "stage", "sources", "stage"]
+    assert kinds[-1] == "done"
+    assert all(k == "token" for k in kinds[4:-1])
+    assert kinds.count("token") >= 1
+
+    assert events[0].data == {"stage": "retrieving"}
+    assert events[1].data == {"stage": "reranking"}
+    assert [s.marker for s in events[2].data["sources"]] == ["S1", "S2"]
+    assert events[3].data == {"stage": "generating"}
+
+    full_text = "".join(e.data["text"] for e in events if e.event == "token")
+    assert "[S1]" in full_text
+
+    done = events[-1]
+    assert set(done.data.keys()) == {"latency_ms", "cost_usd", "citations"}
+    assert done.data["cost_usd"] is None
+    assert [c.marker for c in done.data["citations"]] == ["S1", "S2"]
+    assert done.data["latency_ms"]["retrieval_ms"] == 16.0
+    assert done.data["latency_ms"]["generation_ms"] >= 0
+
+
+async def test_stream_abstains_pre_generation_without_calling_the_llm(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [])
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), _RefusingStreamLlm(),
+            tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
+        )
+    ]
+
+    assert [e.event for e in events] == ["stage", "stage", "sources", "token", "done"]
+    assert events[2].data == {"sources": []}
+    assert events[3].data == {"text": "NICHT_GEFUNDEN"}
+    assert events[4].data["citations"] == []
+
+
+async def test_stream_tokens_are_raw_but_done_citations_exclude_invented_markers(
+    monkeypatch: Any,
+) -> None:
+    """The tension documented in generate_answer_stream's docstring: a
+    marker already streamed cannot be un-sent, but `done.citations` stays
+    the honest, validated list."""
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    llm = _StreamSpy(["Es gilt Regel A [S1] ", "und angeblich [S9]."])
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+        )
+    ]
+
+    streamed_text = "".join(e.data["text"] for e in events if e.event == "token")
+    assert "[S9]" in streamed_text
+
+    done = events[-1]
+    assert [c.marker for c in done.data["citations"]] == ["S1"]
+
+
+async def test_stream_adds_the_conflict_instruction_to_the_system_message(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(
+        monkeypatch,
+        [
+            _chunk("3.2.1", content="LH-3.2.1 fordert 300 N.", version_label="v1.2"),
+            _chunk("3.2.1", content="LH-3.2.1 fordert 250 N.", version_label="v2.0"),
+        ],
+    )
+    llm = _StreamSpy(["[S1]"])
+
+    async for _ in generation.generate_answer_stream(
+        object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+    ):
+        pass
+
+    assert "unterschiedlichen Versionen" in llm.captured["system"]
+
+
+async def test_an_llm_error_mid_stream_becomes_an_error_event_not_a_dead_stream(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), _FailingStreamLlm(),
+            tenant_id=TENANT, question="Frage?",
+        )
+    ]
+
+    assert events[-1].event == "error"
+    assert events[-1].data == {"code": "llm_timeout", "message": "boom"}
+    assert not any(e.event == "done" for e in events)
+    assert any(e.event == "token" and e.data["text"] == "partial " for e in events)
+
+
+async def test_closing_the_stream_early_cascades_to_the_llm_client(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    llm = _FinallyTrackingLlm()
+
+    agen = generation.generate_answer_stream(
+        object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+    )
+    async for event in agen:
+        if event.event == "token":
+            break
+    await agen.aclose()
+
+    assert llm.closed is True
