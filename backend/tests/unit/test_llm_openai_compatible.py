@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from app.adapters.llm.openai_compatible import OpenAICompatibleClient
+from app.core.errors import LlmTimeoutError, LlmUnavailableError
 
 
 def _transport(
@@ -97,13 +98,74 @@ async def test_no_api_key_sends_no_authorization_header() -> None:
     assert "authorization" not in {k.lower() for k in captured[0].headers}
 
 
-async def test_http_error_propagates() -> None:
+def _sequenced_transport(responses: list) -> httpx.MockTransport:  # noqa: ANN001
+    """Returns (or raises) each entry in `responses` in order, one per
+    request -- for exercising a transient failure followed by success."""
+    remaining = iter(responses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        item = next(remaining)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    return httpx.MockTransport(handler)
+
+
+async def test_a_5xx_is_retried_and_can_still_succeed() -> None:
     client = OpenAICompatibleClient(
         base_url="https://llm.example/v1",
         api_key=None,
         model="m",
+        max_retries=1,
+        transport=_sequenced_transport(
+            [httpx.Response(503, json={"error": "busy"}), httpx.Response(200, json=_ok_body())]
+        ),
+    )
+
+    resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
+
+
+async def test_a_5xx_exhausting_retries_raises_llm_unavailable() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=1,
         transport=_transport([], body={"error": "boom"}, status=500),
     )
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(LlmUnavailableError) as exc_info:
         await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert exc_info.value.code == "llm_unavailable"
+
+
+async def test_a_4xx_is_not_retried() -> None:
+    captured: list[httpx.Request] = []
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=2,
+        transport=_transport(captured, body={"error": "bad request"}, status=400),
+    )
+
+    with pytest.raises(LlmUnavailableError):
+        await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert len(captured) == 1, "a 4xx must fail on the first attempt, never retried"
+
+
+async def test_a_timeout_raises_llm_timeout() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=0,
+        transport=_sequenced_transport([httpx.ConnectTimeout("boom")]),
+    )
+
+    with pytest.raises(LlmTimeoutError) as exc_info:
+        await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert exc_info.value.code == "llm_timeout"
