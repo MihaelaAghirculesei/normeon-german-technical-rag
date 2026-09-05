@@ -1,4 +1,4 @@
-"""POST /api/v1/chat -- the non-streaming answer endpoint (plan, Giorno 11).
+"""POST /api/v1/chat (Giorno 11) and POST /api/v1/chat/stream (Giorno 14).
 
 The question is retrieved, the surviving chunks become numbered sources,
 the versioned German prompt is rendered around them, and the model is
@@ -11,22 +11,37 @@ the citations verifiable.
 (Giorno 12) is the validated subset it actually cited -- an invented
 marker never reaches this list, and `domain.citations.extract_and_validate`
 has already turned a claim with zero valid citations into an abstention.
-The pre-generation confidence gate is Day 13; streaming is Day 14.
+The pre-generation confidence gate is Day 13.
+
+`/stream` is the same pipeline as SSE: `stage` events for retrieving /
+reranking / generating, `sources` BEFORE any `token` (so a client can
+show where the answer will come from while it is still being written),
+then `done` (or `error` in its place). See `services.generation.
+generate_answer_stream`'s docstring for what "done" means when the
+validated citations disagree with what was already streamed.
 """
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter
+import structlog
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession, EmbedderDep, LlmClientDep, RerankerDep
-from app.services.generation import generate_answer
+from app.core.streaming import with_heartbeat
+from app.domain.citations import Citation
+from app.domain.context import Source
+from app.services.generation import StreamEvent, generate_answer, generate_answer_stream
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+_log = structlog.get_logger(__name__)
 
 
 class ChatRequest(BaseModel):
@@ -74,6 +89,37 @@ class ChatResponse(BaseModel):
     generation_ms: float
 
 
+def _sources_out(sources: list[Source]) -> list[SourceOut]:
+    return [
+        SourceOut(
+            marker=s.marker,
+            document_id=s.document_id,
+            filename=s.filename,
+            page_from=s.page_from,
+            page_to=s.page_to,
+            section_path=s.section_path,
+            heading=s.heading,
+        )
+        for s in sources
+    ]
+
+
+def _citations_out(citations: list[Citation]) -> list[CitationOut]:
+    return [
+        CitationOut(
+            marker=c.marker,
+            chunk_id=c.chunk_id,
+            document_id=c.document_id,
+            filename=c.filename,
+            page_from=c.page_from,
+            page_to=c.page_to,
+            section_path=c.section_path,
+            snippet=c.snippet,
+        )
+        for c in citations
+    ]
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
@@ -93,34 +139,76 @@ async def chat(
     )
     return ChatResponse(
         answer=result.answer,
-        sources=[
-            SourceOut(
-                marker=s.marker,
-                document_id=s.document_id,
-                filename=s.filename,
-                page_from=s.page_from,
-                page_to=s.page_to,
-                section_path=s.section_path,
-                heading=s.heading,
-            )
-            for s in result.sources
-        ],
-        citations=[
-            CitationOut(
-                marker=c.marker,
-                chunk_id=c.chunk_id,
-                document_id=c.document_id,
-                filename=c.filename,
-                page_from=c.page_from,
-                page_to=c.page_to,
-                section_path=c.section_path,
-                snippet=c.snippet,
-            )
-            for c in result.citations
-        ],
+        sources=_sources_out(result.sources),
+        citations=_citations_out(result.citations),
         prompt_name=result.prompt_name,
         prompt_sha256=result.prompt_sha256,
         model=result.model,
         retrieval_timing=RetrievalTimingOut(**asdict(result.retrieval_timing)),
         generation_ms=result.generation_ms,
+    )
+
+
+_HEARTBEAT = StreamEvent("heartbeat", {})
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _event_payload(event: StreamEvent) -> dict[str, Any]:
+    """Turn one `StreamEvent`'s data into JSON-ready values -- "sources"
+    and "done" are the only two carrying domain objects (`Source` /
+    `Citation`) rather than plain values already."""
+    if event.event == "sources":
+        return {"sources": [s.model_dump(mode="json") for s in _sources_out(event.data["sources"])]}
+    if event.event == "done":
+        payload = dict(event.data)
+        payload["citations"] = [
+            c.model_dump(mode="json") for c in _citations_out(event.data["citations"])
+        ]
+        return payload
+    return event.data
+
+
+@router.post("/stream")
+async def chat_stream(
+    payload: ChatRequest,
+    request: Request,
+    session: DbSession,
+    embedder: EmbedderDep,
+    reranker: RerankerDep,
+    llm: LlmClientDep,
+) -> StreamingResponse:
+    async def sse() -> AsyncIterator[str]:
+        events = with_heartbeat(
+            generate_answer_stream(
+                session,
+                embedder,
+                reranker,
+                llm,
+                tenant_id=payload.tenant_id,
+                question=payload.question,
+                strategy=payload.strategy,
+            ),
+            interval=15.0,
+            heartbeat=_HEARTBEAT,
+        )
+        try:
+            async for event in events:
+                if await request.is_disconnected():
+                    _log.info("client_disconnected", question=payload.question)
+                    break
+                if event.event == "heartbeat":
+                    yield ": heartbeat\n\n"
+                    continue
+                yield _sse(event.event, _event_payload(event))
+        finally:
+            # Cascades through with_heartbeat into generate_answer_stream
+            # into the LlmClient's own stream -- one real network read
+            # actually gets torn down, not just this generator.
+            await events.aclose()
+
+    return StreamingResponse(
+        sse(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
     )

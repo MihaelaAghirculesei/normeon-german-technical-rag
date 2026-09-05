@@ -6,7 +6,9 @@ response shape, parameter forwarding, the backend-held page mapping)
 without a database or a model.
 """
 
+import json
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
@@ -19,7 +21,7 @@ from app.domain.citations import Citation
 from app.domain.context import Source
 from app.domain.models import PipelineTiming
 from app.main import app
-from app.services.generation import AnswerResult
+from app.services.generation import AnswerResult, StreamEvent
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -258,3 +260,122 @@ def test_an_llm_failure_never_surfaces_as_a_bare_500(
 
     assert response.status_code == 502
     assert response.json() == {"code": "llm_unavailable", "detail": "the model host is down"}
+
+
+# --- POST /api/v1/chat/stream (Giorno 14) -----------------------------------
+
+
+def _parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
+    events = []
+    for block in text.strip("\n").split("\n\n"):
+        if not block or block.startswith(":"):
+            continue
+        event_line, data_line = block.split("\n", 1)
+        events.append(
+            (event_line.removeprefix("event: "), json.loads(data_line.removeprefix("data: ")))
+        )
+    return events
+
+
+def _stream_with(events: list[StreamEvent]) -> Any:
+    async def fake_generate_answer_stream(
+        session: Any,
+        embedder: Any,
+        reranker: Any,
+        llm: Any,
+        *,
+        tenant_id: uuid.UUID,
+        question: str,
+        strategy: str | None = None,
+    ) -> AsyncGenerator[StreamEvent]:
+        for event in events:
+            yield event
+
+    return fake_generate_answer_stream
+
+
+@pytest.fixture
+def stream_client(monkeypatch: pytest.MonkeyPatch) -> Any:
+    def make(events: list[StreamEvent]) -> TestClient:
+        monkeypatch.setattr(chat, "generate_answer_stream", _stream_with(events))
+        app.dependency_overrides[get_session] = lambda: object()
+        app.dependency_overrides[get_embedder] = lambda: object()
+        app.dependency_overrides[get_reranker] = lambda: object()
+        app.dependency_overrides[get_llm_client] = lambda: object()
+        return TestClient(app)
+
+    yield make
+    app.dependency_overrides.clear()
+
+
+def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
+    client = stream_client(
+        [
+            StreamEvent("stage", {"stage": "retrieving"}),
+            StreamEvent("stage", {"stage": "reranking"}),
+            StreamEvent("sources", {"sources": [_source("S1", 14)]}),
+            StreamEvent("stage", {"stage": "generating"}),
+            StreamEvent("token", {"text": "Die "}),
+            StreamEvent("token", {"text": "Antwort."}),
+            StreamEvent(
+                "done",
+                {
+                    "latency_ms": {"retrieval_ms": 10.0, "generation_ms": 5.0, "total_ms": 15.0},
+                    "cost_usd": None,
+                    "citations": [_citation("S1", 14)],
+                },
+            ),
+        ]
+    )
+
+    with client.stream(
+        "POST", "/api/v1/chat/stream", json={"question": "x", "tenant_id": str(TENANT_ID)}
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = "".join(response.iter_text())
+
+    events = _parse_sse(body)
+    assert [e for e, _ in events] == [
+        "stage", "stage", "sources", "stage", "token", "token", "done",
+    ]
+    assert events[0][1] == {"stage": "retrieving"}
+    assert events[4][1] == {"text": "Die "}
+
+    sources_data = events[2][1]["sources"]
+    assert [s["marker"] for s in sources_data] == ["S1"]
+    assert sources_data[0]["page_from"] == 14
+
+    done_data = events[-1][1]
+    assert done_data["cost_usd"] is None
+    assert [c["marker"] for c in done_data["citations"]] == ["S1"]
+    assert done_data["latency_ms"]["total_ms"] == 15.0
+
+
+def test_chat_stream_passes_an_error_event_through(stream_client: Any) -> None:
+    client = stream_client(
+        [
+            StreamEvent("stage", {"stage": "retrieving"}),
+            StreamEvent("error", {"code": "llm_timeout", "message": "boom"}),
+        ]
+    )
+
+    with client.stream(
+        "POST", "/api/v1/chat/stream", json={"question": "x", "tenant_id": str(TENANT_ID)}
+    ) as response:
+        body = "".join(response.iter_text())
+
+    events = _parse_sse(body)
+    assert events[-1] == ("error", {"code": "llm_timeout", "message": "boom"})
+
+
+def test_chat_stream_rejects_a_blank_question_before_streaming_anything(
+    stream_client: Any,
+) -> None:
+    client = stream_client([StreamEvent("stage", {"stage": "retrieving"})])
+
+    response = client.post(
+        "/api/v1/chat/stream", json={"question": "", "tenant_id": str(TENANT_ID)}
+    )
+
+    assert response.status_code == 422
