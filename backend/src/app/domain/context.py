@@ -30,6 +30,7 @@ class Source:
     section_path: str | None
     heading: str | None
     content: str
+    version_label: str | None = None
 
 
 def _seiten(page_from: int, page_to: int) -> str:
@@ -39,7 +40,10 @@ def _seiten(page_from: int, page_to: int) -> str:
 
 
 def _header(source: Source) -> str:
-    parts = [f"Quelle: {source.filename}", _seiten(source.page_from, source.page_to)]
+    parts = [f"Quelle: {source.filename}"]
+    if source.version_label:
+        parts.append(f"Version {source.version_label}")
+    parts.append(_seiten(source.page_from, source.page_to))
     if source.section_path:
         parts.append(f"Abschnitt {source.section_path}")
     return " | ".join(parts)
@@ -72,6 +76,7 @@ def build_context(chunks: list[RetrievedChunk]) -> tuple[str, dict[str, Source]]
             section_path=chunk.section_path,
             heading=chunk.heading,
             content=chunk.content,
+            version_label=chunk.version_label,
         )
         sources[marker] = source
         blocks.append(f"[{marker}] {_header(source)}\n{chunk.content.strip()}")

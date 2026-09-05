@@ -14,6 +14,7 @@ from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
 from app.adapters.reranker.noop import NoopReranker
 from app.core.config import settings
+from app.core.errors import EmbeddingMisconfiguredError, LlmMisconfiguredError
 from app.db.session import get_session
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]
@@ -26,7 +27,9 @@ def get_embedder() -> EmbeddingAdapter:
     if settings.embedding_provider == "e5_local":
         return LocalE5Embedder(settings.embedding_model, settings.embedding_dim)
     if settings.embedding_api_base_url is None:
-        raise RuntimeError("embedding_api_base_url must be set when embedding_provider=e5_api")
+        raise EmbeddingMisconfiguredError(
+            "embedding_api_base_url must be set when embedding_provider=e5_api"
+        )
     return ApiE5Embedder(
         base_url=settings.embedding_api_base_url,
         api_key=settings.embedding_api_key,
@@ -59,7 +62,7 @@ def get_llm_client() -> LlmClient:
     if settings.llm_provider == "fake":
         return FakeLlmClient()
     if not settings.llm_api_base_url or not settings.llm_model:
-        raise RuntimeError(
+        raise LlmMisconfiguredError(
             "llm_api_base_url and llm_model must be set when llm_provider=openai_compatible"
         )
     return OpenAICompatibleClient(
@@ -67,6 +70,7 @@ def get_llm_client() -> LlmClient:
         api_key=settings.llm_api_key,
         model=settings.llm_model,
         timeout=settings.llm_timeout_s,
+        max_retries=settings.llm_max_retries,
     )
 
 

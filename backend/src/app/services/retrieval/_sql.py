@@ -30,4 +30,5 @@ def row_to_chunk(row: Any) -> RetrievedChunk:
         section_path=row.section_path,
         heading=row.heading,
         score=float(row.score),
+        version_label=row.version_label,
     )
