@@ -4,7 +4,7 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 12 of 30. Retrieval is feature-complete: structured German
+Status: Day 13 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -16,9 +16,14 @@ with per-phase timings. Generation: a versioned German answer prompt, a
 context builder that assigns stable `[S1]` markers and keeps the
 marker → page/section mapping backend-side, a non-streaming
 `POST /api/v1/chat` over a thin LLM seam (OpenAI-compatible client, or a
-deterministic fake for offline runs), and citation validation that
-drops any marker the model invents and treats an unsupported claim as
-an abstention rather than surfacing it as if it were grounded.
+deterministic fake for offline runs), citation validation that drops
+any marker the model invents and treats an unsupported claim as an
+abstention rather than surfacing it as if it were grounded, a
+pre-generation confidence gate that skips the LLM call entirely below a
+configurable rerank score, version-conflict detection that asks the
+model to flag a requirement code with disagreeing sources, and retried,
+typed-error LLM calls so a provider outage is a coherent HTTP response,
+never a bare 500.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
