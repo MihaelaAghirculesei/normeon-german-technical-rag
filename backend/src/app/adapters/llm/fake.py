@@ -21,12 +21,14 @@ so it needed fixing at the source, not worked around per test.
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncGenerator
 
 from app.adapters.llm.base import LlmResponse
 
 _MARKER = re.compile(r"\[S\d+\]")
 _CONTEXT_START = "Quellen:"
 _CONTEXT_END = "\n\nFrage:"
+_STREAM_CHUNK_CHARS = 8
 
 
 def _context_block(user: str) -> str:
@@ -60,3 +62,18 @@ class FakeLlmClient:
             f"Anforderungen. {markers[0]}"
         )
         return LlmResponse(text=text, model=self.name)
+
+    async def stream(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> AsyncGenerator[str]:
+        """Fixed-size character chunks of the same reply `complete` would
+        give -- deterministic and trivially reassembled (`"".join(chunks)
+        == complete(...).text`), enough to exercise the streaming endpoint
+        without a network call."""
+        text = (
+            await self.complete(
+                system=system, user=user, temperature=temperature, max_tokens=max_tokens
+            )
+        ).text
+        for i in range(0, len(text), _STREAM_CHUNK_CHARS):
+            yield text[i : i + _STREAM_CHUNK_CHARS]
