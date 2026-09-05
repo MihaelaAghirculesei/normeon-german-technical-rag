@@ -78,3 +78,14 @@ def extract_code(question: str) -> str | None:
     if match is None:
         return None
     return normalize_de(match.group(0))
+
+
+def extract_all_codes(text: str) -> set[str]:
+    """Every distinct requirement code in `text` (not just the first, and
+    not the looser norm-reference shapes `extract_code` also matches),
+    canonicalised the same way `normalize_de` collapses one: `LH 3.2.1` /
+    `LH-3.2.1` -> `lh3.2.1`. Used to line up two chunks -- possibly from
+    different documents -- that reference the same requirement code
+    (`domain/conflicts.find_version_conflicts`, Day 13).
+    """
+    return {f"{m.group(1)}{m.group(2)}".lower() for m in _REQUIREMENT_CODE.finditer(text)}

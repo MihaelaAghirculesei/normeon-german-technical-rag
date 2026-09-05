@@ -18,6 +18,7 @@ SELECT c.id            AS chunk_id,
        c.page_to       AS page_to,
        c.section_path  AS section_path,
        c.heading       AS heading,
+       d.version_label AS version_label,
        1 - (e.vec <=> :qvec) AS score
 FROM embeddings e
 JOIN chunks c    ON c.id = e.chunk_id

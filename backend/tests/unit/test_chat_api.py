@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_embedder, get_llm_client, get_reranker, get_session
 from app.api.v1 import chat
+from app.core.errors import LlmUnavailableError
 from app.domain.citations import Citation
 from app.domain.context import Source
 from app.domain.models import PipelineTiming
@@ -231,3 +232,29 @@ def test_chat_rejects_an_unknown_strategy(client_with_generator: Any) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_an_llm_failure_never_surfaces_as_a_bare_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Giorno 13: a typed NormeonError from the generation path is mapped
+    to a coherent JSON error body by main.py's generic handler, not left
+    to fall through as an unstructured crash."""
+
+    async def raising_generate_answer(*args: Any, **kwargs: Any) -> AnswerResult:
+        raise LlmUnavailableError("the model host is down")
+
+    monkeypatch.setattr(chat, "generate_answer", raising_generate_answer)
+    app.dependency_overrides[get_session] = lambda: object()
+    app.dependency_overrides[get_embedder] = lambda: object()
+    app.dependency_overrides[get_reranker] = lambda: object()
+    app.dependency_overrides[get_llm_client] = lambda: object()
+    try:
+        response = TestClient(app).post(
+            "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    assert response.json() == {"code": "llm_unavailable", "detail": "the model host is down"}

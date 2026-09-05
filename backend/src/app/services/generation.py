@@ -1,16 +1,24 @@
-"""``generate_answer`` -- the non-streaming answer path (plan, Giorno 11)::
+"""``generate_answer`` -- the non-streaming answer path::
 
-    retrieve_context  ->  build_context  ->  render the versioned prompt
-      ->  LlmClient.complete  ->  extract_and_validate  ->  answer +
-      valid citations + the marker -> source map
+    retrieve_context  ->  [pre-generation abstention gate, Giorno 13]
+      ->  build_context  ->  detect version conflicts (Giorno 13)
+      ->  render the versioned prompt  ->  LlmClient.complete
+      ->  extract_and_validate (Giorno 12)  ->  answer + valid
+      citations + the marker -> source map
 
-Citation validation (Giorno 12, ``domain.citations.extract_and_validate``)
-drops any marker the model invented, and turns an answer with claims but
-zero valid citations into an abstention -- never a failed request. It
-does not yet apply a confidence threshold *before* calling the model
-(Day 13). It does record which prompt produced the answer -- name and
-content hash -- so any logged answer traces back to its exact
-instructions.
+If the top reranked chunk's score is below `settings.
+min_rerank_score_for_answer` (or nothing was retrieved at all), the LLM
+is never called: the answer is NICHT_GEFUNDEN and the event is logged as
+`abstained_pre_generation` -- the cost-saving path Giorno 13 asks for.
+Past that gate, citation validation (`domain.citations.
+extract_and_validate`) drops any marker the model invented and turns an
+answer with claims but zero valid citations into an abstention -- never
+a failed request. A retrieval whose sources disagree by version on the
+same requirement code (`domain.conflicts.find_version_conflicts`) adds
+an explicit instruction to the system message asking the model to flag
+the discrepancy and cite both versions. It records which prompt produced
+the answer -- name and content hash -- so any logged answer traces back
+to its exact instructions.
 """
 
 from __future__ import annotations
@@ -27,7 +35,8 @@ from app.adapters.llm.base import LlmClient
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.core.metrics import hallucinated_citation_total
-from app.domain.citations import Citation, extract_and_validate
+from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
+from app.domain.conflicts import find_version_conflicts
 from app.domain.context import Source, build_context
 from app.domain.models import PipelineTiming
 from app.services.prompts import load_prompt
@@ -39,6 +48,15 @@ from app.services.retrieval import retrieve_context
 _SYSTEM = (
     "Du bist ein praeziser Assistent fuer technische Normen. "
     "Halte dich strikt an die folgenden Anweisungen."
+)
+
+# Appended to the system message only when find_version_conflicts finds
+# more than one version_label among the retrieved sources for the same
+# document (Giorno 13).
+_CONFLICT_INSTRUCTION = (
+    "Achtung: Einige Quellen stammen aus unterschiedlichen Versionen "
+    "desselben Dokuments. Weise in der Antwort ausdruecklich auf die "
+    "Abweichung hin und nenne beide Versionen mit ihren Markierungen."
 )
 
 _log = structlog.get_logger(__name__)
@@ -79,12 +97,41 @@ async def generate_answer(
         question=question,
         strategy=strategy,
     )
+
+    top_score = retrieval.reranked[0].score if retrieval.reranked else None
+    if top_score is None or top_score < settings.min_rerank_score_for_answer:
+        _log.info(
+            "abstained_pre_generation",
+            top_score=top_score,
+            threshold=settings.min_rerank_score_for_answer,
+            n_candidates=len(retrieval.reranked),
+            retrieval_ms=retrieval.timing.total_ms,
+        )
+        return AnswerResult(
+            answer=ABSTENTION_TEXT,
+            sources=[],
+            citations=[],
+            prompt_name=prompt.name,
+            prompt_sha256=prompt.sha256,
+            model=llm.name,
+            retrieval_timing=retrieval.timing,
+            generation_ms=0.0,
+            prompt_tokens=None,
+            completion_tokens=None,
+        )
+
     context_block, sources = build_context(retrieval.context)
     user_message = prompt.render(context=context_block, question=question)
 
+    system = _SYSTEM
+    conflicts = find_version_conflicts(sources)
+    if conflicts:
+        system = f"{system} {_CONFLICT_INSTRUCTION}"
+        _log.info("version_conflict_detected", codes=list(conflicts))
+
     started = time.perf_counter()
     completion = await llm.complete(
-        system=_SYSTEM,
+        system=system,
         user=user_message,
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
