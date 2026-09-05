@@ -10,7 +10,7 @@ import unicodedata
 
 import pytest
 
-from app.domain.normalization import extract_code, normalize_de
+from app.domain.normalization import extract_all_codes, extract_code, normalize_de
 
 
 @pytest.mark.parametrize("written", ["LH 3.2.1", "LH-3.2.1", "LH3.2.1"])
@@ -84,3 +84,13 @@ def test_normalize_de_is_idempotent() -> None:
 )
 def test_extract_code_picks_out_code_shaped_tokens(question: str, expected: str | None) -> None:
     assert extract_code(question) == expected
+
+
+def test_extract_all_codes_finds_every_distinct_code_in_a_longer_text() -> None:
+    text = "LH-3.2.1 fordert 300 N. Siehe auch LH 4.1.0. Nochmals LH-3.2.1."
+
+    assert extract_all_codes(text) == {"lh3.2.1", "lh4.1.0"}
+
+
+def test_extract_all_codes_on_text_with_no_code_is_empty() -> None:
+    assert extract_all_codes("Allgemeiner Fliesstext ohne Code.") == set()
