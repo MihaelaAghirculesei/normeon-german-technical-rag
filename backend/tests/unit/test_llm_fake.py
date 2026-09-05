@@ -87,3 +87,27 @@ async def test_an_empty_context_block_between_quellen_and_frage_is_nicht_gefunde
     resp = await client.complete(system="x", user=user, temperature=0.0, max_tokens=100)
 
     assert resp.text == "NICHT_GEFUNDEN"
+
+
+async def test_stream_reassembles_to_the_same_text_complete_would_give() -> None:
+    client = FakeLlmClient()
+    kw = {"system": "x", "user": "[S1] Quelle: a.pdf\n...", "temperature": 0.0, "max_tokens": 100}
+
+    chunks = [chunk async for chunk in client.stream(**kw)]
+    whole = await client.complete(**kw)
+
+    assert "".join(chunks) == whole.text
+    assert len(chunks) > 1, "should actually be chunked, not one big piece"
+
+
+async def test_stream_honours_a_canned_reply_too() -> None:
+    client = FakeLlmClient(canned="NICHT_GEFUNDEN")
+
+    chunks = [
+        chunk
+        async for chunk in client.stream(
+            system="x", user="[S1] [S2]", temperature=0.0, max_tokens=100
+        )
+    ]
+
+    assert "".join(chunks) == "NICHT_GEFUNDEN"
