@@ -196,6 +196,38 @@ another" link in the schema (a `document_group`/`supersedes` field),
 which is out of scope for Day 13; revisit if the Week 4 conflict eval
 case needs more recall than the code-matching heuristic gives it.
 
+## Streaming (Day 14)
+
+`POST /api/v1/chat/stream` sends `token` events as the model produces
+them, and only runs citation validation once the whole answer has been
+assembled.
+
+### A token already streamed cannot be un-sent
+
+If the model writes an invented marker (`[S9]`), the client has already
+seen it in a `token` event by the time `extract_and_validate` runs on
+the complete text. The `done` event's `citations` is still the honest,
+validated list -- it simply may not match everything the client already
+rendered from the raw token stream. The non-streaming `POST /api/v1/chat`
+does not have this problem: it validates before returning anything.
+
+**Mitigation / status.** Not fixed by construction -- buffering the
+whole answer before streaming any of it would remove the point of
+streaming (perceived responsiveness, `sources` arriving before the
+text). A frontend that wants to be defensive here can treat `done.
+citations` as authoritative and visually flag/retract a rendered answer
+whose citations came back empty; that UI behaviour is a later
+(Angular, Week 5) concern, not something the backend can paper over.
+
+### The LLM adapter's stream() does not retry
+
+`OpenAICompatibleClient.complete` retries transient failures (Day 13);
+`stream` deliberately does not, because retrying after even one chunk
+has already reached the caller would either duplicate output or need
+"has anything been yielded yet" bookkeeping that was not judged worth
+the complexity for Day 14. A transient mid-stream failure becomes one
+`error` SSE event instead of a retried attempt.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:
