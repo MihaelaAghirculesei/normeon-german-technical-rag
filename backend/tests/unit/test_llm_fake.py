@@ -93,21 +93,23 @@ async def test_stream_reassembles_to_the_same_text_complete_would_give() -> None
     client = FakeLlmClient()
     kw = {"system": "x", "user": "[S1] Quelle: a.pdf\n...", "temperature": 0.0, "max_tokens": 100}
 
-    chunks = [chunk async for chunk in client.stream(**kw)]
+    deltas = [delta async for delta in client.stream(**kw)]
     whole = await client.complete(**kw)
 
-    assert "".join(chunks) == whole.text
-    assert len(chunks) > 1, "should actually be chunked, not one big piece"
+    assert "".join(d.text for d in deltas) == whole.text
+    assert len(deltas) > 1, "should actually be chunked, not one big piece"
+    assert all(d.model == "fake" for d in deltas)
+    assert all(d.prompt_tokens is None and d.completion_tokens is None for d in deltas)
 
 
 async def test_stream_honours_a_canned_reply_too() -> None:
     client = FakeLlmClient(canned="NICHT_GEFUNDEN")
 
-    chunks = [
-        chunk
-        async for chunk in client.stream(
+    deltas = [
+        delta
+        async for delta in client.stream(
             system="x", user="[S1] [S2]", temperature=0.0, max_tokens=100
         )
     ]
 
-    assert "".join(chunks) == "NICHT_GEFUNDEN"
+    assert "".join(d.text for d in deltas) == "NICHT_GEFUNDEN"

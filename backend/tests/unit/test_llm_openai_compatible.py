@@ -171,9 +171,23 @@ async def test_a_timeout_raises_llm_timeout() -> None:
     assert exc_info.value.code == "llm_timeout"
 
 
-def _sse_body(*deltas: dict) -> bytes:
-    lines = "".join(f"data: {json.dumps({'choices': [{'delta': d}]})}\n\n" for d in deltas)
+def _sse_body(*chunks: dict) -> bytes:
+    """Each `chunks` entry is a raw wire chunk -- typically `{"model":
+    ..., "choices": [{"delta": {"content": ...}}]}` or a usage-only
+    `{"choices": [], "usage": {...}}`."""
+    lines = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks)
     return (lines + "data: [DONE]\n\n").encode("utf-8")
+
+
+def _content_chunk(text: str, *, model: str = "test-model") -> dict:
+    return {"model": model, "choices": [{"delta": {"content": text}}]}
+
+
+def _usage_chunk(prompt_tokens: int, completion_tokens: int) -> dict:
+    return {
+        "choices": [],
+        "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens},
+    }
 
 
 def _sse_transport(body: bytes, *, status: int = 200) -> httpx.MockTransport:
@@ -193,47 +207,66 @@ async def test_stream_yields_delta_content_pieces_in_order() -> None:
         base_url="https://llm.example/v1",
         api_key=None,
         model="m",
-        transport=_sse_transport(_sse_body({"content": "Die "}, {"content": "Antwort."})),
+        transport=_sse_transport(_sse_body(_content_chunk("Die "), _content_chunk("Antwort."))),
     )
 
-    chunks = [
-        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    deltas = [
+        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
     ]
 
-    assert "".join(chunks) == "Die Antwort."
+    assert "".join(d.text for d in deltas) == "Die Antwort."
+    assert all(d.model == "test-model" for d in deltas)
 
 
 async def test_stream_stops_at_done_and_ignores_anything_after() -> None:
-    after_done = json.dumps({"choices": [{"delta": {"content": "spaeter"}}]})
-    body = _sse_body({"content": "Die "}) + f"data: {after_done}\n\n".encode()
+    after_done = json.dumps(_content_chunk("spaeter"))
+    body = _sse_body(_content_chunk("Die ")) + f"data: {after_done}\n\n".encode()
     client = OpenAICompatibleClient(
         base_url="https://llm.example/v1", api_key=None, model="m", transport=_sse_transport(body)
     )
 
-    chunks = [
-        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    deltas = [
+        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
     ]
 
-    assert "".join(chunks) == "Die "
+    assert "".join(d.text for d in deltas) == "Die "
 
 
-async def test_stream_skips_deltas_with_no_content() -> None:
+async def test_stream_skips_deltas_with_no_content_and_no_usage() -> None:
+    role_only_chunk = {"model": "m", "choices": [{"delta": {"role": "assistant"}}]}
     client = OpenAICompatibleClient(
         base_url="https://llm.example/v1",
         api_key=None,
         model="m",
-        transport=_sse_transport(_sse_body({"role": "assistant"}, {"content": "Text"})),
+        transport=_sse_transport(_sse_body(role_only_chunk, _content_chunk("Text"))),
     )
 
-    chunks = [
-        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    deltas = [
+        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
     ]
 
-    assert chunks == ["Text"]
+    assert [d.text for d in deltas] == ["Text"]
 
 
-async def test_stream_sends_stream_true_in_the_payload() -> None:
-    transport = _sse_transport(_sse_body({"content": "x"}))
+async def test_stream_yields_a_final_usage_only_delta() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_sse_transport(_sse_body(_content_chunk("Text"), _usage_chunk(42, 7))),
+    )
+
+    deltas = [
+        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    ]
+
+    assert [d.text for d in deltas] == ["Text", ""]
+    assert deltas[0].prompt_tokens is None and deltas[0].completion_tokens is None
+    assert (deltas[1].prompt_tokens, deltas[1].completion_tokens) == (42, 7)
+
+
+async def test_stream_sends_stream_true_and_include_usage() -> None:
+    transport = _sse_transport(_sse_body(_content_chunk("x")))
     client = OpenAICompatibleClient(
         base_url="https://llm.example/v1", api_key=None, model="m", transport=transport
     )
@@ -243,6 +276,7 @@ async def test_stream_sends_stream_true_in_the_payload() -> None:
 
     sent = json.loads(transport.captured[0].content)  # type: ignore[attr-defined]
     assert sent["stream"] is True
+    assert sent["stream_options"] == {"include_usage": True}
 
 
 async def test_stream_raises_llm_unavailable_on_a_5xx() -> None:
