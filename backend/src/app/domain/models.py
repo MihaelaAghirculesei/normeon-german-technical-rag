@@ -27,6 +27,7 @@ class RetrievedChunk:
     section_path: str | None
     heading: str | None
     score: float
+    version_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

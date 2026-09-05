@@ -16,6 +16,7 @@ def _chunk(
     page_to: int = 14,
     section_path: str | None = "5.1.2",
     filename: str = "UN-R79.pdf",
+    version_label: str | None = None,
 ) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=uuid.uuid4(),
@@ -27,6 +28,7 @@ def _chunk(
         section_path=section_path,
         heading="Lenkkraft",
         score=0.9,
+        version_label=version_label,
     )
 
 
@@ -94,3 +96,17 @@ def test_braces_in_chunk_text_are_passed_through_verbatim() -> None:
     block, _ = build_context([_chunk(content="Grenzwert a{b} bei 50 % Last")])
 
     assert "Grenzwert a{b} bei 50 % Last" in block
+
+
+def test_version_label_is_rendered_right_after_the_filename() -> None:
+    block, sources = build_context([_chunk(version_label="1.2")])
+
+    assert "[S1] Quelle: UN-R79.pdf | Version 1.2 | Seite 14 | Abschnitt 5.1.2\n" in block
+    assert sources["S1"].version_label == "1.2"
+
+
+def test_missing_version_label_is_omitted_from_the_header() -> None:
+    block, sources = build_context([_chunk(version_label=None)])
+
+    assert "Version" not in block
+    assert sources["S1"].version_label is None

@@ -15,6 +15,7 @@ SELECT c.id            AS chunk_id,
        c.page_to       AS page_to,
        c.section_path  AS section_path,
        c.heading       AS heading,
+       d.version_label AS version_label,
        word_similarity(:code, c.content_norm) AS score
 FROM chunks c
 JOIN documents d ON d.id = c.document_id
