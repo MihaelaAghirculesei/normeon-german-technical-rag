@@ -4,7 +4,7 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 14 of 30. Retrieval is feature-complete: structured German
+Status: Day 15 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -25,7 +25,10 @@ code with disagreeing sources, retried typed-error LLM calls so a
 provider outage is a coherent HTTP response rather than a bare 500, and
 `POST /api/v1/chat/stream` (SSE) that sends sources before the answer
 starts streaming, with a non-cancelling heartbeat and a clean shutdown
-of the model call on client disconnect.
+of the model call on client disconnect, and cost tracking (a versioned
+`pricing.yaml`, priced against both the streaming and non-streaming
+paths) with every answer writing a `query_logs` row for tokens, cost,
+per-phase latency, config fingerprint and retrieved chunks.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
