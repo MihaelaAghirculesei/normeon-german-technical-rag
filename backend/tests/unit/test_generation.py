@@ -15,17 +15,24 @@ from app.services import generation
 TENANT = uuid.uuid4()
 
 
-def _chunk(section: str) -> RetrievedChunk:
+def _chunk(
+    section: str,
+    *,
+    score: float = 0.8,
+    version_label: str | None = None,
+    content: str | None = None,
+) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=uuid.uuid4(),
         document_id=uuid.uuid4(),
         filename="StVZO.pdf",
-        content=f"Regelungstext zu Abschnitt {section}.",
+        content=content if content is not None else f"Regelungstext zu Abschnitt {section}.",
         page_from=12,
         page_to=12,
         section_path=section,
         heading=None,
-        score=0.8,
+        score=score,
+        version_label=version_label,
     )
 
 
@@ -102,22 +109,61 @@ async def test_the_model_sees_the_rendered_prompt_with_the_context_block(
     assert "Antworte auf Deutsch." in captured["user"]
 
 
-async def test_empty_retrieval_yields_no_sources_and_nicht_gefunden(
+class _RefusingLlm:
+    """An LLM double that fails the test if it is ever called -- used to
+    prove the pre-generation abstention gate genuinely skips generation."""
+
+    name = "refusing"
+
+    async def complete(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> LlmResponse:
+        raise AssertionError("the LLM should not have been called")
+
+
+async def test_empty_retrieval_abstains_pre_generation_without_calling_the_llm(
     monkeypatch: Any,
 ) -> None:
     _stub_retrieval(monkeypatch, [])
 
-    # With no chunks the context block between "Quellen:" and "Frage:" is
-    # empty, so FakeLlmClient (which only scans that block, not the whole
-    # prompt) naturally answers NICHT_GEFUNDEN -- no canned= needed.
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
+        object(), object(), object(), _RefusingLlm(),
         tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
     )
 
     assert result.sources == []
     assert result.citations == []
     assert result.answer == "NICHT_GEFUNDEN"
+    assert result.generation_ms == 0.0
+
+
+async def test_a_low_rerank_score_abstains_pre_generation_without_calling_the_llm(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1", score=-3.0)])
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _RefusingLlm(),
+        tenant_id=TENANT, question="Wie hoch ist der Oelpreis in Katar?",
+    )
+
+    assert result.answer == "NICHT_GEFUNDEN"
+    assert result.sources == []
+    assert result.model == "refusing"
+
+
+async def test_a_rerank_score_at_or_above_the_threshold_still_calls_the_llm(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1", score=0.0)])
+
+    result = await generation.generate_answer(
+        object(), object(), object(), FakeLlmClient(),
+        tenant_id=TENANT, question="Frage?",
+    )
+
+    assert result.answer != "NICHT_GEFUNDEN"
+    assert result.sources != []
 
 
 async def test_an_invented_citation_marker_is_dropped_and_counted(
@@ -170,3 +216,62 @@ async def test_prompt_name_override_is_honoured(monkeypatch: Any) -> None:
     )
 
     assert result.prompt_name == "answer_de.v1"
+
+
+async def test_conflicting_requirement_code_versions_add_an_instruction_to_the_system(
+    monkeypatch: Any,
+) -> None:
+    """The corpus's synthetic Lastenheft-EPS v1.2 / v2.0 scenario: two
+    different documents, different version_labels, restating the same
+    requirement code with different values."""
+    _stub_retrieval(
+        monkeypatch,
+        [
+            _chunk("3.2.1", content="LH-3.2.1 fordert 300 N.", version_label="v1.2"),
+            _chunk("3.2.1", content="LH-3.2.1 fordert 250 N.", version_label="v2.0"),
+        ],
+    )
+    captured: dict[str, str] = {}
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            captured["system"] = system
+            return LlmResponse(text="[S1]", model="spy")
+
+    await generation.generate_answer(
+        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+    )
+
+    assert "unterschiedlichen Versionen" in captured["system"]
+
+
+async def test_a_single_version_label_adds_no_conflict_instruction(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(
+        monkeypatch,
+        [
+            _chunk("3.2.1", content="LH-3.2.1 fordert 300 N.", version_label="v1.2"),
+            _chunk("5.2", content="Belangloser Text.", version_label="v1.2"),
+        ],
+    )
+    captured: dict[str, str] = {}
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            captured["system"] = system
+            return LlmResponse(text="[S1]", model="spy")
+
+    await generation.generate_answer(
+        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+    )
+
+    assert "unterschiedlichen Versionen" not in captured["system"]
