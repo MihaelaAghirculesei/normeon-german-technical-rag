@@ -169,3 +169,106 @@ async def test_a_timeout_raises_llm_timeout() -> None:
     with pytest.raises(LlmTimeoutError) as exc_info:
         await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
     assert exc_info.value.code == "llm_timeout"
+
+
+def _sse_body(*deltas: dict) -> bytes:
+    lines = "".join(f"data: {json.dumps({'choices': [{'delta': d}]})}\n\n" for d in deltas)
+    return (lines + "data: [DONE]\n\n").encode("utf-8")
+
+
+def _sse_transport(body: bytes, *, status: int = 200) -> httpx.MockTransport:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(status, content=body, headers={"content-type": "text/event-stream"})
+
+    transport = httpx.MockTransport(handler)
+    transport.captured = captured  # type: ignore[attr-defined]
+    return transport
+
+
+async def test_stream_yields_delta_content_pieces_in_order() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_sse_transport(_sse_body({"content": "Die "}, {"content": "Antwort."})),
+    )
+
+    chunks = [
+        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    ]
+
+    assert "".join(chunks) == "Die Antwort."
+
+
+async def test_stream_stops_at_done_and_ignores_anything_after() -> None:
+    after_done = json.dumps({"choices": [{"delta": {"content": "spaeter"}}]})
+    body = _sse_body({"content": "Die "}) + f"data: {after_done}\n\n".encode()
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1", api_key=None, model="m", transport=_sse_transport(body)
+    )
+
+    chunks = [
+        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    ]
+
+    assert "".join(chunks) == "Die "
+
+
+async def test_stream_skips_deltas_with_no_content() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_sse_transport(_sse_body({"role": "assistant"}, {"content": "Text"})),
+    )
+
+    chunks = [
+        c async for c in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
+    ]
+
+    assert chunks == ["Text"]
+
+
+async def test_stream_sends_stream_true_in_the_payload() -> None:
+    transport = _sse_transport(_sse_body({"content": "x"}))
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1", api_key=None, model="m", transport=transport
+    )
+
+    async for _ in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
+        pass
+
+    sent = json.loads(transport.captured[0].content)  # type: ignore[attr-defined]
+    assert sent["stream"] is True
+
+
+async def test_stream_raises_llm_unavailable_on_a_5xx() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_sse_transport(b"", status=500),
+    )
+
+    with pytest.raises(LlmUnavailableError):
+        async for _ in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
+            pass
+
+
+async def test_stream_raises_llm_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("boom")
+
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(LlmTimeoutError):
+        async for _ in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
+            pass
