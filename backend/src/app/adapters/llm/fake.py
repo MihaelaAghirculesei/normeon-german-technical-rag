@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncGenerator
 
-from app.adapters.llm.base import LlmResponse
+from app.adapters.llm.base import Delta, LlmResponse
 
 _MARKER = re.compile(r"\[S\d+\]")
 _CONTEXT_START = "Quellen:"
@@ -65,15 +65,17 @@ class FakeLlmClient:
 
     async def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[Delta]:
         """Fixed-size character chunks of the same reply `complete` would
-        give -- deterministic and trivially reassembled (`"".join(chunks)
-        == complete(...).text`), enough to exercise the streaming endpoint
-        without a network call."""
+        give -- deterministic and trivially reassembled (`"".join(d.text
+        for d in ...) == complete(...).text`), enough to exercise the
+        streaming endpoint without a network call. Never carries token
+        counts: the fake has no real usage to report, same as
+        `complete`'s `LlmResponse` never setting them."""
         text = (
             await self.complete(
                 system=system, user=user, temperature=temperature, max_tokens=max_tokens
             )
         ).text
         for i in range(0, len(text), _STREAM_CHUNK_CHARS):
-            yield text[i : i + _STREAM_CHUNK_CHARS]
+            yield Delta(text=text[i : i + _STREAM_CHUNK_CHARS], model=self.name)

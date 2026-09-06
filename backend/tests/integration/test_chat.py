@@ -17,11 +17,12 @@ from pathlib import Path
 import pymupdf
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 from app.adapters.llm.fake import FakeLlmClient
-from app.db.models import Tenant
+from app.db.models import QueryLog, Tenant
 from app.domain.models import RetrievedChunk
 from app.services.generation import generate_answer
 from app.services.ingestion import ingest_document
@@ -170,6 +171,22 @@ async def _run(database_url: str, tmp_path: Path) -> None:
     for citation in result.citations:
         assert citation.document_id == doc_a_id
         assert citation.snippet
+
+    # --- Giorno 15: a real query_logs row exists for this answer --------
+    async with session_factory() as session:
+        logged = (
+            await session.scalars(
+                select(QueryLog).where(QueryLog.tenant_id == tenant_a_id)
+            )
+        ).one()
+    assert logged.question == _QUERY
+    assert len(logged.config_hash) == 64
+    assert logged.abstained is False
+    assert logged.answer == result.answer
+    assert set(logged.retrieved_ids) == {s.chunk_id for s in result.sources}
+    assert set(logged.latency_ms) == {"retrieval_ms", "generation_ms", "total_ms"}
+    assert set(logged.tokens) == {"prompt", "completion"}
+    assert logged.cost_usd is None  # the fake provider isn't in pricing.yaml
 
     # --- tenant isolation: tenant B never sees tenant A's document -------
     async with session_factory() as session:

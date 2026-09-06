@@ -19,6 +19,11 @@ show where the answer will come from while it is still being written),
 then `done` (or `error` in its place). See `services.generation.
 generate_answer_stream`'s docstring for what "done" means when the
 validated citations disagree with what was already streamed.
+
+`cost_usd` (Giorno 15) is the priced token cost of this answer, or
+`null` when the resolved model isn't in `backend/pricing.yaml` (the
+`fake` provider, or a self-hosted model with no listed price) -- see
+`services.pricing`. Every answer also writes one `query_logs` row.
 """
 
 from __future__ import annotations
@@ -87,6 +92,7 @@ class ChatResponse(BaseModel):
     model: str
     retrieval_timing: RetrievalTimingOut
     generation_ms: float
+    cost_usd: float | None
 
 
 def _sources_out(sources: list[Source]) -> list[SourceOut]:
@@ -146,6 +152,7 @@ async def chat(
         model=result.model,
         retrieval_timing=RetrievalTimingOut(**asdict(result.retrieval_timing)),
         generation_ms=result.generation_ms,
+        cost_usd=result.cost_usd,
     )
 
 

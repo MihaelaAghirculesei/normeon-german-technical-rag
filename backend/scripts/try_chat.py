@@ -22,6 +22,13 @@ reranked chunk's score is below `min_rerank_score_for_answer` --
 otherwise it still reaches the LLM and, with the fake provider, "cites"
 whatever irrelevant chunks were retrieved rather than truly abstaining
 (see docs/FAILURE-MODES.md, "Abstention and conflict detection").
+
+Since Day 15, every question also writes a `query_logs` row and prints
+its cost, if the resolved model is priced in `backend/pricing.yaml` --
+the fake provider (and any unlisted model) always shows `n/a`. This is
+the Day 15 "Fatto quando": switch `LLM_PROVIDER`/`LLM_MODEL` in `.env`,
+re-run, and the SAME questions work identically with a different (or
+newly non-null) cost recorded.
 """
 
 import argparse
@@ -63,8 +70,9 @@ async def _run(strategy: str | None) -> None:
                 f"(hybrid {t.hybrid_ms:.0f} / rerank {t.rerank_ms:.0f} / "
                 f"select {t.select_ms:.0f}) | generation {result.generation_ms:.0f} ms"
             )
+            cost = f"${result.cost_usd:.6f}" if result.cost_usd is not None else "n/a"
             print(f"   prompt {result.prompt_name} ({result.prompt_sha256[:12]}) "
-                  f"| model {result.model}")
+                  f"| model {result.model} | cost {cost}")
             print(f"   A: {result.answer}")
             for src in result.sources:
                 section = src.section_path or "-"
