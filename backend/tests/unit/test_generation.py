@@ -7,7 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from app.adapters.llm.base import LlmResponse
+from app.adapters.llm.base import Delta, LlmResponse
 from app.adapters.llm.fake import FakeLlmClient
 from app.core.errors import LlmTimeoutError
 from app.core.metrics import hallucinated_citation_total
@@ -59,7 +59,26 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         return RetrievalResult(context=chunks, reranked=chunks, timing=timing)
 
     monkeypatch.setattr(generation, "retrieve_context", fake_retrieve_context)
+    monkeypatch.setattr(generation, "record_query_log", _noop_record_query_log)
     return seen
+
+
+async def _noop_record_query_log(session: Any, **kwargs: Any) -> None:
+    """Default query_log stub (Giorno 15): most tests don't care that a
+    row would be written, just that generate_answer/_stream don't need a
+    real session to do it -- `object()` is still a valid `session` arg."""
+
+
+def _stub_query_log(monkeypatch: Any) -> list[dict[str, Any]]:
+    """Overrides the no-op stub above for tests that need to inspect
+    what record_query_log was called with."""
+    calls: list[dict[str, Any]] = []
+
+    async def fake_record_query_log(session: Any, **kwargs: Any) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(generation, "record_query_log", fake_record_query_log)
+    return calls
 
 
 async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> None:
@@ -290,7 +309,7 @@ class _RefusingStreamLlm:
 
     def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[Delta]:
         raise AssertionError("the LLM should not have been called")
 
 
@@ -306,11 +325,11 @@ class _StreamSpy:
 
     async def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[Delta]:
         self.captured["system"] = system
         self.captured["user"] = user
         for chunk in self._chunks:
-            yield chunk
+            yield Delta(text=chunk, model="spy")
 
 
 class _FailingStreamLlm:
@@ -318,8 +337,8 @@ class _FailingStreamLlm:
 
     async def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
-        yield "partial "
+    ) -> AsyncGenerator[Delta]:
+        yield Delta(text="partial ", model="spy")
         raise LlmTimeoutError("boom")
 
 
@@ -335,10 +354,10 @@ class _FinallyTrackingLlm:
 
     async def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[Delta]:
         try:
-            yield "a"
-            yield "b"
+            yield Delta(text="a", model="spy")
+            yield Delta(text="b", model="spy")
         finally:
             self.closed = True
 
@@ -468,3 +487,125 @@ async def test_closing_the_stream_early_cascades_to_the_llm_client(monkeypatch: 
     await agen.aclose()
 
     assert llm.closed is True
+
+
+# --- cost tracking + query_logs (Giorno 15) ---------------------------------
+
+
+async def test_generate_answer_writes_a_query_log_row(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1"), _chunk("5.2")])
+    calls = _stub_query_log(monkeypatch)
+
+    result = await generation.generate_answer(
+        object(), object(), object(), FakeLlmClient(),
+        tenant_id=TENANT, question="Welche Lenkkraft?",
+    )
+
+    assert len(calls) == 1
+    logged = calls[0]
+    assert logged["tenant_id"] == TENANT
+    assert logged["question"] == "Welche Lenkkraft?"
+    assert len(logged["config_hash"]) == 64
+    assert logged["abstained"] is False
+    assert logged["answer"] == result.answer
+    assert set(logged["latency_ms"]) == {"retrieval_ms", "generation_ms", "total_ms"}
+    assert logged["tokens"] == {"prompt": 0, "completion": 0}  # fake reports no usage
+    assert logged["cost_usd"] is None  # "fake" isn't in pricing.yaml
+    assert len(logged["retrieved_ids"]) == 2
+
+
+async def test_generate_answer_logs_pre_generation_abstention_as_a_query(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [])
+    calls = _stub_query_log(monkeypatch)
+
+    await generation.generate_answer(
+        object(), object(), object(), _RefusingLlm(),
+        tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["abstained"] is True
+    assert calls[0]["answer"] == "NICHT_GEFUNDEN"
+    assert calls[0]["retrieved_ids"] == []
+    assert calls[0]["cost_usd"] is None
+
+
+async def test_generate_answer_stream_writes_a_query_log_row(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    calls = _stub_query_log(monkeypatch)
+
+    async for _ in generation.generate_answer_stream(
+        object(), object(), object(), FakeLlmClient(),
+        tenant_id=TENANT, question="Frage?",
+    ):
+        pass
+
+    assert len(calls) == 1
+    assert calls[0]["abstained"] is False
+
+
+async def test_cost_usd_is_computed_for_a_priced_model(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            return LlmResponse(
+                text="[S1]", model="gpt-4o-mini", prompt_tokens=1000, completion_tokens=500
+            )
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+    )
+
+    # gpt-4o-mini in pricing.yaml: $0.15/Mtok in, $0.60/Mtok out
+    assert result.cost_usd == round(1000 / 1_000_000 * 0.15 + 500 / 1_000_000 * 0.60, 6)
+
+
+async def test_cost_usd_is_none_for_an_unpriced_model(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            return LlmResponse(
+                text="[S1]", model="some-self-hosted-model",
+                prompt_tokens=100, completion_tokens=50,
+            )
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+    )
+
+    assert result.cost_usd is None
+
+
+async def test_stream_cost_usd_uses_usage_reported_on_the_stream(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    class _Spy:
+        name = "spy"
+
+        async def stream(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> AsyncGenerator[Delta]:
+            yield Delta(text="[S1]", model="gpt-4o-mini")
+            yield Delta(prompt_tokens=1000, completion_tokens=500)
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+        )
+    ]
+
+    done = events[-1]
+    assert done.data["cost_usd"] == round(1000 / 1_000_000 * 0.15 + 500 / 1_000_000 * 0.60, 6)

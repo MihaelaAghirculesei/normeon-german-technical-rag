@@ -228,6 +228,35 @@ has already reached the caller would either duplicate output or need
 the complexity for Day 14. A transient mid-stream failure becomes one
 `error` SSE event instead of a retried attempt.
 
+## Cost tracking (Day 15)
+
+### pricing.yaml is a snapshot, not a live feed
+
+`services.pricing.calculate_cost` looks up a fixed table
+(`backend/pricing.yaml`) verified against a pricing aggregator on the
+date noted in that file's header. Provider prices change without
+notice and this file is never re-fetched automatically -- a cost
+reported today against a stale entry is only as accurate as the last
+time someone re-verified it. An unpriced model (anything not listed,
+including the `fake` provider and any self-hosted model with a
+homegrown id) returns `cost_usd = null` rather than a guess, which is
+correct but means "no cost recorded" cannot be told apart from "this
+answer was free" from the number alone -- `query_logs.tokens` still
+records the token counts either way.
+
+### Streaming cost depends on the server supporting `stream_options.include_usage`
+
+`OpenAICompatibleClient.stream` asks for a final usage-only delta via
+`stream_options: {"include_usage": true}` -- an OpenAI extension most,
+but not all, OpenAI-compatible servers honour (some vLLM/TGI/llama.cpp
+deployments silently ignore unknown request fields rather than
+erroring, so this degrades quietly). If the server doesn't send it,
+`Delta.prompt_tokens`/`completion_tokens` stay `None` for the whole
+stream and the streamed answer's `cost_usd`/`query_logs.tokens` come
+back empty, exactly like a `complete()` response from a server that
+doesn't report `usage` at all -- not a bug, just no signal to work
+with.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:

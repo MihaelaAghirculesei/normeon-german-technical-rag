@@ -1,0 +1,25 @@
+# Per-model cost table for domain.pricing.calculate_cost (plan, Giorno 15).
+#
+# Keyed by the exact model id string that ends up on LlmResponse.model /
+# adapters.llm.base.Delta.model -- for OpenAICompatibleClient that's
+# whatever the server echoes back in its response payload's "model"
+# field (falling back to the configured llm_model if the response
+# doesn't carry one). A model not listed here is simply untracked --
+# calculate_cost returns None, not a fabricated number or an error, so
+# a self-hosted model with a homegrown id is a normal, expected case.
+#
+# Verified against https://openrouter.ai's published per-model pricing
+# on 2026-09-05 (input_per_mtok / output_per_mtok are the price per
+# million tokens, in USD). Re-verify before trusting these for a real
+# cost report -- provider pricing changes without notice, and this file
+# is not re-fetched automatically.
+models:
+  "gpt-4o":
+    input_per_mtok: 2.50
+    output_per_mtok: 10.00
+  "gpt-4o-mini":
+    input_per_mtok: 0.15
+    output_per_mtok: 0.60
+  "meta-llama/llama-3.3-70b-instruct":
+    input_per_mtok: 0.10
+    output_per_mtok: 0.32

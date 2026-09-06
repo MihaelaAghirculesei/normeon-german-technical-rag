@@ -13,14 +13,20 @@ one of the typed `core.errors.NormeonError`s, never a raw `httpx`
 exception, so the API's generic error handler always returns a coherent
 JSON body instead of a bare 500.
 
-``stream`` (Day 14) sets `"stream": true` and reads the same wire
-format's `data: {...}` / `data: [DONE]` Server-Sent-Events lines, one
-`choices[0].delta.content` piece at a time. It deliberately does **not**
-retry: once even one chunk has reached the caller, retrying would either
-duplicate it or require tracking "has anything been yielded yet" state
-that isn't worth the complexity for Day 14 -- a mid-stream failure
-becomes a typed error the caller (`services.generation.
-generate_answer_stream`) turns into an `event: error` SSE frame instead.
+``stream`` (Day 14, widened Day 15) sets `"stream": true` plus
+`"stream_options": {"include_usage": true}` and reads the same wire
+format's `data: {...}` / `data: [DONE]` Server-Sent-Events lines,
+yielding one `Delta` per line that carries a `choices[0].delta.content`
+piece and/or a `usage` object -- servers that support the option send a
+final usage-only delta (empty `choices`, populated `usage`) just before
+`[DONE]`; servers that don't simply never populate `Delta.prompt_tokens`/
+`completion_tokens`, same as an unsupported `complete()` would leave
+`LlmResponse`'s counts `None`. It deliberately does **not** retry: once
+even one chunk has reached the caller, retrying would either duplicate
+it or require tracking "has anything been yielded yet" state that isn't
+worth the complexity here -- a mid-stream failure becomes a typed error
+the caller (`services.generation.generate_answer_stream`) turns into an
+`event: error` SSE frame instead.
 
 A ``transport`` can be injected for tests.
 """
@@ -34,7 +40,7 @@ from typing import Any
 import httpx
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 
-from app.adapters.llm.base import LlmResponse
+from app.adapters.llm.base import Delta, LlmResponse
 from app.core.errors import LlmTimeoutError, LlmUnavailableError
 
 
@@ -102,11 +108,12 @@ class OpenAICompatibleClient:
 
     async def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
-    ) -> AsyncGenerator[str]:
+    ) -> AsyncGenerator[Delta]:
         body = self._body(
             system=system, user=user, temperature=temperature, max_tokens=max_tokens
         )
         body["stream"] = True
+        body["stream_options"] = {"include_usage": True}
         try:
             async with self._client.stream("POST", "/chat/completions", json=body) as response:
                 response.raise_for_status()
@@ -117,10 +124,18 @@ class OpenAICompatibleClient:
                     raw = line[len("data:") :].strip()
                     if raw == "[DONE]":
                         break
-                    delta = json.loads(raw)["choices"][0].get("delta", {})
-                    content = delta.get("content")
-                    if content:
-                        yield content
+                    chunk = json.loads(raw)
+                    choices = chunk.get("choices") or []
+                    content = choices[0].get("delta", {}).get("content") if choices else None
+                    usage = chunk.get("usage") or {}
+                    if not content and not usage:
+                        continue
+                    yield Delta(
+                        text=content or "",
+                        model=chunk.get("model"),
+                        prompt_tokens=usage.get("prompt_tokens"),
+                        completion_tokens=usage.get("completion_tokens"),
+                    )
         except httpx.TimeoutException as exc:
             raise LlmTimeoutError(str(exc)) from exc
         except httpx.HTTPError as exc:
