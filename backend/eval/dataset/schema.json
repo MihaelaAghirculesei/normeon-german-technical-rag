@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "GoldSource": {
+      "properties": {
+        "document": {
+          "title": "Document",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Section"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "title": "GoldSource",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "category": {
+      "enum": [
+        "requirement_lookup",
+        "cross_reference",
+        "code_lookup",
+        "unanswerable",
+        "conflict"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "difficulty": {
+      "default": "medium",
+      "enum": [
+        "easy",
+        "medium",
+        "hard"
+      ],
+      "title": "Difficulty",
+      "type": "string"
+    },
+    "expected_answer_points": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Expected Answer Points",
+      "type": "array"
+    },
+    "gold_sources": {
+      "items": {
+        "$ref": "#/$defs/GoldSource"
+      },
+      "title": "Gold Sources",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^Q\\d{3}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "question": {
+      "minLength": 1,
+      "title": "Question",
+      "type": "string"
+    },
+    "should_abstain": {
+      "default": false,
+      "title": "Should Abstain",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "category",
+    "question"
+  ],
+  "title": "EvalQuestion",
+  "type": "object"
+}

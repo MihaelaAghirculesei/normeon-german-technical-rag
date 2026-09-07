@@ -1,0 +1,36 @@
+# Three throwaway questions to exercise eval/runner.py end to end
+# (plan, Giorno 16 "Fatto quando"). These are NOT the real eval set --
+# the 50 hand-written, gold-verified questions are Giorni 17-18. The
+# gold_sources here are rough and unverified; do not read anything into
+# the numbers a run over this file produces.
+
+- id: Q001
+  category: requirement_lookup
+  question: "Welche Vorschriften gelten fuer Scheinwerfer an Kraftfahrzeugen?"
+  expected_answer_points:
+    - "Scheinwerfer"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "50" }
+  should_abstain: false
+  difficulty: easy
+  notes: "Smoke test only."
+
+- id: Q002
+  category: code_lookup
+  question: "Was regelt Paragraph 41 der StVZO?"
+  expected_answer_points:
+    - "Bremse"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "41" }
+  should_abstain: false
+  difficulty: easy
+  notes: "Smoke test only."
+
+- id: Q003
+  category: unanswerable
+  question: "Wie hoch ist der aktuelle Oelpreis in Katar?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: easy
+  notes: "Smoke test only -- not in the corpus, must abstain."
