@@ -4,7 +4,7 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
-Status: Day 15 of 30. Retrieval is feature-complete: structured German
+Status: Day 16 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search

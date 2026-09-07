@@ -20,5 +20,5 @@ node_modules/
 # local working notes / AI-session continuity — never published
 CLAUDE.md
 
-eval/reports/*.json
-eval/reports/*.html
+backend/eval/reports/*.json
+backend/eval/reports/*.html
