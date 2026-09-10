@@ -4,6 +4,9 @@ A cited RAG assistant for German technical documentation — Lastenhefte,
 UNECE regulations, manuals — that answers with verifiable citations instead
 of prose that merely sounds confident.
 
+[![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Status: Day 16 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
@@ -79,3 +82,13 @@ hook with `--no-verify`.
 - `docs/EVALUATION.md` — evaluation methodology and results (coming Week 4)
 - `docs/THREAT-MODEL.md` — attacker model and mitigations (coming Week 6)
 - `docs/FAILURE-MODES.md` — where this system is not reliable, with numbers (coming Week 6)
+
+## License
+
+Code is released under the [MIT License](LICENSE).
+
+The documents under `corpus/` are not covered by that license and keep
+their own terms: `StVZO.pdf` and `FZV.pdf` are official German
+regulations (amtliche Werke, § 5 UrhG — no copyright), and the
+`Lastenheft-EPS-*.docx` files are synthetic samples written for this
+project. See `corpus/manifest.yaml` for the provenance of each file.
