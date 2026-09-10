@@ -158,7 +158,9 @@ async def _run(database_url: str, tmp_path: Path) -> None:
 
     t = result.timing
     assert t.hybrid_ms >= 0 and t.rerank_ms >= 0 and t.select_ms >= 0
-    assert t.total_ms >= t.hybrid_ms + t.rerank_ms + t.select_ms - 1e-6
+    # each phase is rounded to 0.1 ms independently of the end-to-end total,
+    # so the parts can sum to at most 3 * 0.05 ms over it under load jitter
+    assert t.total_ms >= t.hybrid_ms + t.rerank_ms + t.select_ms - 0.15
 
     # --- a tight token budget stops selection early --------------------
     async with session_factory() as session:
