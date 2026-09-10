@@ -138,7 +138,9 @@ async def test_retrieve_context_reports_per_phase_timings(
 
     t = result.timing
     assert t.hybrid_ms >= 0 and t.rerank_ms >= 0 and t.select_ms >= 0
-    assert t.total_ms >= t.hybrid_ms + t.rerank_ms + t.select_ms - 1e-6
+    # each phase is rounded to 0.1 ms independently of the end-to-end total,
+    # so the parts can sum to at most 3 * 0.05 ms over it under load jitter
+    assert t.total_ms >= t.hybrid_ms + t.rerank_ms + t.select_ms - 0.15
 
 
 async def test_retrieve_context_applies_the_token_budget_after_rerank(
