@@ -1,0 +1,20 @@
+# The real evaluation set (plan, Giorni 17-18). 50 questions, hand-written
+# by reading the corpus PDFs/DOCX -- NOT LLM-generated (that would produce
+# questions the system solves by construction, per the plan's explicit
+# warning). Gold sources verified by opening each source document.
+#
+# 5 categories x 10 questions each -- see docs/EVALUATION.md for the full
+# authoring checklist and the rules recap for each category:
+#   - requirement_lookup  (half of the 10 must cite a fact from a table)
+#   - cross_reference     (spans two sections or two documents)
+#   - code_lookup         (codes / norm numbers -- the case for hybrid)
+#   - unanswerable        (plausible, not absurd; should_abstain: true)
+#   - conflict            (Lastenheft-EPS v1.2 vs v2.0 contradict on
+#                          LH-3.2.1; the correct answer flags the conflict)
+#
+# This file is empty until the questions are written; do not add the
+# full-set shape test (50 entries, 10/category) until it is complete --
+# see test_eval_dataset.py / test_eval_schema.py for the pattern used by
+# the Day 16 smoke set.
+
+[]
