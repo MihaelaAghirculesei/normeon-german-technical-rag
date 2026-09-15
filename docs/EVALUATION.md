@@ -4,8 +4,9 @@ Status: work in progress (plan, Giorni 17-20). This document tracks the
 50-question evaluation set, the two-layer correctness metric, and the
 judge-agreement check. Sections below are filled in as each part lands.
 
-**Progress: 10/50 questions written.** `conflict` (10/10) is done. The
-other four categories (0/10 each) are next.
+**Progress: 50/50 questions written, all validated in CI** (`tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category`).
+`requirement_lookup`, `cross_reference`, `code_lookup`, `unanswerable` and
+`conflict` are each 10/10.
 
 Blocker found and fixed before writing `conflict`: the two Lastenheft
 `.docx` were never ingested (no DOCX parser existed), so the conflict
@@ -79,7 +80,7 @@ Authoring checklist per question:
 
 Validated against `EvalQuestion` (`src/app/eval/models.py`) via
 `load_questions`; the full-set shape test (50 entries, 10 per category)
-lands in `tests/unit/` once the set is complete.
+is `tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category`.
 
 ## Correctness metric (Giorno 18)
 
