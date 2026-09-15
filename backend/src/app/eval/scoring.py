@@ -118,12 +118,22 @@ async def score_layer2(
     question: EvalQuestion,
     answer: str,
     temperature: float = 0.0,
-    max_tokens: int = 300,
+    # Several Gemini models spend part of max_tokens on an internal
+    # "thought" pass before ever emitting the visible JSON; at 300 this
+    # reliably truncated mid-string ('{"score": 2, "rationale": "Die'),
+    # which _parse_judge_response correctly reported as a JudgeError but
+    # for the wrong reason (truncation, not a genuinely malformed
+    # response). 800 matches core.config.Settings.llm_max_tokens, the
+    # same budget the answer-generation path already uses.
+    max_tokens: int = 800,
 ) -> JudgeResult | JudgeError:
     user = render_judge_prompt(question, answer)
-    response = await llm.complete(
-        system=_SYSTEM, user=user, temperature=temperature, max_tokens=max_tokens
-    )
+    try:
+        response = await llm.complete(
+            system=_SYSTEM, user=user, temperature=temperature, max_tokens=max_tokens
+        )
+    except Exception as exc:  # one bad judge call must not sink the whole batch
+        return JudgeError(raw_response="", error=str(exc))
     return _parse_judge_response(response.text)
 
 
