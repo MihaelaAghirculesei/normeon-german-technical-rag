@@ -12,9 +12,146 @@
 #   - conflict            (Lastenheft-EPS v1.2 vs v2.0 contradict on
 #                          LH-3.2.1; the correct answer flags the conflict)
 #
-# This file is empty until the questions are written; do not add the
-# full-set shape test (50 entries, 10/category) until it is complete --
+# Progress: 10/50 written (conflict category complete). Do not add the
+# full-set shape test (50 entries, 10/category) until all 50 are done --
 # see test_eval_dataset.py / test_eval_schema.py for the pattern used by
 # the Day 16 smoke set.
+#
+# `conflict` gold_sources cite the two Lastenheft-EPS .docx by section
+# only, no page: the docx parser (adapters/parsing/docx.py) has no page
+# concept (every block is page=1), so a page number here would be
+# meaningless. Facts verified against corpus/generate_lastenheft.py (the
+# single source both .docx are generated from) and cross-checked against
+# a real retrieval run on the ingested dev DB, which confirmed both
+# LH-3.2.1 and LH-6.2.1 retrieve from both versions and
+# domain.conflicts.find_version_conflicts flags both.
 
-[]
+- id: Q001
+  category: conflict
+  question: "Welchen Höchstwert für die Lenkkraft bei Ausfall der Servounterstützung (LH-3.2.1) legt das Lastenheft EPS fest?"
+  expected_answer_points:
+    - "300 N"
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "3.2" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "3.2" }
+  should_abstain: false
+  difficulty: medium
+  notes: "v1.2 nennt 300 N, v2.0 250 N. Korrekte Antwort muss den Widerspruch benennen, nicht nur einen Wert übernehmen."
+
+- id: Q002
+  category: conflict
+  question: "Welcher Wert für 'Maximal zulässige Lenkkraft bei Ausfall' steht in der Tabelle der Umgebungsbedingungen (Abschnitt 5) des Lastenhefts EPS?"
+  expected_answer_points:
+    - "300 N"
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "5" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Gleicher Konflikt wie LH-3.2.1 (Q001), hier aus der Tabelle in Abschnitt 5 statt aus Abschnitt 3.2 -- Wert steht in einer Tabelle."
+
+- id: Q003
+  category: conflict
+  question: "Wie lange darf die maximale Diagnose-Ansprechzeit bei Ausfall der Servounterstützung (LH-6.2.1) laut Lastenheft EPS höchstens sein?"
+  expected_answer_points:
+    - "150 ms"
+    - "100 ms"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "6" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "6" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Zweiter, unabhängiger Konflikt (LH-6.2.1): v1.2 nennt 150 ms, v2.0 100 ms."
+
+- id: Q004
+  category: conflict
+  question: "Stimmen Lastenheft EPS v1.2 und v2.0 beim Wert der Anforderung LH-3.2.1 überein?"
+  expected_answer_points:
+    - "nein"
+    - "300 N"
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "3.2" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "3.2" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Direkte Ja/Nein-Frage nach dem Konflikt; korrekte Antwort muss 'nein' plus beide Werte nennen, nicht nur einen."
+
+- id: Q005
+  category: conflict
+  question: "Gilt die in Lastenheft EPS v1.2 genannte maximale Lenkkraft von 300 N (LH-3.2.1) auch noch für ein Fahrzeug, das im März 2026 typgenehmigt wird?"
+  expected_answer_points:
+    - "nein"
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "Lastenheft — Elektrisches Servolenksystem (EPS)" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "Anhang A: Änderungshistorie" }
+  should_abstain: false
+  difficulty: hard
+  notes: "v1.2 ist nur bis 2025-12-31 gültig (siehe Metadatentabelle am Dokumentanfang), v2.0 gilt ab 2026-01-01 und ersetzt v1.2 vollständig. Testet zeitliche Gültigkeit, nicht nur den Zahlenkonflikt."
+
+- id: Q006
+  category: conflict
+  question: "Ab welchem Datum gilt der verschärfte Grenzwert von 250 N für LH-3.2.1?"
+  expected_answer_points:
+    - "2026-01-01"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "Anhang A: Änderungshistorie" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Datum steht wörtlich in der Änderungshistorie von v2.0."
+
+- id: Q007
+  category: conflict
+  question: "Welche Version des Lastenhefts EPS ist aktuell die gültige?"
+  expected_answer_points:
+    - "v2.0"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "Anhang A: Änderungshistorie" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Testet, ob das System zwischen den beiden Dokumentversionen unterscheidet, statt nur einen Zahlenkonflikt zu melden."
+
+- id: Q008
+  category: conflict
+  question: "Welche beiden Anforderungen wurden von Lastenheft EPS v1.2 zu v2.0 geändert, und wie?"
+  expected_answer_points:
+    - "LH-3.2.1"
+    - "300 N"
+    - "250 N"
+    - "LH-6.2.1"
+    - "150 ms"
+    - "100 ms"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "Anhang A: Änderungshistorie" }
+  should_abstain: false
+  difficulty: hard
+  notes: "Breiter gefasst als Q001/Q003: prüft, ob BEIDE Konfliktpunkte (Lenkkraft und Diagnosezeit) erkannt werden, nicht nur einer."
+
+- id: Q009
+  category: conflict
+  question: "Wie viel Newton darf die Lenkkraft bei Ausfall der Servounterstützung laut Lastenheft EPS maximal betragen?"
+  expected_answer_points:
+    - "300 N"
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "3.2" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "3.2" }
+  should_abstain: false
+  difficulty: easy
+  notes: "Wie Q001, aber absichtlich ohne den Code LH-3.2.1 zu nennen -- testet, ob reine Stichwortsuche (nicht Code-Lookup) beide Versionen findet."
+
+- id: Q010
+  category: conflict
+  question: "Auf welchen Abschnitt der UN R79 verweist das Lastenheft EPS bei der Anforderung LH-3.2.1, und hat sich dieser Verweis zwischen v1.2 und v2.0 geändert?"
+  expected_answer_points:
+    - "5.1.2"
+    - "nein"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v1.2.docx", section: "3.2" }
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "3.2" }
+  should_abstain: false
+  difficulty: hard
+  notes: "Der Verweis auf UN R79 Abschnitt 5.1.2 bleibt in beiden Versionen unverändert -- nur der Zahlenwert ändert sich. Testet Genauigkeit statt pauschales Konflikt-Flaggen."
