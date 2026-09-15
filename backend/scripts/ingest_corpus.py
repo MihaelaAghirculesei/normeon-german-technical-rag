@@ -1,5 +1,6 @@
-"""Ingest the demo corpus (the two real German traffic-law PDFs) into the
-demo tenant.
+"""Ingest the demo corpus into the demo tenant: the two German traffic-law
+PDFs and the two synthetic Lastenheft DOCX (the eval suite's conflict
+case, plan Giorno 17-18, needs both versions actually retrievable).
 
 Run with:
     cd backend
@@ -10,14 +11,21 @@ Idempotent: re-running skips a document already ingested (same tenant and
 content hash) and resumes one left mid-pipeline. On first run the local
 e5-large model is downloaded and every chunk is embedded on CPU, so this
 takes a while.
+
+Per-file `doc_type`/`version_label`/`valid_from`/`valid_until` come from
+`corpus/manifest.yaml` -- the one place that metadata is authored, so this
+script and the manifest can't drift apart.
 """
 
 import argparse
 import asyncio
 import sys
 import time
+from datetime import date
 from pathlib import Path
+from typing import Any
 
+import yaml
 from sqlalchemy import func, select
 
 from app.api.deps import get_embedder
@@ -27,7 +35,22 @@ from app.db.session import async_session_factory
 from app.services.ingestion import ingest_document
 
 CORPUS_DIR = Path(__file__).parents[2] / "corpus"
-DEFAULT_FILES = ("StVZO.pdf", "FZV.pdf")
+MANIFEST_PATH = CORPUS_DIR / "manifest.yaml"
+DEFAULT_FILES = (
+    "StVZO.pdf",
+    "FZV.pdf",
+    "Lastenheft-EPS-v1.2.docx",
+    "Lastenheft-EPS-v2.0.docx",
+)
+
+
+def _parse_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
+
+
+def _load_manifest() -> dict[str, dict[str, Any]]:
+    raw = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return {entry["filename"]: entry for entry in raw["documents"]}
 
 
 async def _ensure_demo_tenant() -> None:
@@ -41,16 +64,26 @@ async def _ensure_demo_tenant() -> None:
 
 async def _ingest(files: list[str]) -> None:
     embedder = get_embedder()
+    manifest = _load_manifest()
     for name in files:
         path = CORPUS_DIR / name
         if not path.is_file():
             print(f"{name}: SKIPPED (not found at {path})")
             continue
+        meta = manifest.get(name, {})
         content = path.read_bytes()
         started = time.monotonic()
         async with async_session_factory() as session:
             document, already_ingested = await ingest_document(
-                session, embedder, DEMO_TENANT_ID, name, "norm", content
+                session,
+                embedder,
+                DEMO_TENANT_ID,
+                name,
+                meta.get("doc_type", "norm"),
+                content,
+                version_label=meta.get("version_label"),
+                valid_from=_parse_date(meta.get("valid_from")),
+                valid_until=_parse_date(meta.get("valid_until")),
             )
             chunk_count = await session.scalar(
                 select(func.count())
