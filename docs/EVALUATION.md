@@ -4,6 +4,44 @@ Status: work in progress (plan, Giorni 17-20). This document tracks the
 50-question evaluation set, the two-layer correctness metric, and the
 judge-agreement check. Sections below are filled in as each part lands.
 
+**Progress: 10/50 questions written.** `conflict` (10/10) is done. The
+other four categories (0/10 each) are next.
+
+Blocker found and fixed before writing `conflict`: the two Lastenheft
+`.docx` were never ingested (no DOCX parser existed), so the conflict
+case would have been untestable. Added `adapters/parsing/docx.py` +
+wired `version_label`/`valid_from`/`valid_until` through ingestion (see
+git history on `day17-18/eval-question-set-and-judge`). Verified against
+the real dev DB: a live retrieval query surfaces chunks from both
+Lastenheft versions and `find_version_conflicts` correctly flags both
+`LH-3.2.1` and `LH-6.2.1`.
+
+Known limitation carried into the gold sources: the DOCX parser has no
+page concept (short document, every block is stamped page 1), so
+Lastenheft-sourced `gold_sources` cite `section` only, never `page`.
+
+Real body-heading pages found in `corpus/StVZO.pdf` (via the parser, not
+guessed — the first hits on these codes are the table of contents on
+pages 2-4, not the article itself):
+
+| Section | Title | Page |
+|---|---|---|
+| §32 | Abmessungen von Fahrzeugen und Fahrzeugkombinationen | 21 |
+| §35a | Sitze, Sicherheitsgurte, Rückhaltesysteme, ... | 32 |
+| §36 | Bereifung und Laufflächen | 35 |
+| §41 | Bremsen und Unterlegkeile | 40 |
+| §42 | Anhängelast hinter Kraftfahrzeugen und Leergewicht | 45 |
+| §50 | Scheinwerfer für Fern- und Abblendlicht | 55 |
+| §53d | Nebelschlussleuchten | 65 |
+| §55 | Einrichtungen für Schallzeichen | 67 |
+
+And in `corpus/FZV.pdf`:
+
+| Section | Title | Page |
+|---|---|---|
+| §9 | Zuteilung von Kennzeichen | 1 |
+| §10 | Besondere Kennzeichen | 2 |
+
 ## The question set (Giorni 17-18)
 
 `backend/eval/dataset/questions.yaml` — 50 questions, hand-written by
