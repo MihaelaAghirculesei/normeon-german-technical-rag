@@ -84,17 +84,61 @@ is `tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten
 
 ## Correctness metric (Giorno 18)
 
-*Not yet implemented.*
+**Code done, not yet run for real** — needs an actual (non-`fake`) LLM
+provider configured; see "Blocked on" below.
 
-- Layer 1 — deterministic: `expected_answer_points` present in the answer
-  (normalized match, tolerant of numeric formatting).
-- Layer 2 — LLM-as-judge: 0-2 scale, given the answer, the expected
-  points, and the gold sources.
+- Layer 1 — deterministic (`src/app/eval/scoring.py:score_layer1`):
+  every `expected_answer_points` string must appear in the answer after
+  normalizing only numeric *formatting* (decimal comma vs. dot,
+  whitespace, case) — not a fuzzy/semantic match. Zero cost, zero LLM
+  calls, fully reproducible.
+- Layer 2 — LLM-as-judge (`score_layer2`): a versioned prompt
+  (`prompts/eval_judge_de.v1.txt`) scores 0-2 given the question, the
+  expected points, the gold sources, and the answer, returning strict
+  JSON. A malformed judge response comes back as `JudgeError` data
+  rather than raising.
+- `score_report` runs both layers over every answer in an existing
+  `EvalReport`. `scripts/score_eval_report.py` is the CLI: takes a
+  report JSON, writes `<hash>.scored.json` and a
+  `<hash>.human_review.csv` worksheet (see below).
 
 ## Judge agreement (Giorno 18)
 
-*Not yet measured.* Plan: score 15 answers by hand, compare against the
-judge's scores, report percent agreement or Cohen's kappa here.
+**Code done, not yet measured** — needs the actual run above first.
+
+- `select_human_review_sample` (`src/app/eval/agreement.py`) picks 3
+  questions per category (15 total, deterministic — the first 3 by id
+  in each category), so every category is represented.
+- `write_human_review_worksheet` exports those 15 as a CSV: question,
+  the system's answer, the gold facts/sources, the judge's own score —
+  and a blank `human_score` column.
+- Fill in `human_score` by hand, then run
+  `scripts/measure_judge_agreement.py <worksheet.csv>` — prints percent
+  agreement and Cohen's kappa (`cohens_kappa`/`percent_agreement` in
+  `agreement.py`, unit-tested against a hand-worked confusion matrix).
+  Paste the result here once run.
+
+### Blocked on: a real LLM provider
+
+`core/config.py`'s `llm_provider` defaults to `"fake"` (`FakeLlmClient`,
+a deterministic canned responder used everywhere else in this project's
+test suite) and no API key is configured anywhere in this repo (no
+`.env`, nothing in `docker-compose.yml`). Running the 50 questions for
+real answers, and judging them for real, needs `LLM_PROVIDER=
+openai_compatible` + `LLM_API_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`
+pointed at an actual provider (e.g. OpenRouter, per `backend/pricing.
+yaml`'s existing model list) — a cost/provider decision for the user,
+not something to default silently. Once that's set:
+
+```
+cd backend
+DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
+    .venv/Scripts/python scripts/run_eval.py --questions eval/dataset/questions.yaml
+DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
+    .venv/Scripts/python scripts/score_eval_report.py eval/reports/<hash>.json
+# fill in human_score in eval/reports/<hash>.human_review.csv by hand, then:
+.venv/Scripts/python scripts/measure_judge_agreement.py eval/reports/<hash>.human_review.csv
+```
 
 ## Retrieval and outcome metrics (Giorno 19)
 
