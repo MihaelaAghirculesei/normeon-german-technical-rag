@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
 from app.adapters.llm.base import LlmClient
-from app.eval.models import EvalQuestion
+from app.eval.models import Category, EvalQuestion, EvalReport
+from app.eval.runner import REPORTS_DIR
 from app.services.prompts import load_prompt
 
 JUDGE_PROMPT_NAME = "eval_judge_de.v1"
@@ -122,3 +125,55 @@ async def score_layer2(
         system=_SYSTEM, user=user, temperature=temperature, max_tokens=max_tokens
     )
     return _parse_judge_response(response.text)
+
+
+class ScoredQuestionRun(BaseModel):
+    question_id: str
+    category: Category
+    answer: str
+    layer1: Layer1Result
+    layer2: JudgeResult | JudgeError
+
+
+class ScoredReport(BaseModel):
+    config_hash: str
+    scored_at: datetime
+    results: list[ScoredQuestionRun]
+
+
+async def score_report(
+    report: EvalReport, questions: list[EvalQuestion], llm: LlmClient
+) -> ScoredReport:
+    """Layer 1 + Layer 2 for every answered question in `report`. A
+    `QuestionRun` whose `question_id` no longer matches any question in
+    `questions` (the set changed since the report was run) is skipped
+    rather than raising -- a stale report is a caller's mistake to
+    notice from a `ScoredReport` shorter than `report.results`, not this
+    function's to guess around."""
+    by_id = {q.id: q for q in questions}
+    scored: list[ScoredQuestionRun] = []
+    for run in report.results:
+        question = by_id.get(run.question_id)
+        if question is None:
+            continue
+        layer1 = score_layer1(question.expected_answer_points, run.answer)
+        layer2 = await score_layer2(llm, question=question, answer=run.answer)
+        scored.append(
+            ScoredQuestionRun(
+                question_id=run.question_id,
+                category=question.category,
+                answer=run.answer,
+                layer1=layer1,
+                layer2=layer2,
+            )
+        )
+    return ScoredReport(
+        config_hash=report.config_hash, scored_at=datetime.now(UTC), results=scored
+    )
+
+
+def write_scored_report(scored: ScoredReport, reports_dir: Path = REPORTS_DIR) -> Path:
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    path = reports_dir / f"{scored.config_hash}.scored.json"
+    path.write_text(scored.model_dump_json(indent=2), encoding="utf-8")
+    return path
