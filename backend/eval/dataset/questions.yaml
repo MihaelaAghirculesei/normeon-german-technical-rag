@@ -12,15 +12,20 @@
 #   - conflict            (Lastenheft-EPS v1.2 vs v2.0 contradict on
 #                          LH-3.2.1; the correct answer flags the conflict)
 #
-# Progress: 10/50 written (conflict category complete). Do not add the
-# full-set shape test (50 entries, 10/category) until all 50 are done --
-# see test_eval_dataset.py / test_eval_schema.py for the pattern used by
-# the Day 16 smoke set.
+# Complete: 50/50 written, validated by
+# tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category
+# (schema validation + exact 10-per-category shape, the plan's Giorno
+# 17-18 "Fatto quando" criterion).
 #
-# `conflict` gold_sources cite the two Lastenheft-EPS .docx by section
-# only, no page: the docx parser (adapters/parsing/docx.py) has no page
-# concept (every block is page=1), so a page number here would be
-# meaningless. Facts verified against corpus/generate_lastenheft.py (the
+# StVZO.pdf/FZV.pdf gold_sources cite `section` in the exact form the real
+# parser assigns it (e.g. "§41", not "41" -- confirmed via
+# adapters/parsing/pdf.py against the real files, not guessed) plus the
+# `page` where the cited fact was read. Lastenheft .docx gold_sources cite
+# `section` only, no page: the docx parser (adapters/parsing/docx.py) has
+# no page concept (every block is page=1), so a page number there would be
+# meaningless.
+#
+# `conflict` facts verified against corpus/generate_lastenheft.py (the
 # single source both .docx are generated from) and cross-checked against
 # a real retrieval run on the ingested dev DB, which confirmed both
 # LH-3.2.1 and LH-6.2.1 retrieve from both versions and
@@ -155,3 +160,445 @@
   should_abstain: false
   difficulty: hard
   notes: "Der Verweis auf UN R79 Abschnitt 5.1.2 bleibt in beiden Versionen unverändert -- nur der Zahlenwert ändert sich. Testet Genauigkeit statt pauschales Konflikt-Flaggen."
+
+# --- requirement_lookup (Q011-Q020) -- Q011-Q015 cite a table row (the
+# Lastenheft's Umgebungsbedingungen table, Abschnitt 5), Q016-Q020 cite
+# StVZO prose. Single-value lookups, no cross-version conflict involved
+# (LH-3.2.1/LH-6.2.1 here are asked about ONE named version only, unlike
+# the conflict-category phrasing of the same facts in Q001-Q010).
+
+- id: Q011
+  category: requirement_lookup
+  question: "Welchen Betriebstemperaturbereich muss das elektrische Servolenksystem (EPS) laut der Tabelle der Umgebungsbedingungen (Abschnitt 5) im Lastenheft aushalten?"
+  expected_answer_points:
+    - "-40"
+    - "85"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: easy
+  notes: "LH-5.1.1, Tabellenwert, identisch in v1.2 und v2.0 (kein Konflikt)."
+
+- id: Q012
+  category: requirement_lookup
+  question: "Welchen Betriebsspannungsbereich muss das Steuergerät des EPS laut der Tabelle der Umgebungsbedingungen im Lastenheft unterstützen?"
+  expected_answer_points:
+    - "9"
+    - "16"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: easy
+  notes: "LH-5.2.1, Tabellenwert, identisch in v1.2 und v2.0."
+
+- id: Q013
+  category: requirement_lookup
+  question: "Welche Schutzart muss das Steuergerät des EPS laut der Tabelle der Umgebungsbedingungen im Lastenheft aufweisen?"
+  expected_answer_points:
+    - "IP6K9K"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: easy
+  notes: "LH-5.3.1, Tabellenwert, identisch in v1.2 und v2.0."
+
+- id: Q014
+  category: requirement_lookup
+  question: "Wie hoch ist im aktuell gültigen Lastenheft EPS (v2.0) laut der Tabelle in Abschnitt 5 die maximal zulässige Lenkkraft bei Ausfall der Servounterstützung?"
+  expected_answer_points:
+    - "250 N"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Einzelversions-Lookup (nur v2.0) derselben Tabellenzeile, die Q002 als Konflikt zwischen den Versionen abfragt."
+
+- id: Q015
+  category: requirement_lookup
+  question: "Wie lange darf laut der Tabelle in Abschnitt 5 des aktuell gültigen Lastenhefts (v2.0) die Diagnose-Ansprechzeit höchstens sein?"
+  expected_answer_points:
+    - "100 ms"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: medium
+  notes: "Einzelversions-Lookup (nur v2.0) derselben Tabellenzeile, die Q003 als Konflikt zwischen den Versionen abfragt."
+
+- id: Q016
+  category: requirement_lookup
+  question: "Mit wie vielen nach vorn wirkenden Scheinwerfern müssen Kraftfahrzeuge laut § 50 Absatz 2 StVZO mindestens ausgerüstet sein?"
+  expected_answer_points:
+    - "zwei"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§50", page: 55 }
+  should_abstain: false
+  difficulty: easy
+  notes: "Krafträder benötigen laut demselben Absatz nur einen Scheinwerfer."
+
+- id: Q017
+  category: requirement_lookup
+  question: "Welche mittlere Vollverzögerung muss die Betriebsbremse eines Kraftfahrzeugs (ausgenommen Krafträder) laut § 41 Absatz 4 StVZO mindestens erreichen?"
+  expected_answer_points:
+    - "5,0 m/s2"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 40 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Bei einer bauartbedingten Höchstgeschwindigkeit von nicht mehr als 25 km/h genügen 3,5 m/s2."
+
+- id: Q018
+  category: requirement_lookup
+  question: "Welche mittlere Verzögerung muss die Feststellbremse eines Kraftfahrzeugs laut § 41 Absatz 5 StVZO mindestens erreichen?"
+  expected_answer_points:
+    - "1,5 m/s2"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 40 }
+  should_abstain: false
+  difficulty: medium
+
+- id: Q019
+  category: requirement_lookup
+  question: "Wie viele Unterlegkeile sind laut § 41 Absatz 14 StVZO mindestens bei einem Kraftfahrzeug mit einem zulässigen Gesamtgewicht von mehr als 4 t erforderlich?"
+  expected_answer_points:
+    - "ein Unterlegkeil"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 42 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Bei drei- und mehrachsigen Fahrzeugen sowie bei Sattelanhängern sind es laut demselben Absatz zwei."
+
+- id: Q020
+  category: requirement_lookup
+  question: "Auf welche maximale Lautstärke ist die Einrichtung für Schallzeichen (Hupe) eines Kraftfahrzeugs laut § 55 Absatz 2 StVZO in 7 m Entfernung begrenzt?"
+  expected_answer_points:
+    - "105 dB(A)"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§55", page: 67 }
+  should_abstain: false
+  difficulty: medium
+
+# --- cross_reference (Q021-Q030) -- each spans two sections or two
+# documents; every reference below was read directly in the source text,
+# not inferred.
+
+- id: Q021
+  category: cross_reference
+  question: "Welche Vorschrift muss laut § 32 StVZO bei der Messung der höchstzulässigen Breite, Höhe und Länge von Fahrzeugen zusätzlich berücksichtigt werden, und was regelt diese Vorschrift?"
+  expected_answer_points:
+    - "§ 42 Absatz 3"
+    - "austauschbare Ladungsträger"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§32", page: 21 }
+    - { document: "StVZO.pdf", section: "§42", page: 45 }
+  should_abstain: false
+  difficulty: medium
+  notes: "§ 32 Absätze 1-5 verweisen wiederholt auf '(§ 42 Absatz 3)'; § 42 Absatz 3 definiert dort 'austauschbare Ladungsträger' und das Leergewicht."
+
+- id: Q022
+  category: cross_reference
+  question: "Dürfen Schneeketten aus Metall nach § 37 Absatz 2 StVZO bei jeder Bereifung verwendet werden? Wenn nein, welche Vorschrift regelt die dafür zulässige Bereifung?"
+  expected_answer_points:
+    - "nein"
+    - "§ 36 Absatz 3"
+    - "§ 36 Absatz 8"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§37", page: 38 }
+    - { document: "StVZO.pdf", section: "§36", page: 36 }
+  should_abstain: false
+  difficulty: medium
+  notes: "'Schneeketten aus Metall dürfen nur bei elastischer Bereifung (§ 36 Absatz 3 und 8) verwendet werden.'"
+
+- id: Q023
+  category: cross_reference
+  question: "Welche zusätzliche Vorschrift der StVZO ist laut der Fußnote zu § 35a bei dessen Anwendung zu beachten?"
+  expected_answer_points:
+    - "§ 72"
+    - "Absatz 4"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§35a", page: 34 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Fußnote: '(+++ § 35a: Zur Anwendung vgl. § 72 Abs. 4 +++)'."
+
+- id: Q024
+  category: cross_reference
+  question: "Welche Vorschrift der StVZO muss erfüllt sein, damit die Zulassungsbehörde laut § 10 Absatz 1 FZV ein Oldtimerkennzeichen zuteilt?"
+  expected_answer_points:
+    - "§ 23"
+  gold_sources:
+    - { document: "FZV.pdf", section: "§10", page: 15 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Cross-Dokument-Referenz (FZV -> StVZO): 'für ein Fahrzeug, für das ein Gutachten nach § 23 der Straßenverkehrs-Zulassungs-Ordnung vorliegt'."
+
+- id: Q025
+  category: cross_reference
+  question: "Nennt das Lastenheft EPS bei der Anforderung LH-3.2.1 einen Bezug zu einer UN-Regelung? Wenn ja, zu welcher und zu welchem Abschnitt?"
+  expected_answer_points:
+    - "UN R79"
+    - "5.1.2"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "3.2" }
+  should_abstain: false
+  difficulty: easy
+  notes: "'(vgl. UN R79, Abschnitt 5.1.2)' -- identisch in v1.2 und v2.0. UN-R79-Lenkanlagen.pdf selbst ist nicht im Korpus (Issue #15); die Frage betrifft nur, was das Lastenheft referenziert, nicht den Inhalt von UN R79."
+
+- id: Q026
+  category: cross_reference
+  question: "Welche StVZO-Vorschrift regelt die Bremse einachsiger Zug- oder Arbeitsmaschinen, wenn diese laut § 41 Absatz 2 StVZO mit einer weiteren Achse verbunden und vom Sitz aus gefahren werden?"
+  expected_answer_points:
+    - "§ 65"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 40 }
+  should_abstain: false
+  difficulty: hard
+  notes: "'so genügt eine an der Zug- oder Arbeitsmaschine oder an dem einachsigen Anhänger befindliche Bremse nach § 65'."
+
+- id: Q027
+  category: cross_reference
+  question: "Welche zwei Vorschriften bleiben laut § 10 Absatz 3 FZV von der Regelung zum Saisonkennzeichen unberührt?"
+  expected_answer_points:
+    - "§ 41"
+    - "§ 42"
+  gold_sources:
+    - { document: "FZV.pdf", section: "§10", page: 16 }
+  should_abstain: false
+  difficulty: medium
+  notes: "'Die §§ 41 und 42 bleiben unberührt.' Das sind §§ 41/42 der FZV selbst (Prüfungs-/Probefahrten mit rotem bzw. Kurzzeitkennzeichen) -- NICHT die gleichnamigen, inhaltlich unterschiedlichen §§ 41/42 der StVZO (Bremsen bzw. Anhängelast). Wichtig für die Dokumentzuordnung bei der Bewertung."
+
+- id: Q028
+  category: cross_reference
+  question: "Bei welchen Fahrzeugen dürfen laut § 41 Absatz 9 StVZO hinter Zugmaschinen zwei Anhänger mit Auflaufbremse mitgeführt werden, und welche StVZO-Kennzeichnung müssen diese Anhänger dafür tragen?"
+  expected_answer_points:
+    - "25 km/h"
+    - "§ 58"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 41 }
+  should_abstain: false
+  difficulty: hard
+  notes: "Beide Anhänger müssen mit Geschwindigkeitsschildern nach § 58 für eine Höchstgeschwindigkeit von nicht mehr als 25 km/h gekennzeichnet sein."
+
+- id: Q029
+  category: cross_reference
+  question: "Welche StVZO-Vorschrift definiert den Begriff 'Gleiskettenfahrzeuge', auf den sich § 36 Absatz 10 StVZO bezieht?"
+  expected_answer_points:
+    - "§ 34b"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§36", page: 37 }
+  should_abstain: false
+  difficulty: medium
+  notes: "'Bei Gleiskettenfahrzeugen (§ 34b Absatz 1 Satz 1) darf die Kette...'."
+
+- id: Q030
+  category: cross_reference
+  question: "Auf welche StVZO-Vorschrift verweist § 54 Absatz 1a StVZO bei den Fahrtrichtungsanzeigern, die abweichend an beweglichen Fahrzeugteilen angebracht sein dürfen?"
+  expected_answer_points:
+    - "§ 49a"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§54", page: 65 }
+  should_abstain: false
+  difficulty: hard
+  notes: "'Die Sätze 1 und 2 gelten nicht für Fahrtrichtungsanzeiger, die nach § 49a Absatz 9 und 10 abnehmbar sein dürfen.'"
+
+# --- code_lookup (Q031-Q040) -- codes and norm numbers, the case for
+# hybrid retrieval (pure embedding similarity tends to miss an exact
+# code/number match that keyword/trigram search catches).
+
+- id: Q031
+  category: code_lookup
+  question: "Nach welcher ISO-Norm ist die Fahrzeugbreite gemäß § 32 StVZO zu ermitteln, und welche Definitionsnummer gilt dafür?"
+  expected_answer_points:
+    - "ISO-Norm 612-1978"
+    - "6.2"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§32", page: 21 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Höhe -> Definition 6.3, Länge -> Definition 6.1, jeweils selbe Norm (§ 32 Absätze 1-3)."
+
+- id: Q032
+  category: code_lookup
+  question: "Welche DIN-Norm darf laut § 35a Absatz 4a StVZO alternativ für Rollstuhl-Rückhaltesysteme angewendet werden?"
+  expected_answer_points:
+    - "DIN-Norm 75078-2:2015-04"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§35a", page: 32 }
+  should_abstain: false
+  difficulty: medium
+
+- id: Q033
+  category: code_lookup
+  question: "Welchem Normblatt muss der Verbandkasten in einem Kraftomnibus laut § 35h StVZO entsprechen?"
+  expected_answer_points:
+    - "DIN 13 164"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§35h", page: 35 }
+  should_abstain: false
+  difficulty: medium
+  notes: "Zulässig sind die Ausgabe Januar 1998 oder Januar 2014 dieses Normblatts."
+
+- id: Q034
+  category: code_lookup
+  question: "Welches Symbol muss ein Winterreifen laut § 36 Absatz 4 StVZO tragen, und nach welcher UNECE-Regelung ist es festgelegt?"
+  expected_answer_points:
+    - "Alpine-Symbol"
+    - "Regelung Nr. 117"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§36", page: 36 }
+  should_abstain: false
+  difficulty: medium
+
+- id: Q035
+  category: code_lookup
+  question: "Nach welcher UNECE-Regelung werden M+S-Reifen für Fahrzeuge der Klasse L gemäß § 36 Absatz 11 StVZO beurteilt?"
+  expected_answer_points:
+    - "Regelung Nummer 75"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§36", page: 37 }
+  should_abstain: false
+  difficulty: hard
+
+- id: Q036
+  category: code_lookup
+  question: "Nach welcher EU-Richtlinie kann die mittlere Vollverzögerung von Bremsanlagen laut § 41 Absatz 12 StVZO ermittelt werden?"
+  expected_answer_points:
+    - "71/320/EWG"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§41", page: 42 }
+  should_abstain: false
+  difficulty: hard
+
+- id: Q037
+  category: code_lookup
+  question: "Welche Anforderungs-ID trägt im Lastenheft EPS die Vorgabe zum Betriebsspannungsbereich?"
+  expected_answer_points:
+    - "LH-5.2.1"
+  gold_sources:
+    - { document: "Lastenheft-EPS-v2.0.docx", section: "5" }
+  should_abstain: false
+  difficulty: easy
+
+- id: Q038
+  category: code_lookup
+  question: "Welchem Normblatt muss das retroreflektierende Material zur seitlichen Kenntlichmachung von Nachläufern für Langmaterial laut § 51a Absatz 7 StVZO mindestens entsprechen?"
+  expected_answer_points:
+    - "DIN 67 520 Teil 2"
+  gold_sources:
+    - { document: "StVZO.pdf", section: "§51a", page: 58 }
+  should_abstain: false
+  difficulty: hard
+
+- id: Q039
+  category: code_lookup
+  question: "Welchen Kennbuchstaben muss ein Oldtimerkennzeichen laut § 10 Absatz 1 FZV als amtlichen Zusatz hinter der Erkennungsnummer führen?"
+  expected_answer_points:
+    - "H"
+  gold_sources:
+    - { document: "FZV.pdf", section: "§10", page: 15 }
+  should_abstain: false
+  difficulty: easy
+
+- id: Q040
+  category: code_lookup
+  question: "Welchen Kennbuchstaben führt ein Kennzeichen für elektrisch betriebene Fahrzeuge laut § 11 Absatz 2 FZV hinter der Erkennungsnummer?"
+  expected_answer_points:
+    - "E"
+  gold_sources:
+    - { document: "FZV.pdf", section: "§11", page: 16 }
+  should_abstain: false
+  difficulty: easy
+
+# --- unanswerable (Q041-Q050) -- each is adjacent to a real corpus topic
+# (so it's plausible, not absurd) but the specific fact asked for is
+# genuinely outside what StVZO/FZV/the Lastenheft actually cover.
+# should_abstain: true throughout.
+
+- id: Q041
+  category: unanswerable
+  question: "Welchen genauen Wert legt UN R79 Abschnitt 5.1.2 selbst für die maximale Lenkkraft bei Ausfall der Servounterstützung fest?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "UN-R79-Lenkanlagen.pdf ist nicht im Korpus (Issue #15, blockiert durch AWS-WAF-Challenge). Nur der vom Lastenheft zitierte Wert ist bekannt, nicht der Originaltext der UN-Regelung."
+
+- id: Q042
+  category: unanswerable
+  question: "Welche konkreten technischen Mindestanforderungen stellt UN R155 an ein Cybersicherheits-Managementsystem?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "UN-R155-Cybersicherheit.pdf ist nicht im Korpus (Issue #15, blockiert). Das Lastenheft (LH-4.2.1) verweist nur namentlich darauf."
+
+- id: Q043
+  category: unanswerable
+  question: "Welche Anforderungen stellt das Lastenheft EPS an das Bremssystem des Fahrzeugs?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: easy
+  notes: "Das Lastenheft behandelt ausschließlich das elektrische Servolenksystem (EPS), keine Bremsanlage."
+
+- id: Q044
+  category: unanswerable
+  question: "Wie hoch ist die Verwaltungsgebühr für die Zuteilung eines Kennzeichens nach § 9 FZV?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "Gebührenhöhen regelt die separate Gebührenordnung für Maßnahmen im Straßenverkehr, nicht die FZV -- nicht im Korpus."
+
+- id: Q045
+  category: unanswerable
+  question: "Welche Recyclingquote schreibt das Lastenheft EPS für die Entsorgung des Lenksystems am Lebensende vor?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: easy
+  notes: "Das Lastenheft enthält keine Anforderungen zu Recycling oder End-of-Life."
+
+- id: Q046
+  category: unanswerable
+  question: "Welche Mindestversicherungssumme muss eine Kfz-Haftpflichtversicherung für ein nach der FZV zugelassenes Fahrzeug abdecken?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "Kfz-Haftpflichtversicherung ist im Pflichtversicherungsgesetz geregelt, nicht in StVZO oder FZV -- nicht im Korpus."
+
+- id: Q047
+  category: unanswerable
+  question: "Welches Bußgeld droht bei einem Verstoß gegen die Vorschriften zur Nebelschlussleuchte nach § 53d StVZO?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "Bußgeldhöhen regelt die Bußgeldkatalog-Verordnung (BKatV), nicht die StVZO selbst -- nicht im Korpus."
+
+- id: Q048
+  category: unanswerable
+  question: "Welche Softwareversion des Steuergeräts wird für das EPS im Lastenheft vorgeschrieben?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: easy
+  notes: "Das Lastenheft spezifiziert funktionale und sicherheitsbezogene Anforderungen, keine konkrete Software- oder Firmware-Version."
+
+- id: Q049
+  category: unanswerable
+  question: "Welche Kraftfahrzeugsteuer fällt für ein Fahrzeug mit grünem Kennzeichen nach § 10 Absatz 2 FZV an?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: medium
+  notes: "Steuerbeträge regelt das Kraftfahrzeugsteuergesetz; § 10 Absatz 2 FZV definiert nur, wer ein grünes Kennzeichen erhält (dort steuerbefreite Halter), nicht die Steuerhöhe selbst -- nicht im Korpus."
+
+- id: Q050
+  category: unanswerable
+  question: "Welche Garantiezeit gewährt der Hersteller auf das elektrische Servolenksystem laut Lastenheft?"
+  expected_answer_points: []
+  gold_sources: []
+  should_abstain: true
+  difficulty: easy
+  notes: "Das Lastenheft regelt technische Anforderungen, keine vertraglichen Garantiebedingungen."
