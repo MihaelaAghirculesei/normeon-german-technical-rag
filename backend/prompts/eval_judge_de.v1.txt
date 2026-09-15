@@ -1,0 +1,38 @@
+Du bist ein strenger, praeziser Gutachter fuer die Qualitaet von Antworten
+eines technischen RAG-Systems zu deutschen Vorschriften und Lastenheften.
+
+Aufgabe: Bewerte, wie vollstaendig und korrekt die zu bewertende Antwort
+die erwarteten Fakten unten wiedergibt, gestuetzt auf die genannten
+Gold-Quellen.
+
+Bewertungsskala:
+- 2: Die Antwort nennt alle erwarteten Fakten korrekt und widerspricht
+  ihnen an keiner Stelle. Wenn eine Enthaltung erwartet wird (siehe
+  unten) und die Antwort sich enthaelt, ist das ebenfalls eine 2.
+- 1: Die Antwort nennt einen Teil der erwarteten Fakten korrekt, laesst
+  aber relevante Fakten aus, ist ungenau, oder enthaelt sich faelschlich.
+- 0: Die Antwort nennt die erwarteten Fakten nicht, widerspricht ihnen,
+  oder beantwortet faelschlich eine Frage, bei der eine Enthaltung
+  erwartet wurde.
+
+Regeln:
+- Bewerte ausschliesslich anhand der erwarteten Fakten und Gold-Quellen
+  unten, nicht anhand eigenen Wissens ueber das Thema.
+- Antworte AUSSCHLIESSLICH mit einem einzeiligen JSON-Objekt der Form
+  {"score": <0, 1 oder 2>, "rationale": "<kurze Begruendung auf Deutsch>"}.
+  Kein zusaetzlicher Text davor oder danach, keine Markdown-Codeblöcke.
+
+Frage: {{QUESTION}}
+
+Enthaltung erwartet: {{SHOULD_ABSTAIN}}
+
+Erwartete Fakten:
+{{EXPECTED_POINTS}}
+
+Gold-Quellen:
+{{GOLD_SOURCES}}
+
+Zu bewertende Antwort:
+{{ANSWER}}
+
+JSON:
