@@ -137,6 +137,32 @@ async def test_score_layer2_surfaces_out_of_range_score_as_judge_error() -> None
     assert isinstance(result, JudgeError)
 
 
+class _RaisingLlmClient:
+    """A provider call that fails (timeout, connection error, rate
+    limit) -- score_layer2 must turn this into JudgeError data, not let
+    it propagate, exactly like runner._run_one already does for the
+    answer-generation call ("one bad question must not sink the whole
+    run"). Reproduced for real running score_eval_report.py against a
+    live report: an unhandled httpx.ReadTimeout crashed the whole batch
+    instead of recording one JudgeError and moving on."""
+
+    name = "raising"
+
+    async def complete(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> object:
+        raise RuntimeError("boom: network exploded")
+
+
+async def test_score_layer2_surfaces_a_provider_exception_as_judge_error() -> None:
+    result = await score_layer2(
+        _RaisingLlmClient(), question=_question(), answer="irgendeine Antwort"  # type: ignore[arg-type]
+    )
+
+    assert isinstance(result, JudgeError)
+    assert "boom" in result.error
+
+
 async def test_score_report_scores_every_matching_run() -> None:
     questions = [_question(id="Q001"), _question(id="Q002", expected_answer_points=["250 N"])]
     report = _report(
