@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
 import tempfile
+from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -10,13 +12,22 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
+from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
 from app.domain.normalization import normalize_de
+from app.domain.parsing import ParsedDocument
 
 EMBEDDING_BATCH_SIZE = 32
+
+# Dispatch by file extension -- both parsers produce the same ParsedDocument
+# shape, so everything downstream (chunking, embedding) is format-agnostic.
+_PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
+    ".pdf": parse_pdf,
+    ".docx": parse_docx,
+}
 
 
 async def get_or_create_document(
@@ -25,12 +36,21 @@ async def get_or_create_document(
     filename: str,
     doc_type: str,
     content: bytes,
+    *,
+    version_label: str | None = None,
+    valid_from: date | None = None,
+    valid_until: date | None = None,
 ) -> tuple[Document, bool]:
     """Fast, synchronous half of ingestion: hash the upload and look up (or
     create) its Document row. Returns (document, already_ingested) so a
     caller (the upload endpoint) can respond immediately and only schedule
     the slow parse/chunk/embed work (`process_document`) when there's
-    actually something left to do."""
+    actually something left to do.
+
+    `version_label`/`valid_from`/`valid_until` are needed for the eval
+    corpus's two Lastenheft documents (`find_version_conflicts`, Giorno 13,
+    groups by `version_label`) -- the HTTP upload endpoint doesn't collect
+    them yet, so they default to `None` there."""
     content_hash = hashlib.sha256(content).hexdigest()
 
     existing = await session.scalar(
@@ -46,6 +66,9 @@ async def get_or_create_document(
         content_hash=content_hash,
         filename=filename,
         doc_type=doc_type,
+        version_label=version_label,
+        valid_from=valid_from,
+        valid_until=valid_until,
         status="pending",
     )
     session.add(document)
@@ -77,11 +100,16 @@ async def process_document(
         document.status = "parsing"
         await session.commit()
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        suffix = Path(document.filename).suffix.lower()
+        parser = _PARSERS.get(suffix)
+        if parser is None:
+            raise ValueError(f"unsupported file type: {suffix!r}")
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            parsed = await asyncio.to_thread(parse_pdf, tmp_path)
+            parsed = await asyncio.to_thread(parser, tmp_path)
         finally:
             tmp_path.unlink(missing_ok=True)
         document.page_count = max((b.page for b in parsed.blocks), default=0)
@@ -110,12 +138,23 @@ async def ingest_document(
     filename: str,
     doc_type: str,
     content: bytes,
+    *,
+    version_label: str | None = None,
+    valid_from: date | None = None,
+    valid_until: date | None = None,
 ) -> tuple[Document, bool]:
     """Convenience wrapper running both halves in sequence -- used by the
     corpus-loading script and tests, which don't need the HTTP split between
     an immediate response and background processing."""
     document, already_ingested = await get_or_create_document(
-        session, tenant_id, filename, doc_type, content
+        session,
+        tenant_id,
+        filename,
+        doc_type,
+        content,
+        version_label=version_label,
+        valid_from=valid_from,
+        valid_until=valid_until,
     )
     if already_ingested:
         return document, True

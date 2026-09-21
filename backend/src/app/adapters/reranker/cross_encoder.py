@@ -1,3 +1,4 @@
+import threading
 from dataclasses import replace
 
 from sentence_transformers import CrossEncoder
@@ -17,11 +18,18 @@ class CrossEncoderReranker:
     def __init__(self, model_name: str) -> None:
         self._model_name = model_name
         self._model: CrossEncoder | None = None
+        # Same race as LocalE5Embedder's _loaded_model (see its comment):
+        # `rerank` runs off-thread and several questions run concurrently
+        # under the eval runner, so an unlocked lazy-load can have two
+        # threads constructing a CrossEncoder at once.
+        self._load_lock = threading.Lock()
 
     @property
     def _loaded_model(self) -> CrossEncoder:
         if self._model is None:
-            self._model = CrossEncoder(self._model_name)
+            with self._load_lock:
+                if self._model is None:
+                    self._model = CrossEncoder(self._model_name)
         return self._model
 
     def rerank(

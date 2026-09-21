@@ -19,5 +19,5 @@ node_modules/
 
 # local working notes / AI-session continuity — never published
 
-backend/eval/reports/*.json
-backend/eval/reports/*.html
+backend/eval/reports/*
+!backend/eval/reports/.gitkeep
