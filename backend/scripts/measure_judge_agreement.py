@@ -11,6 +11,7 @@ column -- and paste the result into docs/EVALUATION.md yourself.
 
 import argparse
 import csv
+import io
 import sys
 from pathlib import Path
 
@@ -25,8 +26,18 @@ def _int_column(rows: list[dict[str, str]], column: str) -> list[int]:
 
 
 def _run(path: Path) -> None:
-    with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    # utf-8-sig transparently strips a BOM if present and is otherwise
+    # identical to utf-8; sniff the delimiter rather than assume `;`
+    # (write_human_review_worksheet's choice, Excel-friendly for a
+    # German/Italian/etc. locale) since Excel's Save/Save As can rewrite
+    # a CSV with a different one depending on the system's regional
+    # settings. Sniff off just the header line, then hand the WHOLE text
+    # to csv.DictReader via StringIO (not text.splitlines()) so a
+    # multi-line quoted answer field is parsed correctly instead of
+    # being torn apart at its embedded newlines.
+    text = path.read_text(encoding="utf-8-sig")
+    dialect = csv.Sniffer().sniff(text.splitlines()[0], delimiters=";,")
+    rows = list(csv.DictReader(io.StringIO(text), dialect=dialect))
 
     human = _int_column(rows, "human_score")
     judge = _int_column(rows, "judge_score")
