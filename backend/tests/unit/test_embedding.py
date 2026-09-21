@@ -1,7 +1,10 @@
 import json
+import threading
+import time
 from typing import Any
 
 import httpx
+import pytest
 
 from app.adapters.embedding.base import add_passage_prefix, add_query_prefix
 from app.adapters.embedding.e5_api import ApiE5Embedder
@@ -60,6 +63,40 @@ def test_local_embedder_prefixes_query_before_encoding() -> None:
 def test_local_embedder_does_not_load_model_until_first_use() -> None:
     embedder = LocalE5Embedder(model_name="unused", dim=2)
     assert embedder._model is None
+
+
+def test_local_embedder_loads_the_model_only_once_under_concurrent_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: the eval runner (Giorno 17-18) drives several
+    questions concurrently, each calling `embed_query`/`embed_passages`
+    off-thread. An unlocked lazy-load let multiple threads race to
+    construct a SentenceTransformer at once, surfacing as PyTorch's
+    "Cannot copy out of meta tensor; no data!" -- reproduced running the
+    real 50-question eval set. This proves the fix: exactly one
+    construction no matter how many threads arrive concurrently."""
+    construct_count = 0
+    count_lock = threading.Lock()
+
+    class _SlowSentenceTransformer:
+        def __init__(self, model_name: str) -> None:
+            nonlocal construct_count
+            with count_lock:
+                construct_count += 1
+            time.sleep(0.05)  # widen the race window past the naive check
+
+    monkeypatch.setattr(
+        "app.adapters.embedding.e5_local.SentenceTransformer", _SlowSentenceTransformer
+    )
+    embedder = LocalE5Embedder(model_name="unused", dim=2)
+
+    threads = [threading.Thread(target=lambda: embedder._loaded_model) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert construct_count == 1
 
 
 def _recording_transport() -> tuple[httpx.MockTransport, list[dict[str, Any]]]:

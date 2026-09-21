@@ -4,8 +4,12 @@
 `_model`, so the real bge-reranker weights are never loaded here.
 """
 
+import threading
+import time
 import uuid
 from typing import Any
+
+import pytest
 
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
 from app.adapters.reranker.noop import NoopReranker
@@ -98,10 +102,37 @@ def test_cross_encoder_truncates_to_top_k() -> None:
 def test_cross_encoder_on_empty_input_does_not_touch_the_model() -> None:
     reranker = CrossEncoderReranker("unused")
     sentinel: Any = object()
-    reranker._model = sentinel  # type: ignore[assignment]
+    reranker._model = sentinel
 
     assert reranker.rerank("q", [], top_k=5) == []
 
 
 def test_cross_encoder_does_not_load_model_until_first_rerank() -> None:
     assert CrossEncoderReranker("unused")._model is None
+
+
+def test_cross_encoder_loads_the_model_only_once_under_concurrent_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same regression as LocalE5Embedder's equivalent test: an unlocked
+    lazy-load races when several eval questions run concurrently."""
+    construct_count = 0
+    count_lock = threading.Lock()
+
+    class _SlowCrossEncoder:
+        def __init__(self, model_name: str) -> None:
+            nonlocal construct_count
+            with count_lock:
+                construct_count += 1
+            time.sleep(0.05)
+
+    monkeypatch.setattr("app.adapters.reranker.cross_encoder.CrossEncoder", _SlowCrossEncoder)
+    reranker = CrossEncoderReranker("unused")
+
+    threads = [threading.Thread(target=lambda: reranker._loaded_model) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert construct_count == 1

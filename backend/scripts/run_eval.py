@@ -52,6 +52,7 @@ async def _run(args: argparse.Namespace) -> None:
         reranker=reranker,
         llm=get_llm_client(),
         tenant_id=DEMO_TENANT_ID,
+        concurrency=args.concurrency,
     )
     path = write_report(report)
 
@@ -69,6 +70,17 @@ def main() -> int:
     parser.add_argument("--strategy", choices=["fixed_500", "structural"], default="structural")
     parser.add_argument("--reranker", choices=["noop", "cross_encoder"], default="noop")
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=4,
+        help=(
+            "questions in flight at once (default: 4). A free-tier LLM "
+            "provider's requests-per-minute limit is usually the binding "
+            "constraint, not this app -- lower this (e.g. 1) if a run "
+            "comes back with 429 Too Many Requests errors."
+        ),
+    )
     asyncio.run(_run(parser.parse_args()))
     return 0
 
