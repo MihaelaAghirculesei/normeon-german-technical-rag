@@ -87,13 +87,20 @@ def write_human_review_worksheet(
     by `question_id`; a sampled question with no matching scored run
     (report predates the question, or the run errored) gets blank
     answer/judge columns rather than being dropped, so the worksheet
-    still has all 15 rows to fill in manually if needed."""
+    still has all 15 rows to fill in manually if needed.
+
+    Written `utf-8-sig` (a BOM) + `;`-delimited: opened by double-click,
+    Excel's regional CSV settings on a German/Italian/etc. Windows
+    install expect `;` (their decimal separator is `,`) and silently
+    mis-decode a BOM-less UTF-8 file as the system codepage -- without
+    both of these German content (ä/ö/ü/ß) came through mangled and
+    every field landed in one column."""
     sample = select_human_review_sample(questions)
     scored_by_id = {s.question_id: s for s in scored}
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
+    with path.open("w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f, delimiter=";")
         writer.writerow(_WORKSHEET_HEADER)
         for question in sample:
             run = scored_by_id.get(question.id)

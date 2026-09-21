@@ -110,8 +110,8 @@ def test_write_human_review_worksheet_has_fifteen_rows_and_a_blank_human_score_c
 
     path = write_human_review_worksheet(questions, scored, tmp_path / "review.csv")
 
-    with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    with path.open(encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f, delimiter=";"))
 
     assert len(rows) == 15
     assert all(row["human_score"] == "" for row in rows)
@@ -125,8 +125,8 @@ def test_write_human_review_worksheet_blanks_a_missing_scored_run(tmp_path: Path
 
     path = write_human_review_worksheet(questions, [], tmp_path / "review.csv")
 
-    with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    with path.open(encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f, delimiter=";"))
 
     assert all(row["answer"] == "" and row["judge_score"] == "" for row in rows)
 
@@ -147,8 +147,8 @@ def test_write_human_review_worksheet_blanks_judge_columns_on_a_judge_error(
 
     path = write_human_review_worksheet(questions, scored, tmp_path / "review.csv")
 
-    with path.open(encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    with path.open(encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f, delimiter=";"))
 
     assert rows[0]["judge_score"] == ""
     assert rows[0]["judge_rationale"] == ""
