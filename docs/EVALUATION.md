@@ -84,8 +84,11 @@ is `tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten
 
 ## Correctness metric (Giorno 18)
 
-**Code done, not yet run for real** — needs an actual (non-`fake`) LLM
-provider configured; see "Blocked on" below.
+**Done.** Run for real against the full 50-question set
+(`eval/reports/day18-merged-real-run.json` /
+`day18-merged-real-run.scored.json`, gitignored — regenerate from the
+DB + `.env` if lost, don't recommit). See "Judge model note" below for
+the judge-quota issue hit and fixed along the way.
 
 - Layer 1 — deterministic (`src/app/eval/scoring.py:score_layer1`):
   every `expected_answer_points` string must appear in the answer after
@@ -104,7 +107,8 @@ provider configured; see "Blocked on" below.
 
 ## Judge agreement (Giorno 18)
 
-**Measured, partially — 7 of 15 pairs, see blocker below.**
+**Done — all 15 pairs scored, percent agreement 1.0, Cohen's kappa
+1.0.**
 
 - `select_human_review_sample` (`src/app/eval/agreement.py`) picks 3
   questions per category (15 total, deterministic — the first 3 by id
@@ -119,48 +123,43 @@ provider configured; see "Blocked on" below.
   gold-source text directly (not translated — see the authoring
   checklist above), independently of the judge's own score column
   (blinded during scoring, compared only afterwards).
-- **Result on the 7 questions with a valid judge score**
-  (`Q011`, `Q012`, `Q013`, `Q022`, `Q001`, `Q002`, `Q003`): human and
-  judge scores matched on all 7 (`[2,2,2,2,2,1,1]` both sides) —
-  **percent agreement 1.0, Cohen's kappa 1.0**. Read this as a good
-  sign, not as validating the judge overall: the 8 missing pairs are
-  concentrated in exactly the categories most likely to disagree
-  (all 3 `code_lookup`, all 3 `unanswerable`, 2 of 3 `cross_reference`
-  — including both cases where the system incorrectly abstained,
-  `Q021`/`Q023`, which is the most interesting disagreement case to
-  check). The measured 1.0 should not be reported as "the" judge
-  agreement number until the other 8 are scored too.
+- **Result on all 15 pairs**: human and judge scores matched on all
+  15 — **percent agreement 1.0, Cohen's kappa 1.0**
+  (`eval/reports/day18-final-human-review.csv`, reproducible with
+  `scripts/measure_judge_agreement.py`). Unlike the earlier 7/15
+  partial measurement, this now includes the categories most likely to
+  disagree (all 3 `code_lookup`, all 3 `unanswerable`, both
+  false-abstention cases `Q021`/`Q023`), so this is the real number,
+  not a preliminary one.
 
-### Blocked on: judge quota, not the provider anymore
-
-The provider is configured (`backend/.env`, `LLM_PROVIDER=
-openai_compatible`, `LLM_API_BASE_URL` pointed at Google's Gemini
-OpenAI-compatible endpoint, `LLM_MODEL=gemini-omni-1.1-flash`) and the
-real 50-question run has happened (`eval/reports/day18-merged-real-
-run.json`, gitignored — regenerate from the DB + `.env` if lost, don't
-recommit it).
+### Judge model note: quota exhaustion, worked around by switching models
 
 8 of the 15 human-review-sample questions (`Q021`, `Q023`, `Q031`,
-`Q032`, `Q033`, `Q041`, `Q042`, `Q043`) get `429 Too Many Requests`
-from the judge call, **every single time, across at least 4 separate
-attempts at 3 different times of day** (2026-09-15 ~12:00/13:00/17:00,
-2026-09-16, the last one with a 12s delay between calls). Same 8
-questions fail every time — not the random pattern a per-minute rate
-limit would produce — which points at a **daily quota already
-exhausted for this model** (likely a low free-tier quota on a preview/
-experimental Gemini model name) rather than something fixable by
-waiting seconds or adding client-side backoff. Also worth knowing:
-`adapters/llm/openai_compatible.py`'s `_is_transient` only retries
-5xx/timeout — a 429 is never retried today, and the raised
-`LlmUnavailableError(str(exc))` doesn't capture the response body,
-where Google would have put the actual quota-exceeded reason — a real
-gap if this needs diagnosing again.
+`Q032`, `Q033`, `Q041`, `Q042`, `Q043`) got `429 Too Many Requests`
+from the judge call on `gemini-omni-1.1-flash`, **every single time,
+across at least 5 separate attempts over 6 days** (2026-09-15, -16,
+-21). Same 8 questions failed every time — not the random pattern a
+per-minute rate limit would produce — confirming a **daily/persistent
+quota exhausted for this specific model name** on this API key,
+distinct from other Gemini models on the same key.
 
-To finish this: either wait for the daily quota to reset and re-run
-just the 8 missing judge calls (answers already exist, no need to
-re-run `run_eval.py`), or point `LLM_MODEL`/`LLM_API_BASE_URL` at a
-provider/model with more free headroom. Once the 15 are complete,
-re-run:
+Fixed 2026-09-21 by switching the judge model to
+`gemini-flash-lite-latest` (`backend/.env`, `LLM_MODEL`) — verified via
+`GET /v1beta/openai/models` that this key has access to a wide set of
+Gemini model names, and confirmed by direct call that `gemini-2.0-flash`
+(the first guess) 404s for this key/account ("no longer available to
+new users"), while `gemini-flash-lite-latest` answers normally with no
+429. All 8 previously-blocked judge calls were re-run for real on this
+model and succeeded (scores: `Q021`=0, `Q023`=0, `Q031`=2, `Q032`=2,
+`Q033`=2, `Q041`=2, `Q042`=2, `Q043`=2) — no re-run of `run_eval.py` or
+the DB was needed, only `score_layer2` for the 8 missing question ids.
+Also worth knowing for next time: `adapters/llm/openai_compatible.py`'s
+`_is_transient` only retries 5xx/timeout — a 429 is never retried
+today, and the raised `LlmUnavailableError(str(exc))` doesn't capture
+the response body, where Google puts the actual reason (quota vs.
+model-retired) — a real gap if this needs diagnosing again.
+
+Reproduce the final agreement number:
 
 ```
 cd backend
