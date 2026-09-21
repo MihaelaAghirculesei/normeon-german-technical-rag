@@ -104,31 +104,70 @@ provider configured; see "Blocked on" below.
 
 ## Judge agreement (Giorno 18)
 
-**Code done, not yet measured** — needs the actual run above first.
+**Measured, partially — 7 of 15 pairs, see blocker below.**
 
 - `select_human_review_sample` (`src/app/eval/agreement.py`) picks 3
   questions per category (15 total, deterministic — the first 3 by id
   in each category), so every category is represented.
 - `write_human_review_worksheet` exports those 15 as a CSV: question,
   the system's answer, the gold facts/sources, the judge's own score —
-  and a blank `human_score` column.
-- Fill in `human_score` by hand, then run
-  `scripts/measure_judge_agreement.py <worksheet.csv>` — prints percent
-  agreement and Cohen's kappa (`cohens_kappa`/`percent_agreement` in
-  `agreement.py`, unit-tested against a hand-worked confusion matrix).
-  Paste the result here once run.
+  and a blank `human_score` column. Written `utf-8-sig` + `;`-delimited
+  so it opens correctly in Excel on a German/Italian-locale Windows
+  install (a BOM-less, comma-delimited version silently lost 8 of 15
+  rows when round-tripped through Excel on this machine — fixed).
+- Human scoring was done by hand against the German question/answer/
+  gold-source text directly (not translated — see the authoring
+  checklist above), independently of the judge's own score column
+  (blinded during scoring, compared only afterwards).
+- **Result on the 7 questions with a valid judge score**
+  (`Q011`, `Q012`, `Q013`, `Q022`, `Q001`, `Q002`, `Q003`): human and
+  judge scores matched on all 7 (`[2,2,2,2,2,1,1]` both sides) —
+  **percent agreement 1.0, Cohen's kappa 1.0**. Read this as a good
+  sign, not as validating the judge overall: the 8 missing pairs are
+  concentrated in exactly the categories most likely to disagree
+  (all 3 `code_lookup`, all 3 `unanswerable`, 2 of 3 `cross_reference`
+  — including both cases where the system incorrectly abstained,
+  `Q021`/`Q023`, which is the most interesting disagreement case to
+  check). The measured 1.0 should not be reported as "the" judge
+  agreement number until the other 8 are scored too.
 
-### Blocked on: a real LLM provider
+### Blocked on: judge quota, not the provider anymore
 
-`core/config.py`'s `llm_provider` defaults to `"fake"` (`FakeLlmClient`,
-a deterministic canned responder used everywhere else in this project's
-test suite) and no API key is configured anywhere in this repo (no
-`.env`, nothing in `docker-compose.yml`). Running the 50 questions for
-real answers, and judging them for real, needs `LLM_PROVIDER=
-openai_compatible` + `LLM_API_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`
-pointed at an actual provider (e.g. OpenRouter, per `backend/pricing.
-yaml`'s existing model list) — a cost/provider decision for the user,
-not something to default silently. Once that's set:
+The provider is configured (`backend/.env`, `LLM_PROVIDER=
+openai_compatible`, `LLM_API_BASE_URL` pointed at Google's Gemini
+OpenAI-compatible endpoint, `LLM_MODEL=gemini-omni-1.1-flash`) and the
+real 50-question run has happened (`eval/reports/day18-merged-real-
+run.json`, gitignored — regenerate from the DB + `.env` if lost, don't
+recommit it).
+
+8 of the 15 human-review-sample questions (`Q021`, `Q023`, `Q031`,
+`Q032`, `Q033`, `Q041`, `Q042`, `Q043`) get `429 Too Many Requests`
+from the judge call, **every single time, across at least 4 separate
+attempts at 3 different times of day** (2026-09-15 ~12:00/13:00/17:00,
+2026-09-16, the last one with a 12s delay between calls). Same 8
+questions fail every time — not the random pattern a per-minute rate
+limit would produce — which points at a **daily quota already
+exhausted for this model** (likely a low free-tier quota on a preview/
+experimental Gemini model name) rather than something fixable by
+waiting seconds or adding client-side backoff. Also worth knowing:
+`adapters/llm/openai_compatible.py`'s `_is_transient` only retries
+5xx/timeout — a 429 is never retried today, and the raised
+`LlmUnavailableError(str(exc))` doesn't capture the response body,
+where Google would have put the actual quota-exceeded reason — a real
+gap if this needs diagnosing again.
+
+To finish this: either wait for the daily quota to reset and re-run
+just the 8 missing judge calls (answers already exist, no need to
+re-run `run_eval.py`), or point `LLM_MODEL`/`LLM_API_BASE_URL` at a
+provider/model with more free headroom. Once the 15 are complete,
+re-run:
+
+```
+cd backend
+.venv/Scripts/python scripts/measure_judge_agreement.py eval/reports/day18-final-human-review.csv
+```
+
+General commands for a fresh run against a different config:
 
 ```
 cd backend
