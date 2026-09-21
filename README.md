@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 16 of 30. Retrieval is feature-complete: structured German
+Status: Day 18 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -32,6 +32,12 @@ of the model call on client disconnect, and cost tracking (a versioned
 `pricing.yaml`, priced against both the streaming and non-streaming
 paths) with every answer writing a `query_logs` row for tokens, cost,
 per-phase latency, config fingerprint and retrieved chunks.
+Evaluation: a hand-written 50-question German eval set (10 per category
+— requirement lookup, cross-reference, code lookup, unanswerable,
+conflict) run for real against the ingested corpus, scored with a
+two-layer correctness metric (deterministic point match + an LLM
+judge), with the judge itself checked against a 15-question
+human-scored sample (percent agreement 1.0, Cohen's kappa 1.0).
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
