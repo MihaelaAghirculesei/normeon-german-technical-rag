@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 18 of 30. Retrieval is feature-complete: structured German
+Status: Day 19 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -37,7 +37,10 @@ Evaluation: a hand-written 50-question German eval set (10 per category
 conflict) run for real against the ingested corpus, scored with a
 two-layer correctness metric (deterministic point match + an LLM
 judge), with the judge itself checked against a 15-question
-human-scored sample (percent agreement 1.0, Cohen's kappa 1.0).
+human-scored sample (percent agreement 1.0, Cohen's kappa 1.0), and a
+metrics module (recall/MRR/precision, citation precision, hallucinated-
+citation rate, answer accuracy, correct/false abstention rate, latency
+percentiles, cost per query) run for real over the full 50-question set.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
