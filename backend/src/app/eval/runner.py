@@ -64,6 +64,8 @@ async def _run_one(
                     tenant_id=tenant_id,
                     question=question.question,
                     strategy=config.chunking_strategy,
+                    retrieval_mode=config.retrieval_mode,
+                    rerank_top_k=config.top_k,
                     request_id=f"eval-{run_hash[:12]}-{question.id}",
                 )
         except Exception as exc:  # one bad question must not sink the whole run

@@ -4,6 +4,7 @@ context selection, as one instrumented call.
 
 import asyncio
 import time
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services.retrieval.hybrid import hybrid_search
+from app.services.retrieval.vector import vector_search
 
 
 def _select_context(
@@ -54,35 +56,52 @@ async def retrieve_context(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
+    retrieval_mode: Literal["vector", "hybrid"] | None = None,
     candidate_k: int | None = None,
     rerank_top_k: int | None = None,
     token_budget: int | None = None,
 ) -> RetrievalResult:
     """The full retrieval pipeline as one instrumented call:
 
-        tenant filter + hybrid retrieval + RRF   (`hybrid_search`)
+        tenant filter + retrieval (vector-only, or hybrid + RRF)
           -> cross-encoder rerank                (off-thread, CPU-bound)
           -> token-budget context selection      (`_select_context`)
 
     Per-phase wall-clock timings travel back in `RetrievalResult.timing`.
+    `retrieval_mode` (Giorno 20's matrix variable) picks the first phase:
+    `"hybrid"` (default, unchanged behaviour) fuses vector + full-text +
+    trigram via RRF; `"vector"` skips fusion entirely and ranks purely on
+    cosine similarity, so the matrix can isolate hybrid's actual lift.
     `rerank_top_k` and `token_budget` fall back to the configured
-    defaults; `candidate_k` is forwarded to `hybrid_search` (its own
-    default decides how many candidates the reranker sees).
+    defaults; `candidate_k` is forwarded to the chosen retrieval branch
+    (its own default decides how many candidates the reranker sees).
     """
+    retrieval_mode = retrieval_mode or "hybrid"
     rerank_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
     token_budget = (
         token_budget if token_budget is not None else settings.context_token_budget
     )
 
     started = time.perf_counter()
-    fused = await hybrid_search(
-        session,
-        embedder,
-        tenant_id=tenant_id,
-        question=question,
-        strategy=strategy,
-        candidate_k=candidate_k,
-    )
+    if retrieval_mode == "vector":
+        candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
+        fused = await vector_search(
+            session,
+            embedder,
+            tenant_id=tenant_id,
+            question=question,
+            strategy=strategy,
+            k=candidates,
+        )
+    else:
+        fused = await hybrid_search(
+            session,
+            embedder,
+            tenant_id=tenant_id,
+            question=question,
+            strategy=strategy,
+            candidate_k=candidate_k,
+        )
     after_hybrid = time.perf_counter()
     reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
     after_rerank = time.perf_counter()

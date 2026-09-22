@@ -74,9 +74,13 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
     async def fake_generate_answer(
         session: Any, embedder: Any, reranker: Any, llm: Any, *,
         tenant_id: uuid.UUID, question: str, strategy: str | None = None,
+        retrieval_mode: str | None = None, rerank_top_k: int | None = None,
         prompt_name: str | None = None, request_id: str | None = None,
     ) -> AnswerResult:
-        calls.append({"question": question, "strategy": strategy, "request_id": request_id})
+        calls.append({
+            "question": question, "strategy": strategy, "request_id": request_id,
+            "retrieval_mode": retrieval_mode, "rerank_top_k": rerank_top_k,
+        })
         outcome = by_id[question]
         if isinstance(outcome, Exception):
             raise outcome

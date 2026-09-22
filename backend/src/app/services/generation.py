@@ -41,7 +41,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import structlog
@@ -130,6 +130,8 @@ async def _prepare(
     tenant_id: UUID,
     question: str,
     strategy: str | None,
+    retrieval_mode: Literal["vector", "hybrid"] | None,
+    rerank_top_k: int | None,
     prompt_name: str | None,
 ) -> _Prepared:
     prompt = load_prompt(prompt_name or settings.answer_prompt_name)
@@ -141,6 +143,8 @@ async def _prepare(
         tenant_id=tenant_id,
         question=question,
         strategy=strategy,
+        retrieval_mode=retrieval_mode,
+        rerank_top_k=rerank_top_k,
     )
 
     top_score = retrieval.reranked[0].score if retrieval.reranked else None
@@ -251,6 +255,8 @@ async def generate_answer(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
+    retrieval_mode: Literal["vector", "hybrid"] | None = None,
+    rerank_top_k: int | None = None,
     prompt_name: str | None = None,
     request_id: str | None = None,
 ) -> AnswerResult:
@@ -262,6 +268,8 @@ async def generate_answer(
         tenant_id=tenant_id,
         question=question,
         strategy=strategy,
+        retrieval_mode=retrieval_mode,
+        rerank_top_k=rerank_top_k,
         prompt_name=prompt_name,
     )
 
@@ -382,6 +390,8 @@ async def generate_answer_stream(
             tenant_id=tenant_id,
             question=question,
             strategy=strategy,
+            retrieval_mode=None,
+            rerank_top_k=None,
             prompt_name=prompt_name,
         )
 

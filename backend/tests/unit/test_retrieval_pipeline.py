@@ -178,3 +178,60 @@ async def test_retrieve_context_forwards_strategy_and_candidate_k_to_hybrid(
     assert kwargs["strategy"] == "fixed_500"
     assert kwargs["candidate_k"] == 25
     assert kwargs["tenant_id"] == TENANT
+
+
+@pytest.fixture
+def stub_vector(monkeypatch: pytest.MonkeyPatch) -> list[RetrievedChunk]:
+    hits = [_chunk("delta", section="s1"), _chunk("epsilon", section="s2")]
+
+    async def fake_vector_search(
+        session: Any, embedder: Any, **kwargs: Any
+    ) -> list[RetrievedChunk]:
+        fake_vector_search.kwargs = kwargs  # type: ignore[attr-defined]
+        return hits
+
+    monkeypatch.setattr(pipeline, "vector_search", fake_vector_search)
+    return hits
+
+
+async def test_retrieve_context_defaults_to_hybrid(stub_hybrid: list[RetrievedChunk]) -> None:
+    result = await retrieve_context(
+        object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q"
+    )
+    assert [c.content for c in result.reranked] == ["gamma", "beta", "alpha"]
+
+
+async def test_retrieve_context_vector_mode_skips_hybrid_fusion(
+    stub_vector: list[RetrievedChunk],
+) -> None:
+    result = await retrieve_context(
+        object(),
+        object(),
+        _RecordingReranker(),
+        tenant_id=TENANT,
+        question="Q",
+        retrieval_mode="vector",
+    )
+
+    # reranker reverses [delta, epsilon] -> [epsilon, delta]
+    assert [c.content for c in result.reranked] == ["epsilon", "delta"]
+
+
+async def test_retrieve_context_vector_mode_forwards_candidate_k_as_k(
+    stub_vector: list[RetrievedChunk],
+) -> None:
+    await retrieve_context(
+        object(),
+        object(),
+        _RecordingReranker(),
+        tenant_id=TENANT,
+        question="Q",
+        strategy="structural",
+        retrieval_mode="vector",
+        candidate_k=30,
+    )
+
+    kwargs = pipeline.vector_search.kwargs  # type: ignore[attr-defined]
+    assert kwargs["strategy"] == "structural"
+    assert kwargs["k"] == 30
+    assert kwargs["tenant_id"] == TENANT
