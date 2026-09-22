@@ -180,10 +180,82 @@ DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
 
 ## Retrieval and outcome metrics (Giorno 19)
 
-*Not yet implemented.* See `src/app/eval/metrics.py` (planned):
-`recall@k`, `mrr`, `precision@k`, `citation_precision`,
-`hallucinated_citation_rate`, `answer_accuracy`, `correct_abstention_rate`,
-`false_abstention_rate`, `latency_p50`/`p95`, `cost_per_query_avg`.
+**Done.** `src/app/eval/metrics.py` -- pure (no DB/LLM/network), takes
+an `EvalReport` + `ScoredReport` + the question set and returns one
+`EvalMetrics`. `scripts/compute_metrics.py <report>.json` reads the
+matching `<hash>.scored.json` next to it and writes `<hash>.metrics.json`.
+
+- `recall_at_k` / `mean_reciprocal_rank` / `precision_at_k`: gold-source
+  matching is tolerant on purpose -- same `document`, plus *either* a
+  section-string overlap *or* the page within +/-1, not an exact match
+  on both, since chunk boundaries rarely land on the same split a human
+  would draw by hand. Questions with no `gold_sources` (`unanswerable`)
+  and errored runs are excluded from the denominator, not counted as 0.
+- `citation_precision`: one global ratio (matched citations / total
+  citations) across the whole run, not averaged per question -- a
+  question with many citations isn't diluted to the same weight as one
+  with a single lucky hit.
+- `hallucinated_citation_rate` needed a real gap closed first: the
+  count of invented `[S..]` markers `domain.citations.
+  extract_and_validate` drops was only ever logged, never persisted on
+  a `QuestionRun`. Added `invented_citations` to `AnswerResult`
+  (`services/generation.py`) and threaded it through `eval/runner.py`
+  into `QuestionRun` (default `0`, so old report JSON files without the
+  field still load).
+- `answer_accuracy` operationalizes "Layer 1 + Layer 2" as an
+  escalation, not an average: Layer 1's strict substring check is
+  authoritative when it passes; when it fails, Layer 2's judge score is
+  consulted as a semantic fallback, and only a full score of `2` flips
+  a Layer-1 failure to correct (a judge score of `1` is itself not
+  fully convinced, so it doesn't count).
+- `correct_abstention_rate` / `false_abstention_rate`: fraction of
+  `should_abstain` / answerable questions (respectively) that actually
+  abstained, among completed runs.
+- `latency_ms_p50`/`p95`: linear-interpolation percentile (numpy's
+  default convention), per phase and total, over answered questions
+  only.
+- `cost_per_query_avg`: mean of `cost_usd` where not `None` --
+  `null` for a run on a model not in `pricing.yaml` (expected, not a
+  bug -- see `services/pricing.calculate_cost`'s own docstring).
+
+**Real output, run against the full 50-question set**
+(`eval/reports/day18-merged-real-run.json` +
+`day18-merged-real-run.scored.json`), satisfying the plan's literal
+"Fatto quando" (a real JSON with every metric on a real configuration):
+
+```json
+{
+  "config_hash": "day18-merged-real-run",
+  "n_questions": 50,
+  "n_errors": 0,
+  "recall_at_k": 0.9,
+  "mrr": 0.725,
+  "precision_at_k": 0.2522,
+  "citation_precision": 0.6591,
+  "hallucinated_citation_rate": 0.0,
+  "answer_accuracy": 0.7234,
+  "correct_abstention_rate": 0.9,
+  "false_abstention_rate": 0.2,
+  "latency_ms_p50": {"retrieval_ms": 228.0, "generation_ms": 910.4, "total_ms": 1154.8},
+  "latency_ms_p95": {"retrieval_ms": 4503.1, "generation_ms": 9360.1, "total_ms": 11077.8},
+  "cost_per_query_avg": null
+}
+```
+
+**One caveat on this specific number, not on the metric itself:** the
+scored report this ran against (`day18-merged-real-run.scored.json`)
+was scored on 2026-09-15, entirely before the judge-model swap to
+`gemini-flash-lite-latest` (see "Judge model note" above) -- every one
+of its 50 Layer 2 calls is a `JudgeError` from the 429 wall, so
+`answer_accuracy` above is really Layer 1's pass rate alone, with
+Layer 2's semantic fallback never engaging. Re-scoring the full 50 with
+the now-working judge model would sharpen this number but costs 50 real
+judge calls -- worth doing before Giorno 20's matrix run, not required
+for Giorno 19's own "Fatto quando". `false_abstention_rate = 0.2` is
+already a genuine, useful finding either way (independent of the judge):
+8 of 40 answerable questions wrongly abstained, more than the 2 seen in
+the 15-question human-review sample alone -- worth a look before
+Giorno 20 tunes `min_rerank_score_for_answer`.
 
 ## First matrix run (Giorno 20)
 

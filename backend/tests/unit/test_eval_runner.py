@@ -56,12 +56,15 @@ def _citation() -> Citation:
     )
 
 
-def _answer(text: str = "Laut [S1]. [S1]", cost: float | None = 0.0002) -> AnswerResult:
+def _answer(
+    text: str = "Laut [S1]. [S1]", cost: float | None = 0.0002, invented: int = 0
+) -> AnswerResult:
     return AnswerResult(
         answer=text, sources=[_source()], citations=[_citation()],
         prompt_name="answer_de.v1", prompt_sha256="a" * 64, model="fake",
         retrieval_timing=PipelineTiming(10.0, 5.0, 1.0, 16.0),
         generation_ms=3.0, prompt_tokens=None, completion_tokens=None, cost_usd=cost,
+        invented_citations=invented,
     )
 
 

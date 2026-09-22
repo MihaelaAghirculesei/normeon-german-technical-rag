@@ -102,6 +102,7 @@ async def _run_one(
             )
             for c in result.citations
         ],
+        invented_citations=result.invented_citations,
         retrieved=[
             RetrievedRecord(
                 chunk_id=s.chunk_id,
