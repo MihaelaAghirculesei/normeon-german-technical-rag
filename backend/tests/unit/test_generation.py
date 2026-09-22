@@ -49,10 +49,14 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         tenant_id: uuid.UUID,
         question: str,
         strategy: str | None = None,
+        retrieval_mode: str | None = None,
+        rerank_top_k: int | None = None,
     ) -> RetrievalResult:
         seen["tenant_id"] = tenant_id
         seen["question"] = question
         seen["strategy"] = strategy
+        seen["retrieval_mode"] = retrieval_mode
+        seen["rerank_top_k"] = rerank_top_k
         timing = PipelineTiming(
             hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0
         )
@@ -93,6 +97,8 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
         "tenant_id": TENANT,
         "question": "Welche Lenkkraft?",
         "strategy": "structural",
+        "retrieval_mode": None,
+        "rerank_top_k": None,
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
     assert [c.marker for c in result.citations] == ["S1", "S2"]
