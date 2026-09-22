@@ -95,6 +95,7 @@ class AnswerResult:
     prompt_tokens: int | None
     completion_tokens: int | None
     cost_usd: float | None
+    invented_citations: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +284,7 @@ async def generate_answer(
             prompt_tokens=None,
             completion_tokens=None,
             cost_usd=None,
+            invented_citations=0,
         )
 
     started = time.perf_counter()
@@ -335,6 +337,7 @@ async def generate_answer(
         prompt_tokens=completion.prompt_tokens,
         completion_tokens=completion.completion_tokens,
         cost_usd=cost,
+        invented_citations=len(invented_markers),
     )
 
 

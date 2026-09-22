@@ -72,6 +72,7 @@ def _answer(
         prompt_tokens=None,
         completion_tokens=None,
         cost_usd=cost_usd,
+        invented_citations=0,
     )
 
 
@@ -207,6 +208,7 @@ def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any
             prompt_tokens=None,
             completion_tokens=None,
             cost_usd=None,
+            invented_citations=0,
         )
     )
 

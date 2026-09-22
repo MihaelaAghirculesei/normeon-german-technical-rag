@@ -92,6 +92,7 @@ class QuestionRun(BaseModel):
     answer: str
     abstained: bool
     citations: list[CitationRecord]
+    invented_citations: int = 0
     retrieved: list[RetrievedRecord]
     retrieval_ms: float
     generation_ms: float
