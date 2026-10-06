@@ -274,3 +274,49 @@ def test_checkpoint_path_separates_question_sets_that_share_ids(tmp_path: Path) 
     assert runner.checkpoint_path(CONFIG, real, tmp_path).name.startswith(
         runner.config_hash(CONFIG)
     )
+
+
+async def test_min_interval_spaces_question_starts(monkeypatch: Any) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(runner.asyncio, "sleep", fake_sleep)
+    _stub_generate(monkeypatch, {"a": _answer(), "b": _answer(), "c": _answer()})
+
+    await runner.run_evaluation(
+        [_q("Q001", question="a"), _q("Q002", question="b"), _q("Q003", question="c")],
+        CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        concurrency=1, min_interval_s=4.0,
+    )
+
+    assert len(sleeps) == 2  # no wait before the first question
+    assert all(3.0 < s <= 4.0 for s in sleeps)
+
+
+async def test_completed_questions_do_not_consume_a_slot(
+    monkeypatch: Any, tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.partial.jsonl"
+    questions = [_q("Q001", question="a"), _q("Q002", question="b")]
+    _stub_generate(monkeypatch, {"a": _answer(), "b": _answer()})
+    await runner.run_evaluation(
+        questions[:1], CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(runner.asyncio, "sleep", fake_sleep)
+    await runner.run_evaluation(
+        questions, CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path, min_interval_s=4.0,
+    )
+
+    assert sleeps == []  # Q001 came from the checkpoint; Q002 is the first real call

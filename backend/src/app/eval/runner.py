@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -191,23 +192,39 @@ async def run_evaluation(
     tenant_id: UUID,
     concurrency: int = 4,
     checkpoint: Path | None = None,
+    min_interval_s: float = 0.0,
 ) -> EvalReport:
     """With `checkpoint`, every finished question is appended to that
     file as it completes, and questions a previous attempt already
     completed (without error) are taken from it instead of being run
     again. The caller removes the file once the final report is
-    written (see `checkpoint_path`)."""
+    written (see `checkpoint_path`).
+
+    `min_interval_s` spaces question starts at least that far apart. When
+    retrieval is fast (cached rerank scores) the LLM calls would otherwise
+    go out back to back and trip a requests-per-minute quota."""
     run_hash = config_hash(config)
     sem = asyncio.Semaphore(concurrency)
     done = _load_checkpoint(checkpoint, {q.id for q in questions}) if checkpoint else {}
     if done:
         _log.info("eval.resumed", config_hash=run_hash, already_done=len(done))
     finished = len(done)
+    pace = asyncio.Lock()
+    last_start: float | None = None
+
+    async def wait_for_slot() -> None:
+        nonlocal last_start
+        async with pace:
+            if last_start is not None:
+                await asyncio.sleep(max(0.0, last_start + min_interval_s - time.monotonic()))
+            last_start = time.monotonic()
 
     async def run_and_record(question: EvalQuestion) -> QuestionRun:
         nonlocal finished
         if question.id in done:
             return done[question.id]
+        if min_interval_s > 0:
+            await wait_for_slot()
         run = await _run_one(
             question,
             config,
