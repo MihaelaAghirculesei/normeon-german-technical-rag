@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     # represented. All four are experiment-matrix variables in Week 4.
     reranker_provider: Literal["noop", "cross_encoder"] = "cross_encoder"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    # Token cap for one (query, chunk) pair. Without it sentence-
+    # transformers falls back to the tokenizer's own limit -- 8192 for
+    # bge-reranker-v2-m3 -- so every chunk is scored in full and cost
+    # grows with chunk length. 512 is the model authors' own default
+    # (FlagEmbedding's `compute_score`) and what docs/FAILURE-MODES.md
+    # describes; a matrix variable like the rest of this block.
+    reranker_max_length: int = 512
     rerank_top_k: int = 8
     context_token_budget: int = 4000
 
