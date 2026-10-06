@@ -278,3 +278,77 @@ Carried over from earlier days, revisit if Week 4 eval shows they matter:
 - No real character offsets into the source PDF yet (`char_start`/
   `char_end` are `0`/`len`), so highlight-in-original is not possible
   until that is tracked.
+
+## Evaluation findings (Giorno 20)
+
+The first full matrix run -- `{structural, fixed_500} x {hybrid, vector}`,
+cross-encoder reranker, 10 candidates, `top_k=5`, 50 questions -- is in
+`docs/EVALUATION.md`. Five things it showed, each traced to the
+questions that produced it rather than read off an aggregate.
+
+### 1. Context dedup dropped the second version of a section (fixed)
+
+`_select_context` skipped a chunk whose `section_path` was already in the
+context *regardless of document*. Lastenheft v1.2 and v2.0 share section
+numbers, so whenever v1.2's section 5 ranked first, v2.0's section 5 --
+ranked second by the reranker -- was discarded as a duplicate. Five
+questions about v2.0 (Q011-Q014, Q037) were answered from the wrong
+version. The dedup key is now `(document_id, section_path)`; re-measured
+retrieval-only, baseline recall@5 went from **0.800 to 0.925**. This is
+the version-conflict case the corpus was built to test, and it was
+failing in context selection, not in retrieval.
+
+### 2. The generator over-abstains on narrow structural context
+
+Ten of the baseline's eleven wrong answers are `NICHT_GEFUNDEN`, and in
+nine of them a gold source *was* in the context. These are not the
+pre-generation confidence gate (the LLM was called each time). With wider
+fixed windows seven of those ten are answered: false-abstention rate 0.25
+(structural / hybrid) vs 0.15 (fixed_500 / hybrid). The likely cause --
+a hypothesis, not yet isolated -- is that the answer needs a sentence of
+surrounding text a single structural chunk doesn't carry, and the strict
+"answer only from the sources" prompt makes the model decline. Accuracy is limited by generation,
+not retrieval -- the lever is the prompt and the context window (e.g.
+adding the neighbouring chunk), not the chunker.
+
+### 3. Fixed windows carry the wrong section label
+
+A fixed 500-token window spans several sections but is stored with the
+`section_path` of the first heading it starts in; for each Lastenheft it
+is the document title. 15 of fixed_500's 17 recall misses are Lastenheft
+questions whose gold source names a section only -- the text is in the
+chunk, the label is not. That makes fixed_500's recall a lower bound, but
+it is also a real product defect: a citation built from that chunk shows
+the user the wrong section. On PDF-sourced questions the two strategies
+are close (fixed_500 misses 2, structural 0).
+
+### 4. A change log outranks the section it describes
+
+For Q003 and Q004 the reranker puts "Anhang A: Änderungshistorie" -- the
+change log that *mentions* the changed values -- above sections 6 and
+3.2, which actually state them, and the real sections fall outside the
+top five. The answer can still be right (the log contains the numbers),
+but the citation points at the log, not the requirement. A cross-encoder
+rewards lexical overlap with the question; a summary of changes overlaps
+more than the requirement itself.
+
+### 5. Fifty questions cannot separate configurations on accuracy
+
+Every paired difference in `answer_accuracy` has a 95% interval that
+includes zero (e.g. fixed_500 / hybrid vs. baseline: +0.08, [-0.04,
++0.20]). Recall differences can be resolved (structural vs. fixed_500:
+-0.225, [-0.375, -0.075]); accuracy ones cannot at this sample size.
+Conclusions about answer quality from this run are directional only.
+
+### Operational: the run itself
+
+- **No overall deadline on an LLM call.** httpx's `timeout` bounds each
+  read, not the request: one answer took 277 s, and when the laptop
+  entered modern standby a connection hung for nine hours with the
+  process idle. The adapter needs a total per-call deadline.
+- **Free-tier quota is per day, not just per minute.** Retries and pacing
+  handle the per-minute limit; Gemini's free tier also caps a model at
+  500 requests a day, and one full matrix (200 answers + 200 judgements)
+  uses most of it. The post-fix accuracy re-run waits for the reset
+  rather than switching models mid-experiment, which would make the
+  before/after numbers incomparable.
