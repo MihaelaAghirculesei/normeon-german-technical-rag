@@ -84,10 +84,19 @@ against the 50-question eval set, and the numbers land here.
 
 ### The cross-encoder truncates long chunks
 
-The reranker model has a fixed maximum input length (~512 tokens for the
-`(query, chunk)` pair). A structural chunk near the 800-token ceiling is
-truncated before scoring, so its tail never influences its rerank score —
-the relevant sentence may be the part that got cut.
+Each `(query, chunk)` pair is capped at `reranker_max_length` tokens (512,
+the model authors' own default). A structural chunk near the 800-word
+ceiling — roughly 1,000+ subword tokens of German — is truncated before
+scoring, so its tail never influences its rerank score; the relevant
+sentence may be the part that got cut.
+
+Until Giorno 20 this paragraph described a cap the code did not apply:
+no `max_length` was passed, so sentence-transformers fell back to the
+tokenizer's own limit (8192 for `bge-reranker-v2-m3`) and every chunk was
+scored in full. That was more faithful but considerably slower — part of
+the per-pair cost measured below. The cap is now explicit, configurable
+and recorded in each eval run's config (`EvalConfig.reranker_max_length`),
+so its quality cost is something the matrix can measure instead of assume.
 
 ### Section dedup is first-chunk-wins
 
