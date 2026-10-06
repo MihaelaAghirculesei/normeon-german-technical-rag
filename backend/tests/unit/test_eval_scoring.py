@@ -4,7 +4,10 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from app.adapters.llm.fake import FakeLlmClient
+from app.eval import scoring
 from app.eval.models import EvalConfig, EvalQuestion, EvalReport, GoldSource, QuestionRun
 from app.eval.scoring import (
     JudgeError,
@@ -197,3 +200,83 @@ def test_write_scored_report_round_trips(tmp_path: Path) -> None:
 
     assert path == tmp_path / "testhash.scored.json"
     assert ScoredReport.model_validate_json(path.read_text(encoding="utf-8")) == scored
+
+
+async def test_score_report_paces_judge_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With a minimum interval, consecutive judge calls are spaced out --
+    asserted on the requested sleeps, not wall-clock time."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(scoring.asyncio, "sleep", fake_sleep)
+    questions = [_question(id=f"Q00{i}") for i in range(1, 4)]
+    report = _report(*(_question_run(q.id, "300 N") for q in questions))
+    llm = FakeLlmClient(canned='{"score": 2, "rationale": "ok"}')
+
+    await score_report(report, questions, llm, min_interval_s=5.0)
+
+    assert len(sleeps) == 2  # none before the first call
+    assert all(4.0 < s <= 5.0 for s in sleeps)
+
+
+async def test_score_report_does_not_sleep_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(scoring.asyncio, "sleep", fake_sleep)
+    questions = [_question(id="Q001"), _question(id="Q002")]
+    report = _report(*(_question_run(q.id, "300 N") for q in questions))
+
+    await score_report(report, questions, FakeLlmClient(canned='{"score": 2, "rationale": "ok"}'))
+
+    assert sleeps == []
+
+
+# --- resuming a scored report -------------------------------------------------
+
+
+async def test_rescore_stale_rejudges_errors_and_changed_answers_only() -> None:
+    questions = [_question(id=f"Q00{i}") for i in range(1, 5)]
+    first = _report(
+        _question_run("Q001", "300 N"),
+        _question_run("Q002", "300 N"),
+        _question_run("Q003", ""),  # errored run, retried later
+        _question_run("Q004", "300 N"),
+    )
+    wrong = FakeLlmClient(canned='{"score": 0, "rationale": "x"}')
+    scored = await score_report(first, questions, wrong)
+    judge_error = JudgeError(raw_response="", error="429")
+    failed = scored.results[1].model_copy(update={"layer2": judge_error})
+    scored = scored.model_copy(update={"results": [scored.results[0], failed, *scored.results[2:]]})
+
+    retried = _report(
+        _question_run("Q001", "300 N"),
+        _question_run("Q002", "300 N"),
+        _question_run("Q003", "Die Lenkkraft betraegt 300 N."),
+        _question_run("Q004", "300 N"),
+    )
+    llm = FakeLlmClient(canned='{"score": 2, "rationale": "ok"}')
+
+    merged, n = await scoring.rescore_stale(retried, scored, questions, llm)
+
+    assert n == 2
+    assert [r.question_id for r in merged.results] == ["Q001", "Q002", "Q003", "Q004"]
+    scores = [r.layer2.score for r in merged.results if isinstance(r.layer2, JudgeResult)]
+    assert scores == [0, 2, 2, 0]  # Q001/Q004 kept, Q002 (error) and Q003 (new answer) redone
+    assert merged.results[2].answer == "Die Lenkkraft betraegt 300 N."
+
+
+async def test_rescore_stale_is_a_noop_when_everything_is_current() -> None:
+    questions = [_question(id="Q001")]
+    report = _report(_question_run("Q001", "300 N"))
+    ok = FakeLlmClient(canned='{"score": 2, "rationale": "ok"}')
+    scored = await score_report(report, questions, ok)
+
+    merged, n = await scoring.rescore_stale(report, scored, questions, FakeLlmClient())
+
+    assert n == 0
+    assert merged == scored

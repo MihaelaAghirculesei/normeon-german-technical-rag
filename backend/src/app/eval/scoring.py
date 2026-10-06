@@ -17,8 +17,10 @@ templating facility, and the judge prompt has different placeholders.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -152,21 +154,36 @@ class ScoredReport(BaseModel):
 
 
 async def score_report(
-    report: EvalReport, questions: list[EvalQuestion], llm: LlmClient
+    report: EvalReport,
+    questions: list[EvalQuestion],
+    llm: LlmClient,
+    *,
+    min_interval_s: float = 0.0,
 ) -> ScoredReport:
     """Layer 1 + Layer 2 for every answered question in `report`. A
     `QuestionRun` whose `question_id` no longer matches any question in
     `questions` (the set changed since the report was run) is skipped
     rather than raising -- a stale report is a caller's mistake to
     notice from a `ScoredReport` shorter than `report.results`, not this
-    function's to guess around."""
+    function's to guess around.
+
+    `min_interval_s` spaces consecutive judge calls at least that far
+    apart. Fifty back-to-back calls exceed a requests-per-minute quota
+    (Gemini's free tier, for one) faster than the adapter's short retry
+    backoff can recover, and every call lost that way silently drops its
+    answer to Layer 1 alone -- pacing the batch is cheaper than retrying
+    it."""
     by_id = {q.id: q for q in questions}
     scored: list[ScoredQuestionRun] = []
+    last_call: float | None = None
     for run in report.results:
         question = by_id.get(run.question_id)
         if question is None:
             continue
         layer1 = score_layer1(question.expected_answer_points, run.answer)
+        if last_call is not None and min_interval_s > 0:
+            await asyncio.sleep(max(0.0, last_call + min_interval_s - time.monotonic()))
+        last_call = time.monotonic()
         layer2 = await score_layer2(llm, question=question, answer=run.answer)
         scored.append(
             ScoredQuestionRun(
@@ -180,6 +197,46 @@ async def score_report(
     return ScoredReport(
         config_hash=report.config_hash, scored_at=datetime.now(UTC), results=scored
     )
+
+
+def stale_question_ids(report: EvalReport, scored: ScoredReport) -> set[str]:
+    """Questions of `report` whose existing score can't be kept: never
+    scored, judged with an error, or scored against a different answer
+    than the report now holds -- a question re-run after an error has a
+    new answer, and the old score belonged to the empty one."""
+    previous = {r.question_id: r for r in scored.results}
+    return {
+        run.question_id
+        for run in report.results
+        if (old := previous.get(run.question_id)) is None
+        or old.answer != run.answer
+        or isinstance(old.layer2, JudgeError)
+    }
+
+
+async def rescore_stale(
+    report: EvalReport,
+    scored: ScoredReport,
+    questions: list[EvalQuestion],
+    llm: LlmClient,
+    *,
+    min_interval_s: float = 0.0,
+) -> tuple[ScoredReport, int]:
+    """Bring an existing `ScoredReport` up to date with `report`, judging
+    only the stale questions (`stale_question_ids`). Returns the merged
+    report, in `report`'s question order, and how many were re-judged."""
+    stale = stale_question_ids(report, scored)
+    if not stale:
+        return scored, 0
+    retry = report.model_copy(
+        update={"results": [r for r in report.results if r.question_id in stale]}
+    )
+    rescored = await score_report(retry, questions, llm, min_interval_s=min_interval_s)
+    merged = {r.question_id: r for r in scored.results} | {
+        r.question_id: r for r in rescored.results
+    }
+    results = [merged[r.question_id] for r in report.results if r.question_id in merged]
+    return scored.model_copy(update={"results": results}), len(stale)
 
 
 def write_scored_report(scored: ScoredReport, reports_dir: Path = REPORTS_DIR) -> Path:
