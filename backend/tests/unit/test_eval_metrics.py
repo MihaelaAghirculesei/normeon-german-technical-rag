@@ -22,6 +22,7 @@ from app.eval.metrics import (
     latency_percentiles,
     mean_reciprocal_rank,
     precision_at_k,
+    question_outcomes,
     recall_at_k,
 )
 from app.eval.models import (
@@ -377,3 +378,79 @@ def test_compute_metrics_raises_on_empty_report() -> None:
     scored = ScoredReport(config_hash="abc123", scored_at=datetime.now(UTC), results=[])
     with pytest.raises(ValueError, match="no results"):
         compute_metrics(report, scored, [])
+
+
+# --- per-question outcomes + intervals (matrix comparison) ------------------
+
+
+def _report(results: list[QuestionRun]) -> EvalReport:
+    return EvalReport(
+        config=_config(), config_hash="abc123", created_at=datetime.now(UTC),
+        n_questions=len(results), results=results,
+    )
+
+
+def _scored_report(results: list[ScoredQuestionRun]) -> ScoredReport:
+    return ScoredReport(config_hash="abc123", scored_at=datetime.now(UTC), results=results)
+
+
+def test_question_outcomes_follow_the_accuracy_and_recall_rules() -> None:
+    questions = [
+        _question(id="Q001"),
+        _question(id="Q002", category="code_lookup"),
+        _question(id="Q003", category="unanswerable", gold_sources=[], should_abstain=True),
+        _question(id="Q004"),
+    ]
+    report = _report([
+        _run("Q001", retrieved=[_retrieved()]),
+        _run("Q002", retrieved=[_retrieved(filename="FZV.pdf")]),
+        _run("Q003", abstained=True),
+        _run("Q004", error="boom"),
+    ])
+    scored = _scored_report([
+        _scored("Q001"),
+        _scored("Q002", points_missing=["x"], layer2=JudgeResult(score=1, rationale="partly")),
+        _scored("Q003"),
+        _scored("Q004", points_missing=["x"], layer2=JudgeResult(score=0, rationale="empty")),
+    ])
+
+    outcomes = question_outcomes(report, scored, questions)
+
+    assert [(o.question_id, o.category, o.answer_correct, o.gold_hit) for o in outcomes] == [
+        ("Q001", "requirement_lookup", True, True),
+        ("Q002", "code_lookup", False, False),
+        ("Q003", "unanswerable", True, None),  # no gold source: recall undefined
+        ("Q004", "requirement_lookup", False, None),  # errored run: recall undefined
+    ]
+
+
+def test_compute_metrics_reports_intervals_and_judge_errors() -> None:
+    questions = [_question(id=f"Q{i:03d}") for i in range(1, 11)]
+    report = _report([_run(q.id, retrieved=[_retrieved()]) for q in questions])
+    judge_failed = JudgeError(raw_response="", error="429 Too Many Requests")
+    scored = _scored_report(
+        [_scored(q.id) for q in questions[:7]]
+        + [_scored(q.id, points_missing=["x"], layer2=judge_failed) for q in questions[7:]]
+    )
+
+    metrics = compute_metrics(report, scored, questions)
+
+    assert metrics.answer_accuracy == pytest.approx(0.7)
+    assert metrics.n_judge_errors == 3
+    assert metrics.answer_accuracy_ci95 is not None
+    lo, hi = metrics.answer_accuracy_ci95
+    assert lo < 0.7 < hi
+    assert metrics.recall_at_k_ci95 == (1.0, 1.0)
+    assert len(metrics.outcomes) == 10
+
+
+def test_a_metrics_file_from_before_the_outcome_fields_still_loads() -> None:
+    legacy = compute_metrics(
+        _report([_run("Q001", retrieved=[_retrieved()])]),
+        _scored_report([_scored("Q001")]),
+        [_question(id="Q001")],
+    ).model_dump(exclude={"n_judge_errors", "answer_accuracy_ci95", "recall_at_k_ci95", "outcomes"})
+
+    loaded = EvalMetrics.model_validate(legacy)
+
+    assert loaded.outcomes == [] and loaded.answer_accuracy_ci95 is None
