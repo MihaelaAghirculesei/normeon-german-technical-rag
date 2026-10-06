@@ -177,7 +177,22 @@ async def test_retrieve_context_forwards_strategy_and_candidate_k_to_hybrid(
     kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
     assert kwargs["strategy"] == "fixed_500"
     assert kwargs["candidate_k"] == 25
+    # the same budget survives fusion, so the reranker sees 25 candidates
+    # here exactly as it would in vector-only mode
+    assert kwargs["top_k"] == 25
     assert kwargs["tenant_id"] == TENANT
+
+
+async def test_retrieve_context_leaves_hybrid_defaults_alone_without_candidate_k(
+    stub_hybrid: list[RetrievedChunk],
+) -> None:
+    await retrieve_context(
+        object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q"
+    )
+
+    kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
+    assert kwargs["candidate_k"] is None
+    assert kwargs["top_k"] is None
 
 
 @pytest.fixture
