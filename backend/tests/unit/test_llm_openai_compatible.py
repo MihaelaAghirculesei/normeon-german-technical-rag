@@ -6,8 +6,14 @@ import json
 
 import httpx
 import pytest
+from tenacity import AsyncRetrying, RetryCallState
 
-from app.adapters.llm.openai_compatible import OpenAICompatibleClient
+from app.adapters.llm.openai_compatible import (
+    MAX_RETRY_AFTER_S,
+    OpenAICompatibleClient,
+    _retry_after_seconds,
+    _wait,
+)
 from app.core.errors import LlmTimeoutError, LlmUnavailableError
 
 
@@ -306,3 +312,73 @@ async def test_stream_raises_llm_timeout() -> None:
     with pytest.raises(LlmTimeoutError):
         async for _ in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
             pass
+
+
+# --- rate limiting (429) ------------------------------------------------------
+
+
+async def test_a_429_is_retried_and_can_still_succeed() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=1,
+        transport=_sequenced_transport([
+            httpx.Response(429, headers={"Retry-After": "0"}, json={"error": "slow down"}),
+            httpx.Response(200, json=_ok_body()),
+        ]),
+    )
+
+    resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
+
+
+async def test_a_429_exhausting_retries_raises_llm_unavailable() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(429, headers={"Retry-After": "0"}, json={"error": "quota"})
+
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=2,
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(LlmUnavailableError):
+        await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert len(captured) == 3
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [("7", 7.0), ("0.5", 0.5), (None, None), ("soon", None), ("-1", None),
+     ("Wed, 21 Oct 2026 07:28:00 GMT", None)],
+)
+def test_retry_after_parsing(header: str | None, expected: float | None) -> None:
+    assert _retry_after_seconds(header) == expected
+
+
+def _state_after(response: httpx.Response) -> RetryCallState:
+    state = RetryCallState(retry_object=AsyncRetrying(), fn=None, args=(), kwargs={})
+    state.attempt_number = 1
+    request = httpx.Request("POST", "https://llm.example/v1/chat/completions")
+    error = httpx.HTTPStatusError("x", request=request, response=response)
+    state.set_exception((type(error), error, None))
+    return state
+
+
+def test_wait_honours_retry_after_up_to_the_cap() -> None:
+    assert _wait(_state_after(httpx.Response(429, headers={"Retry-After": "3"}))) == 3.0
+    assert _wait(_state_after(httpx.Response(429, headers={"Retry-After": "600"}))) == (
+        MAX_RETRY_AFTER_S
+    )
+
+
+def test_wait_falls_back_to_backoff_without_retry_after() -> None:
+    assert _wait(_state_after(httpx.Response(429))) <= 4
+    assert _wait(_state_after(httpx.Response(503, headers={"Retry-After": "600"}))) <= 4
