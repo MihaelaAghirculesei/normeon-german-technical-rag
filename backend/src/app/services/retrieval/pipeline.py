@@ -73,8 +73,12 @@ async def retrieve_context(
     trigram via RRF; `"vector"` skips fusion entirely and ranks purely on
     cosine similarity, so the matrix can isolate hybrid's actual lift.
     `rerank_top_k` and `token_budget` fall back to the configured
-    defaults; `candidate_k` is forwarded to the chosen retrieval branch
-    (its own default decides how many candidates the reranker sees).
+    defaults. `candidate_k`, when given, is how many candidates the
+    reranker sees in *either* mode: vector-only retrieves that many;
+    hybrid pulls that many from each branch and keeps that many after
+    fusion -- so a vector-vs-hybrid comparison hands the reranker the
+    same budget and differs only in *which* chunks fill it. Left `None`,
+    each branch's configured defaults apply.
     """
     retrieval_mode = retrieval_mode or "hybrid"
     rerank_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
@@ -101,6 +105,7 @@ async def retrieve_context(
             question=question,
             strategy=strategy,
             candidate_k=candidate_k,
+            top_k=candidate_k,
         )
     after_hybrid = time.perf_counter()
     reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
