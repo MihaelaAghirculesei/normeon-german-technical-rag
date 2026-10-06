@@ -120,6 +120,12 @@ class _Prepared:
     system: str
     user_message: str
     abstain_pre_generation: bool
+    # The retrieval knobs actually applied to this request (overrides
+    # resolved against settings), so `_config_hash` records what ran
+    # rather than the configured defaults.
+    retrieval_mode: Literal["vector", "hybrid"]
+    rerank_top_k: int
+    candidate_k: int | None
 
 
 async def _prepare(
@@ -132,9 +138,12 @@ async def _prepare(
     strategy: str | None,
     retrieval_mode: Literal["vector", "hybrid"] | None,
     rerank_top_k: int | None,
+    candidate_k: int | None,
     prompt_name: str | None,
 ) -> _Prepared:
     prompt = load_prompt(prompt_name or settings.answer_prompt_name)
+    applied_mode: Literal["vector", "hybrid"] = retrieval_mode or "hybrid"
+    applied_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
 
     retrieval = await retrieve_context(
         session,
@@ -145,6 +154,7 @@ async def _prepare(
         strategy=strategy,
         retrieval_mode=retrieval_mode,
         rerank_top_k=rerank_top_k,
+        candidate_k=candidate_k,
     )
 
     top_score = retrieval.reranked[0].score if retrieval.reranked else None
@@ -163,6 +173,9 @@ async def _prepare(
             system=_SYSTEM,
             user_message="",
             abstain_pre_generation=True,
+            retrieval_mode=applied_mode,
+            rerank_top_k=applied_top_k,
+            candidate_k=candidate_k,
         )
 
     context_block, sources = build_context(retrieval.context)
@@ -181,21 +194,26 @@ async def _prepare(
         system=system,
         user_message=user_message,
         abstain_pre_generation=False,
+        retrieval_mode=applied_mode,
+        rerank_top_k=applied_top_k,
+        candidate_k=candidate_k,
     )
 
 
 def _config_hash(prep: _Prepared, strategy: str | None) -> str:
     return compute_config_hash(
         retrieval_strategy=strategy or settings.retrieval_strategy,
-        hybrid_candidate_k=settings.hybrid_candidate_k,
-        hybrid_top_k=settings.hybrid_top_k,
+        retrieval_mode=prep.retrieval_mode,
+        hybrid_candidate_k=prep.candidate_k or settings.hybrid_candidate_k,
+        hybrid_top_k=prep.candidate_k or settings.hybrid_top_k,
         rrf_k=settings.rrf_k,
         rrf_weight_vector=settings.rrf_weight_vector,
         rrf_weight_fts=settings.rrf_weight_fts,
         rrf_weight_trgm=settings.rrf_weight_trgm,
         reranker_provider=settings.reranker_provider,
         reranker_model=settings.reranker_model,
-        rerank_top_k=settings.rerank_top_k,
+        reranker_max_length=settings.reranker_max_length,
+        rerank_top_k=prep.rerank_top_k,
         context_token_budget=settings.context_token_budget,
         min_rerank_score_for_answer=settings.min_rerank_score_for_answer,
         llm_provider=settings.llm_provider,
@@ -257,6 +275,7 @@ async def generate_answer(
     strategy: str | None = None,
     retrieval_mode: Literal["vector", "hybrid"] | None = None,
     rerank_top_k: int | None = None,
+    candidate_k: int | None = None,
     prompt_name: str | None = None,
     request_id: str | None = None,
 ) -> AnswerResult:
@@ -270,6 +289,7 @@ async def generate_answer(
         strategy=strategy,
         retrieval_mode=retrieval_mode,
         rerank_top_k=rerank_top_k,
+        candidate_k=candidate_k,
         prompt_name=prompt_name,
     )
 
@@ -392,6 +412,7 @@ async def generate_answer_stream(
             strategy=strategy,
             retrieval_mode=None,
             rerank_top_k=None,
+            candidate_k=None,
             prompt_name=prompt_name,
         )
 
