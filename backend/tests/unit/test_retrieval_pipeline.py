@@ -14,10 +14,18 @@ from app.services.retrieval.pipeline import _select_context, retrieve_context
 TENANT = uuid.uuid4()
 
 
-def _chunk(content: str, section: str | None = None, score: float = 0.0) -> RetrievedChunk:
+DOC = uuid.uuid4()
+
+
+def _chunk(
+    content: str,
+    section: str | None = None,
+    score: float = 0.0,
+    document_id: uuid.UUID = DOC,
+) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=uuid.uuid4(),
-        document_id=uuid.uuid4(),
+        document_id=document_id,
         filename="StVZO.pdf",
         content=content,
         page_from=1,
@@ -57,6 +65,22 @@ def test_select_skips_a_section_path_already_represented() -> None:
     selected = _select_context(chunks, token_budget=1000)
 
     assert [c.content for c in selected] == ["first from A", "from B"]
+
+
+def test_select_keeps_the_same_section_of_two_different_documents() -> None:
+    """Regression: dedup keyed on section_path alone dropped v2.0's
+    section 5 whenever v1.2's section 5 ranked first -- precisely the
+    pair a version-conflict question has to compare."""
+    v12, v20 = uuid.uuid4(), uuid.uuid4()
+    chunks = [
+        _chunk("Lenkkraft 300 N", section="5", document_id=v12),
+        _chunk("Lenkkraft 250 N", section="5", document_id=v20),
+        _chunk("v1.2 again", section="5", document_id=v12),
+    ]
+
+    selected = _select_context(chunks, token_budget=1000)
+
+    assert [c.content for c in selected] == ["Lenkkraft 300 N", "Lenkkraft 250 N"]
 
 
 def test_select_never_dedups_chunks_without_a_section_path() -> None:

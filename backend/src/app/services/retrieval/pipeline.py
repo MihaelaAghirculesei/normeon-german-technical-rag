@@ -22,8 +22,12 @@ def _select_context(
 ) -> list[RetrievedChunk]:
     """Fill a token budget with the highest-ranked chunks, in order.
 
-    A `section_path` already represented is skipped, so the context is not
-    three near-duplicate slices of one section. Chunks are taken whole;
+    A section already represented -- the same `section_path` *of the same
+    document* -- is skipped, so the context is not three near-duplicate
+    slices of one section. The document is part of the key on purpose: two
+    versions of one specification (or two regulations that both have a
+    "§ 10") share section numbers, and comparing them is exactly what a
+    version-conflict question needs. Chunks are taken whole;
     selection stops once the next chunk would push the running total over
     the budget. At least the top chunk is always returned, even if it
     alone exceeds the budget.
@@ -33,18 +37,19 @@ def _select_context(
     hard model-context limit.
     """
     selected: list[RetrievedChunk] = []
-    seen_sections: set[str] = set()
+    seen_sections: set[tuple[UUID, str]] = set()
     used = 0
     for chunk in chunks:
-        if chunk.section_path is not None and chunk.section_path in seen_sections:
+        key = (chunk.document_id, chunk.section_path) if chunk.section_path else None
+        if key is not None and key in seen_sections:
             continue
         cost = len(chunk.content.split())
         if selected and used + cost > token_budget:
             break
         selected.append(chunk)
         used += cost
-        if chunk.section_path is not None:
-            seen_sections.add(chunk.section_path)
+        if key is not None:
+            seen_sections.add(key)
     return selected
 
 
