@@ -84,6 +84,7 @@ async def _report_for(
     *,
     reports_dir: Path,
     concurrency: int,
+    question_interval: float,
 ) -> EvalReport:
     path = reports_dir / f"{config_hash(config)}.json"
     if path.exists():
@@ -104,6 +105,7 @@ async def _report_for(
         tenant_id=DEMO_TENANT_ID,
         concurrency=concurrency,
         checkpoint=checkpoint,
+        min_interval_s=question_interval,
     )
     written = write_report(report, reports_dir)
     n_errors = sum(1 for r in report.results if r.error)
@@ -173,7 +175,12 @@ async def _run_one(
     print(f"\n=== {label} ({config_hash(config)[:12]}) ===", flush=True)
     started = time.perf_counter()
     report = await _report_for(
-        config, questions, reranker, reports_dir=reports_dir, concurrency=args.concurrency
+        config,
+        questions,
+        reranker,
+        reports_dir=reports_dir,
+        concurrency=args.concurrency,
+        question_interval=args.question_interval,
     )
     scored = await _scored_for(
         report, questions, reports_dir=reports_dir, judge_interval=args.judge_interval
@@ -252,6 +259,15 @@ def main() -> int:
         type=int,
         default=settings.reranker_max_length,
         help="reranker token cap per (query, chunk) pair (default: from settings)",
+    )
+    parser.add_argument(
+        "--question-interval",
+        type=float,
+        default=4.0,
+        help=(
+            "minimum seconds between question starts (default: 4, i.e. 15/min). "
+            "Only binds when retrieval is fast, e.g. on rerank-cache hits"
+        ),
     )
     parser.add_argument(
         "--judge-interval",
