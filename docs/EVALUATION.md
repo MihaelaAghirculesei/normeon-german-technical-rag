@@ -259,6 +259,123 @@ Giorno 20 tunes `min_rerank_score_for_answer`.
 
 ## First matrix run (Giorno 20)
 
-*Not yet run.* Plan: `{fixed_500, structural} x {vector-only, hybrid}`,
-reranker on, `top_k=5`. Report table + `docs/adr/0003-*.md` with the
-chosen default chunking strategy, backed by these numbers.
+`{structural, fixed_500} x {hybrid, vector}`, cross-encoder reranker
+(`bge-reranker-v2-m3`, max_length 512), 10 candidates, `top_k=5`, answers
+and judge on `gemini-flash-lite-latest`, 50 questions. Decision recorded
+in [ADR 0003](adr/0003-structural-chunking-as-default.md); the five
+failure modes it surfaced are in `FAILURE-MODES.md` ("Evaluation findings
+(Giorno 20)").
+
+```bash
+cd backend
+DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
+    .venv/Scripts/python scripts/run_matrix.py
+```
+
+### How the run is set up, and why
+
+- **Same reranker budget in both retrieval modes.** `--candidates 10`
+  chunks reach the cross-encoder whether retrieval is vector-only or
+  hybrid (hybrid keeps 10 after fusion). Without that, hybrid would hand
+  the reranker up to three branches' worth of candidates against vector's
+  one, and "hybrid wins" could just mean "the reranker saw more". With it,
+  the two modes differ only in *which* chunks fill the budget.
+- **Baseline = structural chunking + hybrid retrieval**, the plan's
+  ablation baseline. Every other configuration is compared against it
+  question by question.
+- **Uncertainty is reported, not implied.** 50 questions is a small
+  sample: one question is 2 points of overall accuracy and 10 points
+  within a category. The report prints 95% percentile-bootstrap intervals
+  next to `answer_accuracy` and `recall_at_k`, and a *paired* bootstrap of
+  each configuration's difference to the baseline (resampling questions,
+  since all configurations answer the same ones). Only a difference whose
+  interval excludes zero is called a difference.
+- **Resumable.** On this CPU one configuration takes hours. Every finished
+  question is checkpointed; a finished configuration is not re-run, a
+  scored one is not re-scored (except its judge errors, which are
+  retried); and every cross-encoder score is cached on disk, so vector and
+  hybrid over one chunking strategy only pay for the candidates they don't
+  share. After a crash, the same command continues where it stopped.
+  The cache leaves quality metrics untouched (a cached score is the same
+  number) but makes a configuration that reuses another's scores look
+  faster than it is -- the report says so, and latency is only compared
+  from a `--no-rerank-cache` run.
+- **Rate limits are paced and retried, not recorded as wrong answers.**
+  Question starts and judge calls are spaced (`--question-interval`,
+  `--judge-interval`), and the LLM adapter retries a 429, honouring
+  `Retry-After` (capped at 30 s). A judge call that still fails leaves that
+  answer to Layer 1 alone, which can only lower `answer_accuracy` -- so the
+  report counts them (`judge errors`) and a re-run re-judges them. The
+  final run below has zero errors and zero judge errors.
+
+### Results -- run 1 (before the context-dedup fix)
+
+Full answer + judge run. Bold: best per column.
+
+| Config | recall@5 | 95% CI | MRR | answer_accuracy | 95% CI | false abstention | correct abstention |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| structural / hybrid (baseline) | **0.800** | [0.675, 0.925] | **0.658** | 0.780 | [0.660, 0.880] | 0.250 | 0.900 |
+| structural / vector | 0.750 | [0.600, 0.875] | 0.637 | 0.760 | [0.640, 0.880] | 0.300 | 0.900 |
+| fixed_500 / hybrid | 0.575 | [0.425, 0.725] | 0.517 | 0.860 | [0.760, 0.940] | **0.150** | **1.000** |
+| fixed_500 / vector | 0.575 | [0.425, 0.725] | 0.517 | **0.880** | [0.780, 0.960] | 0.175 | **1.000** |
+
+Paired difference against the baseline (bootstrap over questions; `*`:
+the interval excludes zero):
+
+| Config | Δ answer_accuracy | 95% CI | Δ recall@5 | 95% CI |
+| --- | --- | --- | --- | --- |
+| structural / vector | -0.020 | [-0.060, +0.000] | -0.050 | [-0.125, +0.000] |
+| fixed_500 / hybrid | +0.080 | [-0.040, +0.200] | **-0.225 \*** | [-0.375, -0.075] |
+| fixed_500 / vector | +0.100 | [-0.020, +0.240] | **-0.225 \*** | [-0.375, -0.075] |
+
+Answer accuracy by category (correct / 10):
+
+| Config | requirement_lookup | cross_reference | code_lookup | unanswerable | conflict |
+| --- | --- | --- | --- | --- | --- |
+| structural / hybrid | 6 | 7 | 8 | 10 | 8 |
+| structural / vector | 6 | 6 | 8 | 10 | 8 |
+| fixed_500 / hybrid | 8 | 8 | 9 | 10 | 8 |
+| fixed_500 / vector | 8 | 8 | 9 | 10 | 9 |
+
+`hallucinated_citation_rate` was 0.000 in every configuration. Latency is
+not compared: the rerank cache makes the second configuration over each
+chunking strategy look faster than it is (see above).
+
+### Results -- after the context-dedup fix (retrieval only)
+
+Run 1 exposed a bug: context selection deduplicated sections across
+documents, so Lastenheft v2.0's section 5 was dropped whenever v1.2's
+ranked first (`FAILURE-MODES.md`, finding 1). Fixed, then re-measured
+with `scripts/run_retrieval_eval.py` -- the same pipeline, candidates and
+cached reranker scores, no LLM calls:
+
+| Config | recall@5 | 95% CI | MRR | precision@5 |
+| --- | --- | --- | --- | --- |
+| structural / hybrid | **0.925** | [0.825, 1.000] | **0.699** | **0.384** |
+| structural / vector | 0.875 | [0.775, 0.975] | 0.684 | 0.369 |
+| fixed_500 / hybrid | 0.575 | [0.425, 0.725] | 0.517 | 0.217 |
+| fixed_500 / vector | 0.575 | [0.425, 0.725] | 0.517 | 0.218 |
+
+The fix is worth 12.5 points of recall on the baseline. The post-fix
+*answer* run (200 answers + 200 judgements) did not fit the provider's
+free-tier daily quota of 500 requests left after run 1; it is re-run on
+the next quota window with the same models, rather than on a different
+model, so the before/after comparison stays valid.
+
+### What the numbers say
+
+- **Recall: structural chunking wins, and the difference is real** -- but
+  15 of fixed_500's 17 misses are a labelling defect (a fixed window
+  carries the first section heading it starts in), not missing text.
+  On PDF-sourced questions the strategies are close.
+- **Accuracy: fixed_500 leads by 8-10 points, inside the noise.** The
+  mechanism is visible: structural context makes the generator abstain
+  on answerable questions (finding 2). That is a generation problem to
+  fix in the prompt and context window, not a reason to switch chunker.
+- **Hybrid vs. vector: over structural chunks hybrid is ahead on every
+  retrieval metric, by 5 points of recall -- not resolvable at n=40.**
+  Kept as the default; the
+  code-lookup case for the full-text branch is argued in ADR 0002 and
+  costs nothing extra once candidates are capped.
+- **Unanswerable questions are handled**: 9-10 of 10 correctly abstained
+  in every configuration, with no invented citations anywhere.

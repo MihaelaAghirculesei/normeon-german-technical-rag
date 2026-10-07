@@ -4,6 +4,7 @@ context selection, as one instrumented call.
 
 import asyncio
 import time
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services.retrieval.hybrid import hybrid_search
+from app.services.retrieval.vector import vector_search
 
 
 def _select_context(
@@ -20,8 +22,12 @@ def _select_context(
 ) -> list[RetrievedChunk]:
     """Fill a token budget with the highest-ranked chunks, in order.
 
-    A `section_path` already represented is skipped, so the context is not
-    three near-duplicate slices of one section. Chunks are taken whole;
+    A section already represented -- the same `section_path` *of the same
+    document* -- is skipped, so the context is not three near-duplicate
+    slices of one section. The document is part of the key on purpose: two
+    versions of one specification (or two regulations that both have a
+    "§ 10") share section numbers, and comparing them is exactly what a
+    version-conflict question needs. Chunks are taken whole;
     selection stops once the next chunk would push the running total over
     the budget. At least the top chunk is always returned, even if it
     alone exceeds the budget.
@@ -31,18 +37,19 @@ def _select_context(
     hard model-context limit.
     """
     selected: list[RetrievedChunk] = []
-    seen_sections: set[str] = set()
+    seen_sections: set[tuple[UUID, str]] = set()
     used = 0
     for chunk in chunks:
-        if chunk.section_path is not None and chunk.section_path in seen_sections:
+        key = (chunk.document_id, chunk.section_path) if chunk.section_path else None
+        if key is not None and key in seen_sections:
             continue
         cost = len(chunk.content.split())
         if selected and used + cost > token_budget:
             break
         selected.append(chunk)
         used += cost
-        if chunk.section_path is not None:
-            seen_sections.add(chunk.section_path)
+        if key is not None:
+            seen_sections.add(key)
     return selected
 
 
@@ -54,35 +61,57 @@ async def retrieve_context(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
+    retrieval_mode: Literal["vector", "hybrid"] | None = None,
     candidate_k: int | None = None,
     rerank_top_k: int | None = None,
     token_budget: int | None = None,
 ) -> RetrievalResult:
     """The full retrieval pipeline as one instrumented call:
 
-        tenant filter + hybrid retrieval + RRF   (`hybrid_search`)
+        tenant filter + retrieval (vector-only, or hybrid + RRF)
           -> cross-encoder rerank                (off-thread, CPU-bound)
           -> token-budget context selection      (`_select_context`)
 
     Per-phase wall-clock timings travel back in `RetrievalResult.timing`.
+    `retrieval_mode` (Giorno 20's matrix variable) picks the first phase:
+    `"hybrid"` (default, unchanged behaviour) fuses vector + full-text +
+    trigram via RRF; `"vector"` skips fusion entirely and ranks purely on
+    cosine similarity, so the matrix can isolate hybrid's actual lift.
     `rerank_top_k` and `token_budget` fall back to the configured
-    defaults; `candidate_k` is forwarded to `hybrid_search` (its own
-    default decides how many candidates the reranker sees).
+    defaults. `candidate_k`, when given, is how many candidates the
+    reranker sees in *either* mode: vector-only retrieves that many;
+    hybrid pulls that many from each branch and keeps that many after
+    fusion -- so a vector-vs-hybrid comparison hands the reranker the
+    same budget and differs only in *which* chunks fill it. Left `None`,
+    each branch's configured defaults apply.
     """
+    retrieval_mode = retrieval_mode or "hybrid"
     rerank_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
     token_budget = (
         token_budget if token_budget is not None else settings.context_token_budget
     )
 
     started = time.perf_counter()
-    fused = await hybrid_search(
-        session,
-        embedder,
-        tenant_id=tenant_id,
-        question=question,
-        strategy=strategy,
-        candidate_k=candidate_k,
-    )
+    if retrieval_mode == "vector":
+        candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
+        fused = await vector_search(
+            session,
+            embedder,
+            tenant_id=tenant_id,
+            question=question,
+            strategy=strategy,
+            k=candidates,
+        )
+    else:
+        fused = await hybrid_search(
+            session,
+            embedder,
+            tenant_id=tenant_id,
+            question=question,
+            strategy=strategy,
+            candidate_k=candidate_k,
+            top_k=candidate_k,
+        )
     after_hybrid = time.perf_counter()
     reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
     after_rerank = time.perf_counter()

@@ -14,10 +14,18 @@ from app.services.retrieval.pipeline import _select_context, retrieve_context
 TENANT = uuid.uuid4()
 
 
-def _chunk(content: str, section: str | None = None, score: float = 0.0) -> RetrievedChunk:
+DOC = uuid.uuid4()
+
+
+def _chunk(
+    content: str,
+    section: str | None = None,
+    score: float = 0.0,
+    document_id: uuid.UUID = DOC,
+) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=uuid.uuid4(),
-        document_id=uuid.uuid4(),
+        document_id=document_id,
         filename="StVZO.pdf",
         content=content,
         page_from=1,
@@ -57,6 +65,22 @@ def test_select_skips_a_section_path_already_represented() -> None:
     selected = _select_context(chunks, token_budget=1000)
 
     assert [c.content for c in selected] == ["first from A", "from B"]
+
+
+def test_select_keeps_the_same_section_of_two_different_documents() -> None:
+    """Regression: dedup keyed on section_path alone dropped v2.0's
+    section 5 whenever v1.2's section 5 ranked first -- precisely the
+    pair a version-conflict question has to compare."""
+    v12, v20 = uuid.uuid4(), uuid.uuid4()
+    chunks = [
+        _chunk("Lenkkraft 300 N", section="5", document_id=v12),
+        _chunk("Lenkkraft 250 N", section="5", document_id=v20),
+        _chunk("v1.2 again", section="5", document_id=v12),
+    ]
+
+    selected = _select_context(chunks, token_budget=1000)
+
+    assert [c.content for c in selected] == ["Lenkkraft 300 N", "Lenkkraft 250 N"]
 
 
 def test_select_never_dedups_chunks_without_a_section_path() -> None:
@@ -177,4 +201,76 @@ async def test_retrieve_context_forwards_strategy_and_candidate_k_to_hybrid(
     kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
     assert kwargs["strategy"] == "fixed_500"
     assert kwargs["candidate_k"] == 25
+    # the same budget survives fusion, so the reranker sees 25 candidates
+    # here exactly as it would in vector-only mode
+    assert kwargs["top_k"] == 25
+    assert kwargs["tenant_id"] == TENANT
+
+
+async def test_retrieve_context_leaves_hybrid_defaults_alone_without_candidate_k(
+    stub_hybrid: list[RetrievedChunk],
+) -> None:
+    await retrieve_context(
+        object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q"
+    )
+
+    kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
+    assert kwargs["candidate_k"] is None
+    assert kwargs["top_k"] is None
+
+
+@pytest.fixture
+def stub_vector(monkeypatch: pytest.MonkeyPatch) -> list[RetrievedChunk]:
+    hits = [_chunk("delta", section="s1"), _chunk("epsilon", section="s2")]
+
+    async def fake_vector_search(
+        session: Any, embedder: Any, **kwargs: Any
+    ) -> list[RetrievedChunk]:
+        fake_vector_search.kwargs = kwargs  # type: ignore[attr-defined]
+        return hits
+
+    monkeypatch.setattr(pipeline, "vector_search", fake_vector_search)
+    return hits
+
+
+async def test_retrieve_context_defaults_to_hybrid(stub_hybrid: list[RetrievedChunk]) -> None:
+    result = await retrieve_context(
+        object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q"
+    )
+    assert [c.content for c in result.reranked] == ["gamma", "beta", "alpha"]
+
+
+async def test_retrieve_context_vector_mode_skips_hybrid_fusion(
+    stub_vector: list[RetrievedChunk],
+) -> None:
+    result = await retrieve_context(
+        object(),
+        object(),
+        _RecordingReranker(),
+        tenant_id=TENANT,
+        question="Q",
+        retrieval_mode="vector",
+    )
+
+    # reranker reverses [delta, epsilon] -> [epsilon, delta]
+    assert [c.content for c in result.reranked] == ["epsilon", "delta"]
+
+
+async def test_retrieve_context_vector_mode_forwards_candidate_k_as_k(
+    stub_vector: list[RetrievedChunk],
+) -> None:
+    await retrieve_context(
+        object(),
+        object(),
+        _RecordingReranker(),
+        tenant_id=TENANT,
+        question="Q",
+        strategy="structural",
+        retrieval_mode="vector",
+        candidate_k=30,
+    )
+
+    kwargs = pipeline.vector_search.kwargs  # type: ignore[attr-defined]
+    assert kwargs["strategy"] == "structural"
+    assert kwargs["k"] == 30
     assert kwargs["tenant_id"] == TENANT
