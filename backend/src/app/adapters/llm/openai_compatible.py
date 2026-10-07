@@ -5,13 +5,15 @@ wire format reaches every model the Week 4 matrix needs; committing to
 specific provider SDKs is deferred to Day 15.
 
 ``complete``'s transient failures (a timeout, a dropped connection, a
-5xx) are retried with `tenacity`, up to `max_retries` extra attempts with
-a short exponential backoff -- a per-request budget, not unbounded
-retrying. A 4xx is never retried (retrying a bad request or an auth
-failure just wastes the budget). Whatever finally fails is re-raised as
-one of the typed `core.errors.NormeonError`s, never a raw `httpx`
-exception, so the API's generic error handler always returns a coherent
-JSON body instead of a bare 500.
+5xx, a 429 rate limit) are retried with `tenacity`, up to `max_retries`
+extra attempts with a short exponential backoff -- a per-request budget,
+not unbounded retrying. A 429 that sends `Retry-After` waits that long
+instead (capped at `MAX_RETRY_AFTER_S`). Any other 4xx is never retried
+(retrying a bad request or an auth failure just wastes the budget).
+Whatever finally fails is re-raised as one of the typed
+`core.errors.NormeonError`s, never a raw `httpx` exception, so the API's
+generic error handler always returns a coherent JSON body instead of a
+bare 500.
 
 ``stream`` (Day 14, widened Day 15) sets `"stream": true` plus
 `"stream_options": {"include_usage": true}` and reads the same wire
@@ -38,16 +40,53 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
-from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import (
+    AsyncRetrying,
+    RetryCallState,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.adapters.llm.base import Delta, LlmResponse
 from app.core.errors import LlmTimeoutError, LlmUnavailableError
 
+#: Upper bound on how long one 429's `Retry-After` may stall a request,
+#: so a single call never blocks for minutes. A provider that is really
+#: out of quota keeps answering 429 and the bounded retry budget runs out.
+MAX_RETRY_AFTER_S = 30.0
+
+_backoff = wait_exponential(multiplier=0.5, max=4)
+
 
 def _is_transient(exc: BaseException) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
+        status = exc.response.status_code
+        return status == 429 or status >= 500
     return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError))
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    """`Retry-After` in its delay-seconds form; the HTTP-date form (rare
+    on LLM APIs) and anything unparsable fall back to the backoff."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None
+
+
+def _wait(retry_state: RetryCallState) -> float:
+    """Exponential backoff, except a 429 that names its own delay is
+    retried after that delay (capped at `MAX_RETRY_AFTER_S`)."""
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        delay = _retry_after_seconds(exc.response.headers.get("retry-after"))
+        if delay is not None:
+            return min(delay, MAX_RETRY_AFTER_S)
+    return float(_backoff(retry_state))
 
 
 class OpenAICompatibleClient:
@@ -145,7 +184,7 @@ class OpenAICompatibleClient:
         retrying = AsyncRetrying(
             retry=retry_if_exception(_is_transient),
             stop=stop_after_attempt(self._max_retries + 1),
-            wait=wait_exponential(multiplier=0.5, max=4),
+            wait=_wait,
             reraise=True,
         )
         async for attempt in retrying:

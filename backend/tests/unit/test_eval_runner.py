@@ -11,7 +11,7 @@ from app.domain.config_hash import compute_config_hash
 from app.domain.context import Source
 from app.domain.models import PipelineTiming
 from app.eval import runner
-from app.eval.models import EvalConfig, EvalQuestion, EvalReport
+from app.eval.models import EvalConfig, EvalQuestion, EvalReport, QuestionRun
 from app.services.generation import AnswerResult
 
 TENANT = uuid.uuid4()
@@ -74,9 +74,15 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
     async def fake_generate_answer(
         session: Any, embedder: Any, reranker: Any, llm: Any, *,
         tenant_id: uuid.UUID, question: str, strategy: str | None = None,
+        retrieval_mode: str | None = None, rerank_top_k: int | None = None,
+        candidate_k: int | None = None,
         prompt_name: str | None = None, request_id: str | None = None,
     ) -> AnswerResult:
-        calls.append({"question": question, "strategy": strategy, "request_id": request_id})
+        calls.append({
+            "question": question, "strategy": strategy, "request_id": request_id,
+            "retrieval_mode": retrieval_mode, "rerank_top_k": rerank_top_k,
+            "candidate_k": candidate_k,
+        })
         outcome = by_id[question]
         if isinstance(outcome, Exception):
             raise outcome
@@ -105,7 +111,7 @@ async def test_run_evaluation_builds_a_report_in_question_order(monkeypatch: Any
 
     assert isinstance(report, EvalReport)
     assert report.n_questions == 3
-    assert report.config_hash == compute_config_hash(**CONFIG.model_dump())
+    assert report.config_hash == compute_config_hash(**CONFIG.model_dump(exclude_none=True))
     assert [r.question_id for r in report.results] == ["Q001", "Q002", "Q003"]
     assert [r.abstained for r in report.results] == [False, True, False]
     assert report.results[0].category == "requirement_lookup"
@@ -154,3 +160,163 @@ async def test_write_report_names_the_file_by_config_hash_and_round_trips(
 
     assert path.name == f"{report.config_hash}.json"
     assert EvalReport.model_validate_json(path.read_text(encoding="utf-8")) == report
+
+
+# --- checkpoint / resume ----------------------------------------------------
+
+
+async def test_checkpoint_records_every_finished_question(
+    monkeypatch: Any, tmp_path: Path,
+) -> None:
+    _stub_generate(monkeypatch, {"a": _answer(), "b": RuntimeError("down")})
+    path = tmp_path / "run.partial.jsonl"
+
+    await runner.run_evaluation(
+        [_q("Q001", question="a"), _q("Q002", question="b")], CONFIG,
+        session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert sorted(QuestionRun.model_validate_json(x).question_id for x in lines) == [
+        "Q001", "Q002",
+    ]
+
+
+async def test_resume_skips_completed_questions_and_retries_errored_ones(
+    monkeypatch: Any, tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.partial.jsonl"
+    questions = [_q("Q001", question="a"), _q("Q002", question="b"), _q("Q003", question="c")]
+    _stub_generate(monkeypatch, {
+        "a": _answer("A [S1]"), "b": RuntimeError("down"), "c": _answer("C [S1]"),
+    })
+    await runner.run_evaluation(
+        questions, CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+
+    calls = _stub_generate(monkeypatch, {"b": _answer("B [S1]")})
+    report = await runner.run_evaluation(
+        questions, CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+
+    assert [c["question"] for c in calls] == ["b"]
+    assert [r.question_id for r in report.results] == ["Q001", "Q002", "Q003"]
+    assert [r.answer for r in report.results] == ["A [S1]", "B [S1]", "C [S1]"]
+    assert all(r.error is None for r in report.results)
+
+
+async def test_resume_tolerates_a_torn_last_line_and_ignores_unknown_ids(
+    monkeypatch: Any, tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.partial.jsonl"
+    _stub_generate(monkeypatch, {"a": _answer("A [S1]")})
+    await runner.run_evaluation(
+        [_q("Q001", question="a")], CONFIG,
+        session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+    stale = path.read_text(encoding="utf-8").replace('"Q001"', '"Q999"')
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(stale)
+        fh.write('{"question_id": "Q002", "categ')  # died mid-write
+
+    calls = _stub_generate(monkeypatch, {"b": _answer("B [S1]")})
+    report = await runner.run_evaluation(
+        [_q("Q001", question="a"), _q("Q002", question="b")], CONFIG,
+        session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+
+    assert [c["question"] for c in calls] == ["b"]
+    assert [r.answer for r in report.results] == ["A [S1]", "B [S1]"]
+
+
+async def test_rerank_candidates_is_forwarded_as_candidate_k(monkeypatch: Any) -> None:
+    calls = _stub_generate(monkeypatch, {"x": _answer()})
+    config = CONFIG.model_copy(update={"rerank_candidates": 10})
+
+    await runner.run_evaluation(
+        [_q("Q001", question="x")], config,
+        session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+    )
+
+    assert calls[0]["candidate_k"] == 10
+
+
+def test_unset_new_knobs_leave_the_config_hash_unchanged() -> None:
+    """Reports written before rerank_candidates/reranker_max_length
+    existed keep the hash they were filed under."""
+    new_knobs = {"rerank_candidates", "reranker_max_length"}
+    legacy = compute_config_hash(**CONFIG.model_dump(exclude=new_knobs))
+    assert runner.config_hash(CONFIG) == legacy
+    assert runner.config_hash(CONFIG.model_copy(update={"rerank_candidates": 10})) != legacy
+
+
+def test_checkpoint_path_separates_question_sets_that_share_ids(tmp_path: Path) -> None:
+    smoke = [_q("Q001", question="Smoke-Frage?")]
+    real = [_q("Q001", question="Echte Frage?")]
+
+    assert runner.checkpoint_path(CONFIG, smoke, tmp_path) != runner.checkpoint_path(
+        CONFIG, real, tmp_path
+    )
+    assert runner.checkpoint_path(CONFIG, real, tmp_path) == runner.checkpoint_path(
+        CONFIG, list(real), tmp_path
+    )
+    assert runner.checkpoint_path(CONFIG, real, tmp_path).name.startswith(
+        runner.config_hash(CONFIG)
+    )
+
+
+async def test_min_interval_spaces_question_starts(monkeypatch: Any) -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(runner.asyncio, "sleep", fake_sleep)
+    _stub_generate(monkeypatch, {"a": _answer(), "b": _answer(), "c": _answer()})
+
+    await runner.run_evaluation(
+        [_q("Q001", question="a"), _q("Q002", question="b"), _q("Q003", question="c")],
+        CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        concurrency=1, min_interval_s=4.0,
+    )
+
+    assert len(sleeps) == 2  # no wait before the first question
+    assert all(3.0 < s <= 4.0 for s in sleeps)
+
+
+async def test_completed_questions_do_not_consume_a_slot(
+    monkeypatch: Any, tmp_path: Path,
+) -> None:
+    path = tmp_path / "run.partial.jsonl"
+    questions = [_q("Q001", question="a"), _q("Q002", question="b")]
+    _stub_generate(monkeypatch, {"a": _answer(), "b": _answer()})
+    await runner.run_evaluation(
+        questions[:1], CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path,
+    )
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(runner.asyncio, "sleep", fake_sleep)
+    await runner.run_evaluation(
+        questions, CONFIG, session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(), reranker=object(), llm=object(), tenant_id=TENANT,
+        checkpoint=path, min_interval_s=4.0,
+    )
+
+    assert sleeps == []  # Q001 came from the checkpoint; Q002 is the first real call

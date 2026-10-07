@@ -20,12 +20,6 @@ async def _fast_source() -> AsyncGenerator[str]:
     yield "b"
 
 
-async def _slow_then_fast_source(delay: float) -> AsyncGenerator[str]:
-    await asyncio.sleep(delay)
-    yield "a"
-    yield "b"
-
-
 async def _raising_source() -> AsyncGenerator[str]:
     raise ValueError("boom")
     yield "unreachable"  # pragma: no cover -- makes this a generator function
@@ -48,15 +42,25 @@ async def test_a_fast_source_produces_no_heartbeats() -> None:
 
 
 async def test_a_slow_source_is_heartbeated_without_losing_its_item() -> None:
-    items = [
-        item
-        async for item in with_heartbeat(
-            _slow_then_fast_source(0.12), interval=0.04, heartbeat=_HEARTBEAT
-        )
-    ]
+    # Gated on the heartbeats themselves rather than on wall-clock time: a
+    # 120 ms source against a 40 ms interval expects ~3 heartbeats, but
+    # with Windows' ~15.6 ms timer granularity and a loaded CPU it
+    # sometimes saw only one, so the test flaked under the full suite.
+    release = asyncio.Event()
 
+    async def gated_source() -> AsyncGenerator[str]:
+        await release.wait()
+        yield "a"
+        yield "b"
+
+    items: list[str] = []
+    async for item in with_heartbeat(gated_source(), interval=0.02, heartbeat=_HEARTBEAT):
+        items.append(item)
+        if items.count(_HEARTBEAT) == 2:
+            release.set()
+
+    assert items[:2] == [_HEARTBEAT, _HEARTBEAT]
     assert items[-2:] == ["a", "b"]
-    assert items.count(_HEARTBEAT) >= 2
 
 
 async def test_an_exception_from_the_source_propagates() -> None:
