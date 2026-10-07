@@ -341,13 +341,13 @@ Answer accuracy by category (correct / 10):
 not compared: the rerank cache makes the second configuration over each
 chunking strategy look faster than it is (see above).
 
-### Results -- after the context-dedup fix (retrieval only)
+### Results -- run 2 (after the context-dedup fix)
 
 Run 1 exposed a bug: context selection deduplicated sections across
 documents, so Lastenheft v2.0's section 5 was dropped whenever v1.2's
 ranked first (`FAILURE-MODES.md`, finding 1). Fixed, then re-measured
-with `scripts/run_retrieval_eval.py` -- the same pipeline, candidates and
-cached reranker scores, no LLM calls:
+twice. First retrieval only, with `scripts/run_retrieval_eval.py` -- the
+same pipeline, candidates and cached reranker scores, no LLM calls:
 
 | Config | recall@5 | 95% CI | MRR | precision@5 |
 | --- | --- | --- | --- | --- |
@@ -356,11 +356,33 @@ cached reranker scores, no LLM calls:
 | fixed_500 / hybrid | 0.575 | [0.425, 0.725] | 0.517 | 0.217 |
 | fixed_500 / vector | 0.575 | [0.425, 0.725] | 0.517 | 0.218 |
 
-The fix is worth 12.5 points of recall on the baseline. The post-fix
-*answer* run (200 answers + 200 judgements) did not fit the provider's
-free-tier daily quota of 500 requests left after run 1; it is re-run on
-the next quota window with the same models, rather than on a different
-model, so the before/after comparison stays valid.
+The fix is worth 12.5 points of recall on the baseline. Then the full
+answer-and-judge run, with the same models as run 1 (it waited for the
+provider's daily quota to reset rather than switch models, so the two
+runs stay comparable). Zero errors, zero judge errors:
+
+| Config | recall@5 | answer_accuracy | 95% CI | false abstention | correct abstention | citation precision |
+| --- | --- | --- | --- | --- | --- | --- |
+| structural / hybrid (baseline) | **0.925** | 0.800 | [0.680, 0.900] | 0.250 | **1.000** | 0.509 |
+| structural / vector | 0.875 | 0.780 | [0.660, 0.880] | 0.275 | **1.000** | **0.614** |
+| fixed_500 / hybrid | 0.575 | **0.880** | [0.780, 0.960] | **0.175** | **1.000** | 0.412 |
+| fixed_500 / vector | 0.575 | 0.860 | [0.760, 0.940] | 0.225 | **1.000** | 0.400 |
+
+Paired against the baseline:
+
+| Config | Δ answer_accuracy | 95% CI | Δ recall@5 | 95% CI |
+| --- | --- | --- | --- | --- |
+| structural / vector | -0.020 | [-0.100, +0.060] | -0.050 | [-0.125, +0.000] |
+| fixed_500 / hybrid | +0.080 | [-0.040, +0.200] | **-0.350 \*** | [-0.500, -0.175] |
+| fixed_500 / vector | +0.060 | [-0.060, +0.180] | **-0.350 \*** | [-0.500, -0.175] |
+
+Run 1 -> run 2 on the baseline: recall@5 0.800 -> 0.925, answer accuracy
+0.780 -> 0.800, conflict-category accuracy 8/10 -> 9/10. The false-
+abstention rate did not move (0.250): the fix put the right section in
+front of the generator, and the generator still declines a quarter of
+answerable questions. All ten of the baseline's wrong answers in run 2
+are abstentions with a gold source in the context -- finding 2 is now
+the main quality lever.
 
 ### What the numbers say
 
@@ -368,14 +390,14 @@ model, so the before/after comparison stays valid.
   15 of fixed_500's 17 misses are a labelling defect (a fixed window
   carries the first section heading it starts in), not missing text.
   On PDF-sourced questions the strategies are close.
-- **Accuracy: fixed_500 leads by 8-10 points, inside the noise.** The
+- **Accuracy: fixed_500 leads by 6-8 points, inside the noise.** The
   mechanism is visible: structural context makes the generator abstain
   on answerable questions (finding 2). That is a generation problem to
   fix in the prompt and context window, not a reason to switch chunker.
 - **Hybrid vs. vector: over structural chunks hybrid is ahead on every
   retrieval metric, by 5 points of recall -- not resolvable at n=40.**
-  Kept as the default; the
-  code-lookup case for the full-text branch is argued in ADR 0002 and
-  costs nothing extra once candidates are capped.
-- **Unanswerable questions are handled**: 9-10 of 10 correctly abstained
-  in every configuration, with no invented citations anywhere.
+  Kept as the default; the code-lookup case for the full-text branch is
+  argued in ADR 0002 and costs nothing extra once candidates are capped.
+- **Unanswerable questions are handled**: 10 of 10 correctly abstained in
+  every configuration in run 2 (9-10 in run 1), with no invented
+  citations anywhere.
