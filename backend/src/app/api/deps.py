@@ -48,7 +48,7 @@ def get_reranker() -> Reranker:
     itself still loads lazily inside the adapter on first use."""
     if settings.reranker_provider == "noop":
         return NoopReranker()
-    return CrossEncoderReranker(settings.reranker_model)
+    return CrossEncoderReranker(settings.reranker_model, settings.reranker_max_length)
 
 
 RerankerDep = Annotated[Reranker, Depends(get_reranker)]

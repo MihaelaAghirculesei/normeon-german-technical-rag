@@ -27,10 +27,18 @@ from __future__ import annotations
 
 import math
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.eval.models import CitationRecord, EvalQuestion, EvalReport, QuestionRun, RetrievedRecord
-from app.eval.scoring import JudgeResult, ScoredQuestionRun, ScoredReport
+from app.eval.models import (
+    Category,
+    CitationRecord,
+    EvalQuestion,
+    EvalReport,
+    QuestionRun,
+    RetrievedRecord,
+)
+from app.eval.scoring import JudgeError, JudgeResult, ScoredQuestionRun, ScoredReport
+from app.eval.stats import bootstrap_ci
 
 GoldMatchable = RetrievedRecord | CitationRecord
 
@@ -153,15 +161,16 @@ def hallucinated_citation_rate(results: list[QuestionRun]) -> float | None:
     return sum(r.invented_citations for r in answered) / len(answered)
 
 
+def _is_correct(scored: ScoredQuestionRun) -> bool:
+    return scored.layer1.all_present or (
+        isinstance(scored.layer2, JudgeResult) and scored.layer2.score == 2
+    )
+
+
 def answer_accuracy(scored_results: list[ScoredQuestionRun]) -> float:
     if not scored_results:
         raise ValueError("need at least one scored question")
-    correct = sum(
-        1
-        for r in scored_results
-        if r.layer1.all_present or (isinstance(r.layer2, JudgeResult) and r.layer2.score == 2)
-    )
-    return correct / len(scored_results)
+    return sum(_is_correct(r) for r in scored_results) / len(scored_results)
 
 
 def correct_abstention_rate(
@@ -237,6 +246,46 @@ def cost_per_query_avg(results: list[QuestionRun]) -> float | None:
     return sum(costs) / len(costs)
 
 
+class QuestionOutcome(BaseModel):
+    """One question's result under one configuration -- the unit the
+    matrix needs to break a metric down by category and to compare two
+    configurations question by question. `answer_correct` follows
+    `answer_accuracy`'s rule; `gold_hit` follows `recall_at_k`'s and is
+    `None` where recall is undefined (no gold source, or an errored
+    run)."""
+
+    question_id: str
+    category: Category
+    answer_correct: bool
+    gold_hit: bool | None
+
+
+def question_outcomes(
+    report: EvalReport, scored: ScoredReport, questions: list[EvalQuestion]
+) -> list[QuestionOutcome]:
+    """In question-set order, for every question that was scored."""
+    runs = {r.question_id: r for r in report.results}
+    scored_by_id = {s.question_id: s for s in scored.results}
+    outcomes = []
+    for question in questions:
+        scored_run = scored_by_id.get(question.id)
+        if scored_run is None:
+            continue
+        run = runs.get(question.id)
+        gold_hit = None
+        if question.gold_sources and run is not None and run.error is None:
+            gold_hit = any(_any_gold_match(question, r) for r in run.retrieved)
+        outcomes.append(
+            QuestionOutcome(
+                question_id=question.id,
+                category=question.category,
+                answer_correct=_is_correct(scored_run),
+                gold_hit=gold_hit,
+            )
+        )
+    return outcomes
+
+
 class EvalMetrics(BaseModel):
     config_hash: str
     n_questions: int
@@ -252,6 +301,12 @@ class EvalMetrics(BaseModel):
     latency_ms_p50: dict[str, float]
     latency_ms_p95: dict[str, float]
     cost_per_query_avg: float | None
+    # Added for the matrix comparison; defaulted so a metrics file
+    # written before they existed still loads.
+    n_judge_errors: int = 0
+    answer_accuracy_ci95: tuple[float, float] | None = None
+    recall_at_k_ci95: tuple[float, float] | None = None
+    outcomes: list[QuestionOutcome] = Field(default_factory=list)
 
 
 def compute_metrics(
@@ -260,6 +315,8 @@ def compute_metrics(
     if not report.results:
         raise ValueError("report has no results")
     p50, p95 = latency_percentiles(report.results)
+    outcomes = question_outcomes(report, scored, questions)
+    gold_hits = [float(o.gold_hit) for o in outcomes if o.gold_hit is not None]
     return EvalMetrics(
         config_hash=report.config_hash,
         n_questions=len(report.results),
@@ -275,4 +332,8 @@ def compute_metrics(
         latency_ms_p50=p50,
         latency_ms_p95=p95,
         cost_per_query_avg=cost_per_query_avg(report.results),
+        n_judge_errors=sum(1 for r in scored.results if isinstance(r.layer2, JudgeError)),
+        answer_accuracy_ci95=bootstrap_ci([float(o.answer_correct) for o in outcomes]),
+        recall_at_k_ci95=bootstrap_ci(gold_hits),
+        outcomes=outcomes,
     )

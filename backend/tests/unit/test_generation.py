@@ -49,10 +49,16 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         tenant_id: uuid.UUID,
         question: str,
         strategy: str | None = None,
+        retrieval_mode: str | None = None,
+        rerank_top_k: int | None = None,
+        candidate_k: int | None = None,
     ) -> RetrievalResult:
         seen["tenant_id"] = tenant_id
         seen["question"] = question
         seen["strategy"] = strategy
+        seen["retrieval_mode"] = retrieval_mode
+        seen["rerank_top_k"] = rerank_top_k
+        seen["candidate_k"] = candidate_k
         timing = PipelineTiming(
             hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0
         )
@@ -93,6 +99,9 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
         "tenant_id": TENANT,
         "question": "Welche Lenkkraft?",
         "strategy": "structural",
+        "retrieval_mode": None,
+        "rerank_top_k": None,
+        "candidate_k": None,
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
     assert [c.marker for c in result.citations] == ["S1", "S2"]
@@ -609,3 +618,36 @@ async def test_stream_cost_usd_uses_usage_reported_on_the_stream(monkeypatch: An
 
     done = events[-1]
     assert done.data["cost_usd"] == round(1000 / 1_000_000 * 0.15 + 500 / 1_000_000 * 0.60, 6)
+
+async def test_query_log_config_hash_reflects_the_applied_overrides(
+    monkeypatch: Any,
+) -> None:
+    """An eval run overriding retrieval_mode/top_k/candidate_k must not be
+    logged under the same config_hash as a request on the defaults."""
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    calls = _stub_query_log(monkeypatch)
+
+    for overrides in (
+        {},
+        {"retrieval_mode": "vector"},
+        {"rerank_top_k": 3},
+        {"candidate_k": 10},
+    ):
+        await generation.generate_answer(
+            object(), object(), object(), FakeLlmClient(),
+            tenant_id=TENANT, question="Welche Lenkkraft?", **overrides,
+        )
+
+    hashes = [call["config_hash"] for call in calls]
+    assert len(set(hashes)) == 4
+
+
+async def test_candidate_k_is_forwarded_to_retrieval(monkeypatch: Any) -> None:
+    seen = _stub_retrieval(monkeypatch, [_chunk("5.1")])
+
+    await generation.generate_answer(
+        object(), object(), object(), FakeLlmClient(),
+        tenant_id=TENANT, question="Frage?", candidate_k=10,
+    )
+
+    assert seen["candidate_k"] == 10

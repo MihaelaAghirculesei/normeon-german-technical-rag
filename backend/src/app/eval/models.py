@@ -52,17 +52,25 @@ class EvalQuestion(BaseModel):
 
 
 class EvalConfig(BaseModel):
-    """The knobs the Week 4 matrix (Giorno 20) varies. `chunking_strategy`
-    is applied by the runner today (passed straight to `generate_answer`);
-    the reranker is chosen by which object the caller hands the runner;
-    `retrieval_mode` and `top_k` are recorded and hashed now but only
-    *applied* once Day 20 threads them through `retrieve_context` (which
-    is hybrid-only, no top-k param, at time of writing)."""
+    """The knobs the Week 4 matrix (Giorno 20) varies. `chunking_strategy`,
+    `retrieval_mode` and `top_k` are all applied by the runner (passed
+    straight to `generate_answer` -> `retrieve_context`, which picks
+    vector-only or hybrid retrieval and reranks down to `top_k`); the
+    reranker is chosen by which object the caller hands the runner.
+
+    `rerank_candidates` is how many candidates reach the reranker in
+    either retrieval mode (`None`: the configured defaults), applied by
+    the runner. `reranker_max_length` is recorded, not applied -- it is a
+    property of the reranker object the caller builds -- but it changes
+    every score, so it belongs in the hash. Both default to `None` so a
+    report written before they existed still loads."""
 
     chunking_strategy: Literal["fixed_500", "structural"]
     retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
     reranker: Literal["noop", "cross_encoder"]
     top_k: int = 5
+    rerank_candidates: int | None = None
+    reranker_max_length: int | None = None
     embedding_provider: str
     llm_provider: str
     llm_model: str
