@@ -120,7 +120,7 @@ def test_cross_encoder_loads_the_model_only_once_under_concurrent_access(
     count_lock = threading.Lock()
 
     class _SlowCrossEncoder:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, **kwargs: Any) -> None:
             nonlocal construct_count
             with count_lock:
                 construct_count += 1
@@ -136,3 +136,24 @@ def test_cross_encoder_loads_the_model_only_once_under_concurrent_access(
         t.join()
 
     assert construct_count == 1
+
+
+def test_cross_encoder_passes_max_length_to_the_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without an explicit cap the tokenizer's own limit (8192 for
+    bge-reranker-v2-m3) applies and every chunk is scored in full."""
+    seen: dict[str, Any] = {}
+
+    class _RecordingCrossEncoder:
+        def __init__(self, model_name: str, **kwargs: Any) -> None:
+            seen["model_name"] = model_name
+            seen.update(kwargs)
+
+    monkeypatch.setattr(
+        "app.adapters.reranker.cross_encoder.CrossEncoder", _RecordingCrossEncoder
+    )
+
+    _ = CrossEncoderReranker("bge", max_length=512)._loaded_model
+
+    assert seen == {"model_name": "bge", "max_length": 512}
