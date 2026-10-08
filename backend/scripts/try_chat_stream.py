@@ -10,8 +10,8 @@ Needs the backend actually running and reachable, unlike try_chat.py
     docker compose up -d
 
 or a local `uvicorn app.main:app --port 8010` from backend/. Default URL
-matches this machine's docker-compose port remap (see CLAUDE.md
-"Environment specifics"); override with --url or $BACKEND_URL.
+matches the backend port published in docker-compose.yml (8010:8000);
+override with --url or $BACKEND_URL.
 
 Run:
     cd backend
