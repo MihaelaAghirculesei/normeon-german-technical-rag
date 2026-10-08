@@ -17,7 +17,5 @@ node_modules/
 .idea/
 *.swp
 
-# local working notes / AI-session continuity — never published
-
 backend/eval/reports/*
 !backend/eval/reports/.gitkeep
