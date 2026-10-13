@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 20 of 30. Retrieval is feature-complete: structured German
+Status: Day 21 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -46,6 +46,9 @@ hybrid vs. vector retrieval) reported with bootstrap confidence intervals
 and paired comparisons: it found and fixed a context-selection bug worth
 12.5 points of recall (0.80 → 0.925), and backs the default chunking
 choice with numbers (ADR 0003, `docs/EVALUATION.md`).
+Frontend: an Angular 22 app (zoneless, signals) whose API types are
+generated from the backend's OpenAPI document, with CI failing on any
+contract drift between the two; the document list reads live data.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
@@ -76,6 +79,19 @@ curl localhost:8010/health
 
 (Ports are offset from the defaults — 8010/5433/8081 — to avoid clashing
 with other local projects. See `docker-compose.yml`.)
+
+Frontend (Node 22.22.3+), with the backend running:
+
+```
+cd frontend
+npm ci
+npm start          # http://localhost:4210, /api proxied to :8010
+```
+
+The API types in `frontend/src/app/api/schema.d.ts` are generated, never
+edited by hand. After changing an endpoint: regenerate
+`backend/openapi.json` (`backend/scripts/export_openapi.py`), then
+`npm run gen:api` in `frontend/`. CI checks both steps.
 
 One-time setup after cloning:
 

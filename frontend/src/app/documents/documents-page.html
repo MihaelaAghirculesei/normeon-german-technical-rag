@@ -1,0 +1,53 @@
+<app-page-header
+  heading="Dokumente"
+  description="Normen, Verordnungen und Lastenhefte, die für Antworten durchsucht werden."
+>
+  <button type="button" (click)="documents.reload()" [disabled]="documents.isLoading()">
+    Aktualisieren
+  </button>
+</app-page-header>
+
+@if (documents.error()) {
+  <app-notice kind="error"
+    >Die Dokumente konnten nicht geladen werden. Läuft das Backend?</app-notice
+  >
+} @else if (documents.isLoading() && !documents.hasValue()) {
+  <app-notice>Dokumente werden geladen…</app-notice>
+} @else if (documents.value().length === 0) {
+  <app-notice>Noch keine Dokumente vorhanden.</app-notice>
+} @else {
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">Datei</th>
+        <th scope="col">Typ</th>
+        <th scope="col">Version</th>
+        <th scope="col">Gültig</th>
+        <th scope="col" class="num">Seiten</th>
+        <th scope="col">Status</th>
+        <th scope="col">Hinzugefügt</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (doc of documents.value(); track doc.document_id) {
+        <tr>
+          <td class="mono">{{ doc.filename }}</td>
+          <td>{{ doc.doc_type }}</td>
+          <td>{{ doc.version_label ?? '–' }}</td>
+          <td>
+            @if (doc.valid_from || doc.valid_until) {
+              {{ doc.valid_from ? (doc.valid_from | date: 'dd.MM.yyyy') : '…' }} –
+              {{ doc.valid_until ? (doc.valid_until | date: 'dd.MM.yyyy') : 'heute' }}
+            } @else {
+              <span class="muted">–</span>
+            }
+          </td>
+          <td class="num">{{ doc.page_count ?? '–' }}</td>
+          <td><app-status-badge [status]="doc.status" /></td>
+          <td>{{ doc.created_at | date: 'dd.MM.yyyy HH:mm' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+  <p class="muted count">{{ documents.value().length }} Dokumente</p>
+}
