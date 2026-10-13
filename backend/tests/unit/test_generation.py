@@ -3,8 +3,9 @@ stubbed on the ``generation`` module, so no database or real models are
 touched; the LLM is the FakeLlmClient (or a spy).
 """
 
+import asyncio
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from app.adapters.llm.base import Delta, LlmResponse
@@ -52,7 +53,10 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         retrieval_mode: str | None = None,
         rerank_top_k: int | None = None,
         candidate_k: int | None = None,
+        on_rerank_start: Callable[[], None] | None = None,
     ) -> RetrievalResult:
+        if on_rerank_start is not None:
+            on_rerank_start()
         seen["tenant_id"] = tenant_id
         seen["question"] = question
         seen["strategy"] = strategy
@@ -402,6 +406,87 @@ async def test_stream_emits_events_in_the_documented_order(monkeypatch: Any) -> 
     assert [c.marker for c in done.data["citations"]] == ["S1", "S2"]
     assert done.data["latency_ms"]["retrieval_ms"] == 16.0
     assert done.data["latency_ms"]["generation_ms"] >= 0
+
+
+def _stub_gated_retrieval(
+    monkeypatch: Any, *, reach_rerank: asyncio.Event, finish: asyncio.Event
+) -> None:
+    """Retrieval that only hands off to the reranker once `reach_rerank`
+    is set, and only returns once `finish` is set -- so a test can observe
+    which stage the stream reports while each phase is still running."""
+
+    async def gated_retrieve_context(*args: Any, **kwargs: Any) -> RetrievalResult:
+        await reach_rerank.wait()
+        kwargs["on_rerank_start"]()
+        await finish.wait()
+        chunks = [_chunk("5.1")]
+        timing = PipelineTiming(hybrid_ms=1.0, rerank_ms=1.0, select_ms=0.0, total_ms=2.0)
+        return RetrievalResult(context=chunks, reranked=chunks, timing=timing)
+
+    monkeypatch.setattr(generation, "retrieve_context", gated_retrieve_context)
+    monkeypatch.setattr(generation, "record_query_log", _noop_record_query_log)
+
+
+async def _still_pending(task: asyncio.Task[Any]) -> bool:
+    for _ in range(20):
+        await asyncio.sleep(0)
+    return not task.done()
+
+
+async def test_stream_reports_reranking_only_once_retrieval_hands_off(monkeypatch: Any) -> None:
+    reach_rerank, finish = asyncio.Event(), asyncio.Event()
+    _stub_gated_retrieval(monkeypatch, reach_rerank=reach_rerank, finish=finish)
+    stream = generation.generate_answer_stream(
+        object(), object(), object(), FakeLlmClient(), tenant_id=TENANT, question="Lenkkraft?"
+    )
+
+    assert (await anext(stream)).data == {"stage": "retrieving"}
+
+    second = asyncio.ensure_future(anext(stream))
+    assert await _still_pending(second), "reranking reported while retrieval still runs"
+
+    reach_rerank.set()
+    assert (await second).data == {"stage": "reranking"}
+
+    third = asyncio.ensure_future(anext(stream))
+    assert await _still_pending(third), "sources sent before reranking finished"
+    finish.set()
+    assert (await third).event == "sources"
+    await stream.aclose()
+
+
+async def test_stream_closed_during_retrieval_cancels_it(monkeypatch: Any) -> None:
+    reach_rerank, finish = asyncio.Event(), asyncio.Event()
+    _stub_gated_retrieval(monkeypatch, reach_rerank=reach_rerank, finish=finish)
+    tasks_before = asyncio.all_tasks()
+    stream = generation.generate_answer_stream(
+        object(), object(), object(), FakeLlmClient(), tenant_id=TENANT, question="Lenkkraft?"
+    )
+    await anext(stream)
+    reach_rerank.set()
+    await anext(stream)  # "reranking": retrieval is now parked on `finish`
+
+    await stream.aclose()
+
+    leftover = [t for t in asyncio.all_tasks() - tasks_before if not t.done()]
+    assert leftover == []
+
+
+async def test_stream_failing_before_rerank_skips_the_reranking_stage(monkeypatch: Any) -> None:
+    async def broken_retrieve_context(*args: Any, **kwargs: Any) -> RetrievalResult:
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(generation, "retrieve_context", broken_retrieve_context)
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), FakeLlmClient(), tenant_id=TENANT, question="Lenkkraft?"
+        )
+    ]
+
+    assert [e.event for e in events] == ["stage", "error"]
+    assert events[1].data == {"code": "internal_error", "message": "database down"}
 
 
 async def test_stream_abstains_pre_generation_without_calling_the_llm(monkeypatch: Any) -> None:

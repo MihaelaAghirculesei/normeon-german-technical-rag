@@ -153,6 +153,26 @@ async def test_retrieve_context_runs_hybrid_then_rerank_then_select(
     assert [c.content for c in result.context] == ["gamma", "beta"]
 
 
+async def test_retrieve_context_signals_the_rerank_hand_off(
+    stub_hybrid: list[RetrievedChunk],
+) -> None:
+    reranker = _RecordingReranker()
+    seen_at_signal: list[tuple[str, int] | None] = []
+
+    await retrieve_context(
+        object(),
+        object(),
+        reranker,
+        tenant_id=TENANT,
+        question="Q",
+        on_rerank_start=lambda: seen_at_signal.append(reranker.seen),
+    )
+
+    # Called exactly once, after retrieval and before the reranker ran.
+    assert seen_at_signal == [None]
+    assert reranker.seen is not None
+
+
 async def test_retrieve_context_reports_per_phase_timings(
     stub_hybrid: list[RetrievedChunk],
 ) -> None:

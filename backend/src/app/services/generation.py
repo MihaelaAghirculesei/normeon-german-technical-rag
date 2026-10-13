@@ -38,8 +38,10 @@ logged as a query yet; a later day's observability concern.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -140,6 +142,7 @@ async def _prepare(
     rerank_top_k: int | None,
     candidate_k: int | None,
     prompt_name: str | None,
+    on_rerank_start: Callable[[], None] | None = None,
 ) -> _Prepared:
     prompt = load_prompt(prompt_name or settings.answer_prompt_name)
     applied_mode: Literal["vector", "hybrid"] = retrieval_mode or "hybrid"
@@ -155,6 +158,7 @@ async def _prepare(
         retrieval_mode=retrieval_mode,
         rerank_top_k=rerank_top_k,
         candidate_k=candidate_k,
+        on_rerank_start=on_rerank_start,
     )
 
     top_score = retrieval.reranked[0].score if retrieval.reranked else None
@@ -400,21 +404,41 @@ async def generate_answer_stream(
     """
     request_id = request_id or str(uuid4())
     try:
+        # Each stage is reported when the request actually enters it:
+        # retrieval runs in a task that flags the hand-off to the
+        # reranker, so a slow rerank shows as "reranking", not as a
+        # retrieval that seems to hang.
         yield StreamEvent("stage", {"stage": "retrieving"})
-        yield StreamEvent("stage", {"stage": "reranking"})
-
-        prep = await _prepare(
-            session,
-            embedder,
-            reranker,
-            tenant_id=tenant_id,
-            question=question,
-            strategy=strategy,
-            retrieval_mode=None,
-            rerank_top_k=None,
-            candidate_k=None,
-            prompt_name=prompt_name,
+        reranking = asyncio.Event()
+        preparing = asyncio.create_task(
+            _prepare(
+                session,
+                embedder,
+                reranker,
+                tenant_id=tenant_id,
+                question=question,
+                strategy=strategy,
+                retrieval_mode=None,
+                rerank_top_k=None,
+                candidate_k=None,
+                prompt_name=prompt_name,
+                on_rerank_start=reranking.set,
+            )
         )
+        try:
+            rerank_started = asyncio.create_task(reranking.wait())
+            await asyncio.wait({preparing, rerank_started}, return_when=asyncio.FIRST_COMPLETED)
+            rerank_started.cancel()
+            if reranking.is_set():
+                yield StreamEvent("stage", {"stage": "reranking"})
+            prep = await preparing
+        finally:
+            # Closed early (client disconnect) while retrieval still runs:
+            # stop it rather than leave it working for nobody.
+            if not preparing.done():
+                preparing.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await preparing
 
         if prep.abstain_pre_generation:
             await _log_query(

@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 21 of 30. Retrieval is feature-complete: structured German
+Status: Day 22 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -48,7 +48,13 @@ and paired comparisons: it found and fixed a context-selection bug worth
 choice with numbers (ADR 0003, `docs/EVALUATION.md`).
 Frontend: an Angular 22 app (zoneless, signals) whose API types are
 generated from the backend's OpenAPI document, with CI failing on any
-contract drift between the two; the document list reads live data.
+contract drift between the two; the document list reads live data. The
+chat page streams answers over `fetch` + `ReadableStream` (POST, so not
+`EventSource`), with the SSE frames themselves typed in the OpenAPI
+contract. It names the pipeline phase the request is actually in
+(searching, weighing sources, writing), shows the sources before the
+first word of the answer, and can cancel a running request, which also
+stops the model call on the server.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 

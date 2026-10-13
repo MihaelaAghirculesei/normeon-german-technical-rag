@@ -28,16 +28,15 @@ validated citations disagree with what was already streamed.
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 
 from app.api.deps import DbSession, EmbedderDep, LlmClientDep, RerankerDep
 from app.core.streaming import with_heartbeat
@@ -156,29 +155,116 @@ async def chat(
     )
 
 
+class _EventStream(StreamingResponse):
+    # Sets the media type FastAPI documents the 200 response under, so the
+    # ChatStreamEvent schema lands on text/event-stream, not application/json.
+    media_type = "text/event-stream"
+
+
+class StageData(BaseModel):
+    stage: Literal["retrieving", "reranking", "generating"]
+
+
+class SourcesData(BaseModel):
+    sources: list[SourceOut]
+
+
+class TokenData(BaseModel):
+    text: str
+
+
+class StreamLatencyOut(BaseModel):
+    retrieval_ms: float
+    generation_ms: float
+    total_ms: float
+
+
+class DoneData(BaseModel):
+    latency_ms: StreamLatencyOut
+    cost_usd: float | None
+    citations: list[CitationOut]
+
+
+class ErrorData(BaseModel):
+    code: str
+    message: str
+
+
+class StageEvent(BaseModel):
+    event: Literal["stage"]
+    data: StageData
+
+
+class SourcesEvent(BaseModel):
+    event: Literal["sources"]
+    data: SourcesData
+
+
+class TokenEvent(BaseModel):
+    event: Literal["token"]
+    data: TokenData
+
+
+class DoneEvent(BaseModel):
+    event: Literal["done"]
+    data: DoneData
+
+
+class ErrorEvent(BaseModel):
+    event: Literal["error"]
+    data: ErrorData
+
+
+class ChatStreamEvent(
+    RootModel[
+        Annotated[
+            StageEvent | SourcesEvent | TokenEvent | DoneEvent | ErrorEvent,
+            Field(discriminator="event"),
+        ]
+    ]
+):
+    """One SSE frame of `/chat/stream`: `event:` is the discriminator,
+    `data:` the JSON payload. Never sent as a JSON body -- it exists so the
+    frame shapes are part of the OpenAPI contract the frontend is
+    generated from."""
+
+
 _HEARTBEAT = StreamEvent("heartbeat", {})
 
 
-def _sse(event: str, data: dict[str, Any]) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+def _sse(event: str, data: BaseModel) -> str:
+    return f"event: {event}\ndata: {data.model_dump_json()}\n\n"
 
 
-def _event_payload(event: StreamEvent) -> dict[str, Any]:
-    """Turn one `StreamEvent`'s data into JSON-ready values -- "sources"
-    and "done" are the only two carrying domain objects (`Source` /
-    `Citation`) rather than plain values already."""
+def _event_payload(event: StreamEvent) -> BaseModel:
+    """Turn one `StreamEvent` into its typed payload -- validated against
+    the same models the OpenAPI document advertises."""
+    if event.event == "stage":
+        return StageData(**event.data)
     if event.event == "sources":
-        return {"sources": [s.model_dump(mode="json") for s in _sources_out(event.data["sources"])]}
+        return SourcesData(sources=_sources_out(event.data["sources"]))
+    if event.event == "token":
+        return TokenData(**event.data)
     if event.event == "done":
-        payload = dict(event.data)
-        payload["citations"] = [
-            c.model_dump(mode="json") for c in _citations_out(event.data["citations"])
-        ]
-        return payload
-    return event.data
+        return DoneData(
+            latency_ms=StreamLatencyOut(**event.data["latency_ms"]),
+            cost_usd=event.data["cost_usd"],
+            citations=_citations_out(event.data["citations"]),
+        )
+    return ErrorData(**event.data)
 
 
-@router.post("/stream")
+@router.post(
+    "/stream",
+    response_class=_EventStream,
+    responses={
+        200: {
+            "model": ChatStreamEvent,
+            "description": "A `text/event-stream` of `ChatStreamEvent` frames.",
+            "content": {"text/event-stream": {}},
+        }
+    },
+)
 async def chat_stream(
     payload: ChatRequest,
     request: Request,
@@ -186,7 +272,7 @@ async def chat_stream(
     embedder: EmbedderDep,
     reranker: RerankerDep,
     llm: LlmClientDep,
-) -> StreamingResponse:
+) -> _EventStream:
     async def sse() -> AsyncIterator[str]:
         events = with_heartbeat(
             generate_answer_stream(
@@ -216,6 +302,4 @@ async def chat_stream(
             # actually gets torn down, not just this generator.
             await events.aclose()
 
-    return StreamingResponse(
-        sse(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
-    )
+    return _EventStream(sse(), headers={"Cache-Control": "no-cache"})
