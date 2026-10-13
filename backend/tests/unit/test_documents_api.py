@@ -6,6 +6,7 @@ response shape, error mapping -- without a database or a real model.
 """
 
 import uuid
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -53,6 +54,10 @@ class _FakeSession:
 
     async def get(self, model: type[Document], pk: UUID) -> Document | None:
         return self._document
+
+    async def scalars(self, statement: Any) -> list[Document]:
+        self.statement = statement
+        return [] if self._document is None else [self._document]
 
 
 @pytest.fixture
@@ -130,6 +135,45 @@ def test_getting_a_document_returns_its_current_status(client_factory: Any) -> N
     assert body["status"] == "embedding"
     # already_ingested belongs to the upload response only.
     assert "already_ingested" not in body
+
+
+def test_listing_documents_returns_summaries(client_factory: Any) -> None:
+    document = _document("ready")
+    document.version_label = "v2.0"
+    document.valid_from = date(2026, 1, 1)
+    document.created_at = datetime(2026, 8, 26, 12, 0)
+    client, _ = client_factory(document)
+
+    response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
+
+    assert response.status_code == 200
+    [body] = response.json()
+    assert body["document_id"] == str(DOCUMENT_ID)
+    assert body["filename"] == "FZV.pdf"
+    assert body["version_label"] == "v2.0"
+    assert body["valid_from"] == "2026-01-01"
+    assert body["valid_until"] is None
+    assert body["status"] == "ready"
+
+
+def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
+    client, _ = client_factory(None)
+    session = app.dependency_overrides[get_session]()
+    app.dependency_overrides[get_session] = lambda: session
+
+    response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
+
+    assert response.status_code == 200
+    assert response.json() == []
+    compiled = session.statement.compile()
+    assert "WHERE documents.tenant_id = :tenant_id_1" in str(compiled)
+    assert compiled.params["tenant_id_1"] == TENANT_ID
+
+
+def test_listing_documents_requires_a_tenant(client_factory: Any) -> None:
+    client, _ = client_factory(None)
+
+    assert client.get("/api/v1/documents").status_code == 422
 
 
 def test_getting_an_unknown_document_returns_a_typed_404(client_factory: Any) -> None:
