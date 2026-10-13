@@ -4,6 +4,7 @@ context selection, as one instrumented call.
 
 import asyncio
 import time
+from collections.abc import Callable
 from typing import Literal
 from uuid import UUID
 
@@ -65,6 +66,7 @@ async def retrieve_context(
     candidate_k: int | None = None,
     rerank_top_k: int | None = None,
     token_budget: int | None = None,
+    on_rerank_start: Callable[[], None] | None = None,
 ) -> RetrievalResult:
     """The full retrieval pipeline as one instrumented call:
 
@@ -84,6 +86,10 @@ async def retrieve_context(
     fusion -- so a vector-vs-hybrid comparison hands the reranker the
     same budget and differs only in *which* chunks fill it. Left `None`,
     each branch's configured defaults apply.
+
+    `on_rerank_start`, when given, is called once retrieval is done and
+    reranking is about to begin -- the streaming endpoint uses it to report
+    the phase a request is actually in, not one it will reach later.
     """
     retrieval_mode = retrieval_mode or "hybrid"
     rerank_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
@@ -113,6 +119,8 @@ async def retrieve_context(
             top_k=candidate_k,
         )
     after_hybrid = time.perf_counter()
+    if on_rerank_start is not None:
+        on_rerank_start()
     reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
     after_rerank = time.perf_counter()
     context = _select_context(reranked, token_budget)
