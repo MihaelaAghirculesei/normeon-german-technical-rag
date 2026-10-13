@@ -367,6 +367,11 @@ def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
     assert [c["marker"] for c in done_data["citations"]] == ["S1"]
     assert done_data["latency_ms"]["total_ms"] == 15.0
 
+    # Every frame is exactly what the OpenAPI contract advertises -- the
+    # shape the frontend's generated types are built from.
+    for event, data in events:
+        chat.ChatStreamEvent.model_validate({"event": event, "data": data})
+
 
 def test_chat_stream_passes_an_error_event_through(stream_client: Any) -> None:
     client = stream_client(
