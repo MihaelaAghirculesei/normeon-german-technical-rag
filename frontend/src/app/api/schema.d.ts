@@ -155,6 +155,14 @@ export interface components {
             /** Cost Usd */
             cost_usd: number | null;
         };
+        /**
+         * ChatStreamEvent
+         * @description One SSE frame of `/chat/stream`: `event:` is the discriminator,
+         *     `data:` the JSON payload. Never sent as a JSON body -- it exists so the
+         *     frame shapes are part of the OpenAPI contract the frontend is
+         *     generated from.
+         */
+        ChatStreamEvent: components["schemas"]["StageEvent"] | components["schemas"]["SourcesEvent"] | components["schemas"]["TokenEvent"] | components["schemas"]["DoneEvent"] | components["schemas"]["ErrorEvent"];
         /** CitationOut */
         CitationOut: {
             /** Marker */
@@ -232,6 +240,39 @@ export interface components {
             status: string;
             /** Already Ingested */
             already_ingested: boolean;
+        };
+        /** DoneData */
+        DoneData: {
+            latency_ms: components["schemas"]["StreamLatencyOut"];
+            /** Cost Usd */
+            cost_usd: number | null;
+            /** Citations */
+            citations: components["schemas"]["CitationOut"][];
+        };
+        /** DoneEvent */
+        DoneEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "done";
+            data: components["schemas"]["DoneData"];
+        };
+        /** ErrorData */
+        ErrorData: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /** ErrorEvent */
+        ErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "error";
+            data: components["schemas"]["ErrorData"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -345,6 +386,60 @@ export interface components {
             section_path: string | null;
             /** Heading */
             heading: string | null;
+        };
+        /** SourcesData */
+        SourcesData: {
+            /** Sources */
+            sources: components["schemas"]["SourceOut"][];
+        };
+        /** SourcesEvent */
+        SourcesEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "sources";
+            data: components["schemas"]["SourcesData"];
+        };
+        /** StageData */
+        StageData: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "retrieving" | "reranking" | "generating";
+        };
+        /** StageEvent */
+        StageEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "stage";
+            data: components["schemas"]["StageData"];
+        };
+        /** StreamLatencyOut */
+        StreamLatencyOut: {
+            /** Retrieval Ms */
+            retrieval_ms: number;
+            /** Generation Ms */
+            generation_ms: number;
+            /** Total Ms */
+            total_ms: number;
+        };
+        /** TokenData */
+        TokenData: {
+            /** Text */
+            text: string;
+        };
+        /** TokenEvent */
+        TokenEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            event: "token";
+            data: components["schemas"]["TokenData"];
         };
         /** ValidationError */
         ValidationError: {
@@ -562,13 +657,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description A `text/event-stream` of `ChatStreamEvent` frames. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/event-stream": components["schemas"]["ChatStreamEvent"];
                 };
             };
             /** @description Validation Error */

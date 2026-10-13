@@ -256,10 +256,13 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "A `text/event-stream` of `ChatStreamEvent` frames.",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent",
+                  "type": "string"
+                }
               }
             }
           },
@@ -403,6 +406,37 @@
           "cost_usd"
         ],
         "title": "ChatResponse"
+      },
+      "ChatStreamEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StageEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SourcesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/TokenEvent"
+          },
+          {
+            "$ref": "#/components/schemas/DoneEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorEvent"
+          }
+        ],
+        "title": "ChatStreamEvent",
+        "description": "One SSE frame of `/chat/stream`: `event:` is the discriminator,\n`data:` the JSON payload. Never sent as a JSON body -- it exists so the\nframe shapes are part of the OpenAPI contract the frontend is\ngenerated from.",
+        "discriminator": {
+          "propertyName": "event",
+          "mapping": {
+            "done": "#/components/schemas/DoneEvent",
+            "error": "#/components/schemas/ErrorEvent",
+            "sources": "#/components/schemas/SourcesEvent",
+            "stage": "#/components/schemas/StageEvent",
+            "token": "#/components/schemas/TokenEvent"
+          }
+        }
       },
       "CitationOut": {
         "properties": {
@@ -598,6 +632,92 @@
           "already_ingested"
         ],
         "title": "DocumentUploadResponse"
+      },
+      "DoneData": {
+        "properties": {
+          "latency_ms": {
+            "$ref": "#/components/schemas/StreamLatencyOut"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "type": "array",
+            "title": "Citations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latency_ms",
+          "cost_usd",
+          "citations"
+        ],
+        "title": "DoneData"
+      },
+      "DoneEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "const": "done",
+            "title": "Event"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DoneData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "data"
+        ],
+        "title": "DoneEvent"
+      },
+      "ErrorData": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorData"
+      },
+      "ErrorEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "const": "error",
+            "title": "Event"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ErrorData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "data"
+        ],
+        "title": "ErrorEvent"
       },
       "HTTPValidationError": {
         "properties": {
@@ -920,6 +1040,130 @@
           "heading"
         ],
         "title": "SourceOut"
+      },
+      "SourcesData": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources"
+        ],
+        "title": "SourcesData"
+      },
+      "SourcesEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "const": "sources",
+            "title": "Event"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SourcesData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "data"
+        ],
+        "title": "SourcesEvent"
+      },
+      "StageData": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "retrieving",
+              "reranking",
+              "generating"
+            ],
+            "title": "Stage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "title": "StageData"
+      },
+      "StageEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "const": "stage",
+            "title": "Event"
+          },
+          "data": {
+            "$ref": "#/components/schemas/StageData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "data"
+        ],
+        "title": "StageEvent"
+      },
+      "StreamLatencyOut": {
+        "properties": {
+          "retrieval_ms": {
+            "type": "number",
+            "title": "Retrieval Ms"
+          },
+          "generation_ms": {
+            "type": "number",
+            "title": "Generation Ms"
+          },
+          "total_ms": {
+            "type": "number",
+            "title": "Total Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "retrieval_ms",
+          "generation_ms",
+          "total_ms"
+        ],
+        "title": "StreamLatencyOut"
+      },
+      "TokenData": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TokenData"
+      },
+      "TokenEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "const": "token",
+            "title": "Event"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "data"
+        ],
+        "title": "TokenEvent"
       },
       "ValidationError": {
         "properties": {
