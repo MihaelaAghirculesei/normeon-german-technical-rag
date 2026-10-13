@@ -1,7 +1,12 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'dokumente' },
+  { path: '', pathMatch: 'full', redirectTo: 'fragen' },
+  {
+    path: 'fragen',
+    title: 'Fragen · Normeon',
+    loadComponent: () => import('./chat/chat-page').then((m) => m.ChatPage),
+  },
   {
     path: 'dokumente',
     title: 'Dokumente · Normeon',

@@ -17,6 +17,7 @@ describe('App', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('.brand')?.textContent).toContain('Normeon');
-    expect(el.querySelector('nav a')?.getAttribute('href')).toBe('/dokumente');
+    const links = [...el.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/fragen', '/dokumente']);
   });
 });
