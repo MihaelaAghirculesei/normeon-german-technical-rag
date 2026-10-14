@@ -48,6 +48,9 @@ async def upload_document(
     tenant_id: Annotated[UUID, Form()],
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
+    version_label: Annotated[str | None, Form()] = None,
+    valid_from: Annotated[date | None, Form()] = None,
+    valid_until: Annotated[date | None, Form()] = None,
 ) -> DocumentUploadResponse:
     filename = file.filename or "unnamed"
     suffix = Path(filename).suffix.lower()
@@ -61,7 +64,14 @@ async def upload_document(
 
     content = await file.read()
     document, created = await get_or_create_document(
-        session, tenant_id, filename, doc_type, content
+        session,
+        tenant_id,
+        filename,
+        doc_type,
+        content,
+        version_label=version_label or None,
+        valid_from=valid_from,
+        valid_until=valid_until,
     )
 
     outcome: UploadOutcome

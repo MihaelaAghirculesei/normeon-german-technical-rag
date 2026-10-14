@@ -139,6 +139,12 @@ export interface components {
             doc_type: string;
             /** File */
             file: string;
+            /** Version Label */
+            version_label?: string | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
         };
         /** ChatRequest */
         ChatRequest: {
