@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import chat, documents, health, search
+from app.api.v1 import chat, chunks, documents, health, search
 from app.core.config import settings
 from app.core.errors import NormeonError
 from app.core.logging import configure_logging
@@ -20,3 +20,4 @@ app.include_router(health.router)
 app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(chat.router)
+app.include_router(chunks.router)

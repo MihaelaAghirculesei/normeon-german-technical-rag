@@ -278,6 +278,71 @@
           }
         }
       }
+    },
+    "/api/v1/chunks/{chunk_id}/context": {
+      "get": {
+        "tags": [
+          "chunks"
+        ],
+        "summary": "Chunk Context",
+        "operationId": "chunk_context_api_v1_chunks__chunk_id__context_get",
+        "parameters": [
+          {
+            "name": "chunk_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Chunk Id"
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 3,
+              "minimum": 0,
+              "default": 1,
+              "title": "Window"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -438,6 +503,96 @@
           }
         }
       },
+      "ChunkContextResponse": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ContextDocumentOut"
+          },
+          "chunk": {
+            "$ref": "#/components/schemas/ChunkOut"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/ChunkOut"
+            },
+            "type": "array",
+            "title": "Before"
+          },
+          "after": {
+            "items": {
+              "$ref": "#/components/schemas/ChunkOut"
+            },
+            "type": "array",
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "chunk",
+          "before",
+          "after"
+        ],
+        "title": "ChunkContextResponse"
+      },
+      "ChunkOut": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Chunk Id"
+          },
+          "ordinal": {
+            "type": "integer",
+            "title": "Ordinal"
+          },
+          "page_from": {
+            "type": "integer",
+            "title": "Page From"
+          },
+          "page_to": {
+            "type": "integer",
+            "title": "Page To"
+          },
+          "section_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Path"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "ordinal",
+          "page_from",
+          "page_to",
+          "section_path",
+          "heading",
+          "content"
+        ],
+        "title": "ChunkOut"
+      },
       "CitationOut": {
         "properties": {
           "marker": {
@@ -494,6 +649,42 @@
           "snippet"
         ],
         "title": "CitationOut"
+      },
+      "ContextDocumentOut": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "filename",
+          "doc_type",
+          "version_label"
+        ],
+        "title": "ContextDocumentOut"
       },
       "DocumentStatusResponse": {
         "properties": {
