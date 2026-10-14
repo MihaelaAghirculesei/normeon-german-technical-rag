@@ -5,12 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Response, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.api.deps import DbSession, EmbedderDep
 from app.core.errors import DocumentNotFoundError, UnsupportedFileTypeError
-from app.db.models import Document
+from app.db.models import Chunk, Document
 from app.db.session import async_session_factory
 from app.services.ingestion import SUPPORTED_SUFFIXES, get_or_create_document, process_document
 
@@ -122,6 +122,9 @@ class DocumentSummary(BaseModel):
     page_count: int | None
     status: str
     created_at: datetime
+    # Chunks per chunking strategy, e.g. {"fixed_500": 233, "structural": 114};
+    # empty until the document has been parsed.
+    chunk_counts: dict[str, int]
 
 
 @router.get("", response_model=list[DocumentSummary])
@@ -135,6 +138,14 @@ async def list_documents(
         .where(Document.tenant_id == tenant_id)
         .order_by(Document.filename, Document.version_label)
     )
+    counted = await session.execute(
+        select(Chunk.document_id, Chunk.strategy, func.count())
+        .where(Chunk.tenant_id == tenant_id)
+        .group_by(Chunk.document_id, Chunk.strategy)
+    )
+    chunk_counts: dict[UUID, dict[str, int]] = {}
+    for document_id, strategy, count in counted:
+        chunk_counts.setdefault(document_id, {})[strategy] = count
     return [
         DocumentSummary(
             document_id=d.id,
@@ -146,6 +157,7 @@ async def list_documents(
             page_count=d.page_count,
             status=d.status,
             created_at=d.created_at,
+            chunk_counts=chunk_counts.get(d.id, {}),
         )
         for d in documents
     ]

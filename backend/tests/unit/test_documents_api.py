@@ -46,18 +46,24 @@ def _document(status: str) -> Document:
 
 
 class _FakeSession:
-    """Only `get` is exercised by these endpoints; ingestion itself is
+    """Answers the few queries these endpoints make; ingestion itself is
     stubbed out, so nothing else on AsyncSession is reached."""
 
-    def __init__(self, document: Document | None) -> None:
+    def __init__(self, document: Document | None, chunk_counts: list[tuple[UUID, str, int]]):
         self._document = document
+        self._chunk_counts = chunk_counts
+        self.statements: list[Any] = []
 
     async def get(self, model: type[Document], pk: UUID) -> Document | None:
         return self._document
 
     async def scalars(self, statement: Any) -> list[Document]:
-        self.statement = statement
+        self.statements.append(statement)
         return [] if self._document is None else [self._document]
+
+    async def execute(self, statement: Any) -> list[tuple[UUID, str, int]]:
+        self.statements.append(statement)
+        return self._chunk_counts
 
 
 @pytest.fixture
@@ -65,10 +71,11 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
     def make(
         document: Document | None,
         created: bool = False,
+        chunk_counts: list[tuple[UUID, str, int]] | None = None,
     ) -> tuple[TestClient, list[UUID], _FakeSession, list[dict[str, Any]]]:
         processed: list[UUID] = []
         create_calls: list[dict[str, Any]] = []
-        session = _FakeSession(document)
+        session = _FakeSession(document, chunk_counts or [])
 
         async def fake_get_or_create(
             session: Any,
@@ -216,7 +223,10 @@ def test_listing_documents_returns_summaries(client_factory: Any) -> None:
     document.version_label = "v2.0"
     document.valid_from = date(2026, 1, 1)
     document.created_at = datetime(2026, 8, 26, 12, 0)
-    client, _, _, _ = client_factory(document)
+    client, _, _, _ = client_factory(
+        document,
+        chunk_counts=[(DOCUMENT_ID, "structural", 114), (DOCUMENT_ID, "fixed_500", 119)],
+    )
 
     response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
 
@@ -228,6 +238,17 @@ def test_listing_documents_returns_summaries(client_factory: Any) -> None:
     assert body["valid_from"] == "2026-01-01"
     assert body["valid_until"] is None
     assert body["status"] == "ready"
+    assert body["chunk_counts"] == {"structural": 114, "fixed_500": 119}
+
+
+def test_a_document_not_yet_parsed_has_no_chunk_counts(client_factory: Any) -> None:
+    document = _document("pending")
+    document.created_at = datetime(2026, 8, 26, 12, 0)
+    client, _, _, _ = client_factory(document)
+
+    [body] = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)}).json()
+
+    assert body["chunk_counts"] == {}
 
 
 def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
@@ -237,9 +258,11 @@ def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
 
     assert response.status_code == 200
     assert response.json() == []
-    compiled = session.statement.compile()
-    assert "WHERE documents.tenant_id = :tenant_id_1" in str(compiled)
-    assert compiled.params["tenant_id_1"] == TENANT_ID
+    # Both the documents and the chunk-count query filter on the tenant.
+    for statement in session.statements:
+        compiled = statement.compile()
+        assert "tenant_id = :tenant_id_1" in str(compiled)
+        assert compiled.params["tenant_id_1"] == TENANT_ID
 
 
 def test_listing_documents_requires_a_tenant(client_factory: Any) -> None:

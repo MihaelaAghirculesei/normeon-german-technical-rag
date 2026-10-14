@@ -814,6 +814,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "chunk_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Chunk Counts"
           }
         },
         "type": "object",
@@ -826,7 +833,8 @@
           "valid_until",
           "page_count",
           "status",
-          "created_at"
+          "created_at",
+          "chunk_counts"
         ],
         "title": "DocumentSummary"
       },
