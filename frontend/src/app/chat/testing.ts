@@ -2,6 +2,7 @@ import type { ChatRequest, ChatStreamEvent, Source, StreamChat } from '../api/ch
 
 export const SOURCE_S1: Source = {
   marker: 'S1',
+  chunk_id: 'aaaaaaaa-0000-0000-0000-000000000001',
   document_id: '11111111-1111-1111-1111-111111111111',
   filename: 'Lastenheft-EPS-v2.0.docx',
   page_from: 1,
@@ -13,6 +14,7 @@ export const SOURCE_S1: Source = {
 export const SOURCE_S2: Source = {
   ...SOURCE_S1,
   marker: 'S2',
+  chunk_id: 'aaaaaaaa-0000-0000-0000-000000000002',
   filename: 'StVZO.pdf',
   page_from: 40,
   page_to: 41,
