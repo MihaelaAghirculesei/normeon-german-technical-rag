@@ -107,6 +107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chunks/{chunk_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chunk Context */
+        get: operations["chunk_context_api_v1_chunks__chunk_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -163,6 +180,35 @@ export interface components {
          *     generated from.
          */
         ChatStreamEvent: components["schemas"]["StageEvent"] | components["schemas"]["SourcesEvent"] | components["schemas"]["TokenEvent"] | components["schemas"]["DoneEvent"] | components["schemas"]["ErrorEvent"];
+        /** ChunkContextResponse */
+        ChunkContextResponse: {
+            document: components["schemas"]["ContextDocumentOut"];
+            chunk: components["schemas"]["ChunkOut"];
+            /** Before */
+            before: components["schemas"]["ChunkOut"][];
+            /** After */
+            after: components["schemas"]["ChunkOut"][];
+        };
+        /** ChunkOut */
+        ChunkOut: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Page From */
+            page_from: number;
+            /** Page To */
+            page_to: number;
+            /** Section Path */
+            section_path: string | null;
+            /** Heading */
+            heading: string | null;
+            /** Content */
+            content: string;
+        };
         /** CitationOut */
         CitationOut: {
             /** Marker */
@@ -187,6 +233,20 @@ export interface components {
             section_path: string | null;
             /** Snippet */
             snippet: string;
+        };
+        /** ContextDocumentOut */
+        ContextDocumentOut: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Filename */
+            filename: string;
+            /** Doc Type */
+            doc_type: string;
+            /** Version Label */
+            version_label: string | null;
         };
         /** DocumentStatusResponse */
         DocumentStatusResponse: {
@@ -664,6 +724,40 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["ChatStreamEvent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chunk_context_api_v1_chunks__chunk_id__context_get: {
+        parameters: {
+            query: {
+                tenant_id: string;
+                window?: number;
+            };
+            header?: never;
+            path: {
+                chunk_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextResponse"];
                 };
             };
             /** @description Validation Error */
