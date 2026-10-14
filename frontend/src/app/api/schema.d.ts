@@ -298,8 +298,11 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
-            /** Already Ingested */
-            already_ingested: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "duplicate" | "in_progress" | "retrying";
         };
         /** DoneData */
         DoneData: {
