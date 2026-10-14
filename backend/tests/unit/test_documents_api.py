@@ -87,11 +87,11 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
     app.dependency_overrides.clear()
 
 
-def _upload(client: TestClient) -> Any:
+def _upload(client: TestClient, filename: str = "FZV.pdf") -> Any:
     return client.post(
         "/api/v1/documents",
         data={"tenant_id": str(TENANT_ID), "doc_type": "norm"},
-        files={"file": ("FZV.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        files={"file": (filename, b"%PDF-1.4 fake", "application/octet-stream")},
     )
 
 
@@ -146,6 +146,23 @@ def test_uploading_a_document_that_failed_before_retries_it(client_factory: Any)
     assert response.status_code == 200
     assert response.json()["outcome"] == "retrying"
     assert processed == [DOCUMENT_ID]
+
+
+@pytest.mark.parametrize("filename", ["notes.txt", "scan.PNG", "README"])
+def test_upload_rejects_a_file_type_no_parser_reads(client_factory: Any, filename: str) -> None:
+    client, processed = client_factory(_document("pending"), created=True)
+
+    response = _upload(client, filename=filename)
+
+    assert response.status_code == 415
+    assert response.json()["code"] == "unsupported_file_type"
+    assert processed == []
+
+
+def test_upload_accepts_an_uppercase_extension(client_factory: Any) -> None:
+    client, _ = client_factory(_document("pending"), created=True)
+
+    assert _upload(client, filename="LASTENHEFT.DOCX").status_code == 201
 
 
 def test_getting_a_document_returns_its_current_status(client_factory: Any) -> None:
