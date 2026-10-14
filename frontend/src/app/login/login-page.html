@@ -1,0 +1,35 @@
+<form class="login" (submit)="submit($event)">
+  <h1>Anmelden</h1>
+  <p class="muted">Normeon durchsucht nur die Dokumente Ihres Mandanten.</p>
+
+  <label>
+    E-Mail
+    <input
+      type="email"
+      name="email"
+      autocomplete="username"
+      required
+      [value]="email()"
+      (input)="email.set($any($event.target).value)"
+    />
+  </label>
+  <label>
+    Passwort
+    <input
+      type="password"
+      name="password"
+      autocomplete="current-password"
+      required
+      [value]="password()"
+      (input)="password.set($any($event.target).value)"
+    />
+  </label>
+
+  @if (error(); as message) {
+    <app-notice kind="error">{{ message }}</app-notice>
+  }
+
+  <button type="submit" [disabled]="busy() || !email().trim() || !password()">
+    {{ busy() ? 'Anmeldung läuft…' : 'Anmelden' }}
+  </button>
+</form>
