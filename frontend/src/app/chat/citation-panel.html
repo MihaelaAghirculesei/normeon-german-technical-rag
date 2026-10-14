@@ -1,0 +1,36 @@
+<header>
+  <div>
+    <span class="marker mono">{{ source().marker }}</span>
+    <h2>{{ source().filename }}</h2>
+  </div>
+  <button type="button" class="close" (click)="closed.emit()" aria-label="Quelle schließen">
+    ×
+  </button>
+</header>
+
+<dl>
+  <dt>Abschnitt</dt>
+  <dd>{{ source().section_path ?? '–' }}</dd>
+  <dt>Seite</dt>
+  <dd>{{ pages(source().page_from, source().page_to) }}</dd>
+  @if (context.hasValue() && context.value().document.version_label; as version) {
+    <dt>Version</dt>
+    <dd>{{ version }}</dd>
+  }
+</dl>
+
+@if (context.error()) {
+  <app-notice kind="error">Der Quelltext konnte nicht geladen werden.</app-notice>
+} @else if (context.value(); as ctx) {
+  <div class="excerpt">
+    @for (chunk of ctx.before; track chunk.chunk_id) {
+      <p class="around">{{ chunk.content }}</p>
+    }
+    <mark class="cited" aria-label="Zitierte Stelle">{{ ctx.chunk.content }}</mark>
+    @for (chunk of ctx.after; track chunk.chunk_id) {
+      <p class="around">{{ chunk.content }}</p>
+    }
+  </div>
+} @else {
+  <app-notice>Quelltext wird geladen…</app-notice>
+}
