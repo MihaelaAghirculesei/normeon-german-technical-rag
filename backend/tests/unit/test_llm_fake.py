@@ -51,9 +51,7 @@ async def test_repeated_markers_are_deduped_in_the_reply() -> None:
 async def test_canned_reply_overrides_everything() -> None:
     client = FakeLlmClient(canned="NICHT_GEFUNDEN")
 
-    resp = await client.complete(
-        system="x", user="[S1] [S2] [S3]", temperature=0.0, max_tokens=100
-    )
+    resp = await client.complete(system="x", user="[S1] [S2] [S3]", temperature=0.0, max_tokens=100)
 
     assert resp.text == "NICHT_GEFUNDEN"
 

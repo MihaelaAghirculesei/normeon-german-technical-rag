@@ -95,9 +95,7 @@ def test_fixed_ordinals_increase_sequentially() -> None:
 
 def test_fixed_page_span_crosses_a_page_boundary() -> None:
     chunker = FixedWindowChunker(window_tokens=100, overlap_ratio=0.0)
-    doc = ParsedDocument(
-        blocks=[_block(_words(60), page=1), _block(_words(60), page=2)]
-    )
+    doc = ParsedDocument(blocks=[_block(_words(60), page=1), _block(_words(60), page=2)])
 
     chunks = chunker.chunk(doc)
 

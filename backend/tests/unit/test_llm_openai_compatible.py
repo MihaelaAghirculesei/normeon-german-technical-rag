@@ -216,9 +216,7 @@ async def test_stream_yields_delta_content_pieces_in_order() -> None:
         transport=_sse_transport(_sse_body(_content_chunk("Die "), _content_chunk("Antwort."))),
     )
 
-    deltas = [
-        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
-    ]
+    deltas = [d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)]
 
     assert "".join(d.text for d in deltas) == "Die Antwort."
     assert all(d.model == "test-model" for d in deltas)
@@ -231,9 +229,7 @@ async def test_stream_stops_at_done_and_ignores_anything_after() -> None:
         base_url="https://llm.example/v1", api_key=None, model="m", transport=_sse_transport(body)
     )
 
-    deltas = [
-        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
-    ]
+    deltas = [d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)]
 
     assert "".join(d.text for d in deltas) == "Die "
 
@@ -247,9 +243,7 @@ async def test_stream_skips_deltas_with_no_content_and_no_usage() -> None:
         transport=_sse_transport(_sse_body(role_only_chunk, _content_chunk("Text"))),
     )
 
-    deltas = [
-        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
-    ]
+    deltas = [d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)]
 
     assert [d.text for d in deltas] == ["Text"]
 
@@ -262,9 +256,7 @@ async def test_stream_yields_a_final_usage_only_delta() -> None:
         transport=_sse_transport(_sse_body(_content_chunk("Text"), _usage_chunk(42, 7))),
     )
 
-    deltas = [
-        d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)
-    ]
+    deltas = [d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)]
 
     assert [d.text for d in deltas] == ["Text", ""]
     assert deltas[0].prompt_tokens is None and deltas[0].completion_tokens is None
@@ -323,10 +315,12 @@ async def test_a_429_is_retried_and_can_still_succeed() -> None:
         api_key=None,
         model="m",
         max_retries=1,
-        transport=_sequenced_transport([
-            httpx.Response(429, headers={"Retry-After": "0"}, json={"error": "slow down"}),
-            httpx.Response(200, json=_ok_body()),
-        ]),
+        transport=_sequenced_transport(
+            [
+                httpx.Response(429, headers={"Retry-After": "0"}, json={"error": "slow down"}),
+                httpx.Response(200, json=_ok_body()),
+            ]
+        ),
     )
 
     resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
@@ -356,8 +350,14 @@ async def test_a_429_exhausting_retries_raises_llm_unavailable() -> None:
 
 @pytest.mark.parametrize(
     ("header", "expected"),
-    [("7", 7.0), ("0.5", 0.5), (None, None), ("soon", None), ("-1", None),
-     ("Wed, 21 Oct 2026 07:28:00 GMT", None)],
+    [
+        ("7", 7.0),
+        ("0.5", 0.5),
+        (None, None),
+        ("soon", None),
+        ("-1", None),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", None),
+    ],
 )
 def test_retry_after_parsing(header: str | None, expected: float | None) -> None:
     assert _retry_after_seconds(header) == expected

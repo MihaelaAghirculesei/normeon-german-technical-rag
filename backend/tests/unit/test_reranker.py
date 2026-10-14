@@ -150,9 +150,7 @@ def test_cross_encoder_passes_max_length_to_the_model(
             seen["model_name"] = model_name
             seen.update(kwargs)
 
-    monkeypatch.setattr(
-        "app.adapters.reranker.cross_encoder.CrossEncoder", _RecordingCrossEncoder
-    )
+    monkeypatch.setattr("app.adapters.reranker.cross_encoder.CrossEncoder", _RecordingCrossEncoder)
 
     _ = CrossEncoderReranker("bge", max_length=512)._loaded_model
 

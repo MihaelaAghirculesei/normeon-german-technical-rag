@@ -331,9 +331,7 @@ def test_search_leaves_unset_params_as_none_for_the_service_to_default(
 def test_search_rejects_a_blank_question(client_with_retriever: Any) -> None:
     client, _ = client_with_retriever([])
 
-    response = client.post(
-        "/api/v1/search", json={"question": "", "tenant_id": str(TENANT_ID)}
-    )
+    response = client.post("/api/v1/search", json={"question": "", "tenant_id": str(TENANT_ID)})
 
     assert response.status_code == 422
 

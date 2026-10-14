@@ -91,9 +91,7 @@ def client_with_generator(monkeypatch: pytest.MonkeyPatch) -> Any:
             question: str,
             strategy: str | None = None,
         ) -> AnswerResult:
-            calls.append(
-                {"tenant_id": tenant_id, "question": question, "strategy": strategy}
-            )
+            calls.append({"tenant_id": tenant_id, "question": question, "strategy": strategy})
             return result
 
         monkeypatch.setattr(chat, "generate_answer", fake_generate_answer)
@@ -130,9 +128,7 @@ def test_chat_returns_answer_sources_and_prompt_identity(client_with_generator: 
 def test_chat_response_carries_a_priced_cost(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer(cost_usd=0.00045))
 
-    body = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
-    ).json()
+    body = client.post("/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}).json()
 
     assert body["cost_usd"] == 0.00045
 
@@ -180,9 +176,7 @@ def test_chat_forwards_question_tenant_and_strategy(client_with_generator: Any) 
 def test_chat_response_carries_validated_citations(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer(citations=[_citation("S1", 14)]))
 
-    body = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
-    ).json()
+    body = client.post("/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}).json()
 
     assert len(body["citations"]) == 1
     citation = body["citations"][0]
@@ -224,9 +218,7 @@ def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any
 def test_chat_rejects_a_blank_question(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer())
 
-    response = client.post(
-        "/api/v1/chat", json={"question": "", "tenant_id": str(TENANT_ID)}
-    )
+    response = client.post("/api/v1/chat", json={"question": "", "tenant_id": str(TENANT_ID)})
 
     assert response.status_code == 422
 
@@ -234,9 +226,7 @@ def test_chat_rejects_a_blank_question(client_with_generator: Any) -> None:
 def test_chat_rejects_a_bad_tenant_id(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer())
 
-    response = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": "not-a-uuid"}
-    )
+    response = client.post("/api/v1/chat", json={"question": "x", "tenant_id": "not-a-uuid"})
 
     assert response.status_code == 422
 
@@ -353,7 +343,13 @@ def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
 
     events = _parse_sse(body)
     assert [e for e, _ in events] == [
-        "stage", "stage", "sources", "stage", "token", "token", "done",
+        "stage",
+        "stage",
+        "sources",
+        "stage",
+        "token",
+        "token",
+        "done",
     ]
     assert events[0][1] == {"stage": "retrieving"}
     assert events[4][1] == {"text": "Die "}
