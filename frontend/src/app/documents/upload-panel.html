@@ -1,0 +1,78 @@
+<div class="options">
+  <label>
+    Typ
+    <select [value]="docType()" (change)="docType.set($any($event.target).value)">
+      <option value="norm">Norm / Verordnung</option>
+      <option value="lastenheft">Lastenheft</option>
+      <option value="sonstiges">Sonstiges</option>
+    </select>
+  </label>
+  <label>
+    Version <span class="muted">(optional)</span>
+    <input
+      type="text"
+      placeholder="z. B. v2.0"
+      [value]="versionLabel()"
+      (input)="versionLabel.set($any($event.target).value)"
+    />
+  </label>
+</div>
+
+<div
+  class="dropzone"
+  [class.dragging]="dragging()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="dragging.set(false)"
+  (drop)="onDrop($event)"
+>
+  <p>PDF- oder DOCX-Dateien hierher ziehen</p>
+  <p class="muted">oder</p>
+  <button type="button" (click)="picker.click()">Dateien auswählen</button>
+  <input
+    #picker
+    type="file"
+    multiple
+    hidden
+    [accept]="accept"
+    (change)="onPick(picker)"
+    data-testid="file-input"
+  />
+</div>
+
+@if (queue.items().length > 0) {
+  <ul class="uploads" aria-label="Uploads" aria-live="polite">
+    @for (item of queue.items(); track item.id) {
+      <li [class]="item.state">
+        <span class="name mono">{{ item.name }}</span>
+        <span class="size muted">{{ item.size / 1024 / 1024 | number: '1.1-1' }} MB</span>
+        <span class="phase">
+          @switch (item.state) {
+            @case ('uploading') {
+              <progress [value]="item.progress" max="1" aria-label="Upload-Fortschritt"></progress>
+              <span class="muted">{{ item.progress * 100 | number: '1.0-0' }} %</span>
+            }
+            @case ('duplicate') {
+              <span class="tag">Bereits vorhanden</span>
+            }
+            @case ('rejected') {
+              <span class="tag danger">Abgelehnt</span>
+            }
+            @default {
+              @if (item.status) {
+                <app-status-badge [status]="item.status" />
+              }
+            }
+          }
+        </span>
+        @if (item.message) {
+          <span class="message">{{ item.message }}</span>
+        }
+      </li>
+    }
+  </ul>
+  @if (hasFinished()) {
+    <button type="button" class="link" (click)="queue.clearFinished()">
+      Abgeschlossene ausblenden
+    </button>
+  }
+}

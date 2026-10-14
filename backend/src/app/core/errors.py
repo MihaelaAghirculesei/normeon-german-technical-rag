@@ -10,6 +10,13 @@ class DocumentNotFoundError(NormeonError):
     status_code = 404
 
 
+class UnsupportedFileTypeError(NormeonError):
+    """An upload whose extension no parser handles (only .pdf and .docx)."""
+
+    code = "unsupported_file_type"
+    status_code = 415
+
+
 class ChunkNotFoundError(NormeonError):
     """No chunk with that id for this tenant -- a chunk of another tenant
     is reported the same way, so the endpoint never confirms it exists."""

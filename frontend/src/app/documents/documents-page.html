@@ -7,6 +7,8 @@
   </button>
 </app-page-header>
 
+<app-upload-panel (changed)="documents.reload()" />
+
 @if (documents.error()) {
   <app-notice kind="error"
     >Die Dokumente konnten nicht geladen werden. Läuft das Backend?</app-notice
@@ -24,6 +26,7 @@
         <th scope="col">Version</th>
         <th scope="col">Gültig</th>
         <th scope="col" class="num">Seiten</th>
+        <th scope="col">Chunks</th>
         <th scope="col">Status</th>
         <th scope="col">Hinzugefügt</th>
       </tr>
@@ -43,6 +46,15 @@
             }
           </td>
           <td class="num">{{ doc.page_count ?? '–' }}</td>
+          <td class="chunks">
+            @for (entry of chunkCounts(doc); track entry.strategy) {
+              <span
+                ><span class="muted mono">{{ entry.strategy }}</span> {{ entry.count }}</span
+              >
+            } @empty {
+              <span class="muted">–</span>
+            }
+          </td>
           <td><app-status-badge [status]="doc.status" /></td>
           <td>{{ doc.created_at | date: 'dd.MM.yyyy HH:mm' }}</td>
         </tr>
