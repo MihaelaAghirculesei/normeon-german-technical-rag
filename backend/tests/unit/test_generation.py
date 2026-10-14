@@ -63,9 +63,7 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         seen["retrieval_mode"] = retrieval_mode
         seen["rerank_top_k"] = rerank_top_k
         seen["candidate_k"] = candidate_k
-        timing = PipelineTiming(
-            hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0
-        )
+        timing = PipelineTiming(hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0)
         return RetrievalResult(context=chunks, reranked=chunks, timing=timing)
 
     monkeypatch.setattr(generation, "retrieve_context", fake_retrieve_context)
@@ -95,8 +93,13 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
     seen = _stub_retrieval(monkeypatch, [_chunk("5.1"), _chunk("5.2")])
 
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="Welche Lenkkraft?", strategy="structural",
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Welche Lenkkraft?",
+        strategy="structural",
     )
 
     assert seen == {
@@ -134,8 +137,12 @@ async def test_the_model_sees_the_rendered_prompt_with_the_context_block(
             return LlmResponse(text="ok [S1]", model="spy")
 
     await generation.generate_answer(
-        object(), object(), object(), _Spy(),
-        tenant_id=TENANT, question="Frage X?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage X?",
     )
 
     assert "[S1] Quelle: StVZO.pdf | Seite 12 | Abschnitt 5.1" in captured["user"]
@@ -161,8 +168,12 @@ async def test_empty_retrieval_abstains_pre_generation_without_calling_the_llm(
     _stub_retrieval(monkeypatch, [])
 
     result = await generation.generate_answer(
-        object(), object(), object(), _RefusingLlm(),
-        tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
+        object(),
+        object(),
+        object(),
+        _RefusingLlm(),
+        tenant_id=TENANT,
+        question="Wie hoch ist der Oelpreis?",
     )
 
     assert result.sources == []
@@ -177,8 +188,12 @@ async def test_a_low_rerank_score_abstains_pre_generation_without_calling_the_ll
     _stub_retrieval(monkeypatch, [_chunk("5.1", score=-3.0)])
 
     result = await generation.generate_answer(
-        object(), object(), object(), _RefusingLlm(),
-        tenant_id=TENANT, question="Wie hoch ist der Oelpreis in Katar?",
+        object(),
+        object(),
+        object(),
+        _RefusingLlm(),
+        tenant_id=TENANT,
+        question="Wie hoch ist der Oelpreis in Katar?",
     )
 
     assert result.answer == "NICHT_GEFUNDEN"
@@ -192,8 +207,12 @@ async def test_a_rerank_score_at_or_above_the_threshold_still_calls_the_llm(
     _stub_retrieval(monkeypatch, [_chunk("5.1", score=0.0)])
 
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert result.answer != "NICHT_GEFUNDEN"
@@ -216,8 +235,12 @@ async def test_an_invented_citation_marker_is_dropped_and_counted(
     before = hallucinated_citation_total.value
 
     result = await generation.generate_answer(
-        object(), object(), object(), _Spy(),
-        tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert "[S9]" not in result.answer
@@ -232,9 +255,12 @@ async def test_claims_with_zero_valid_citations_become_an_abstention(
     _stub_retrieval(monkeypatch, [_chunk("5.1")])
 
     result = await generation.generate_answer(
-        object(), object(), object(),
+        object(),
+        object(),
+        object(),
         FakeLlmClient(canned="Angeblich gilt Regel Z [S9]."),
-        tenant_id=TENANT, question="Frage?",
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert result.answer == "NICHT_GEFUNDEN"
@@ -245,8 +271,13 @@ async def test_prompt_name_override_is_honoured(monkeypatch: Any) -> None:
     _stub_retrieval(monkeypatch, [_chunk("1")])
 
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="q", prompt_name="answer_de.v1",
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="q",
+        prompt_name="answer_de.v1",
     )
 
     assert result.prompt_name == "answer_de.v1"
@@ -277,7 +308,12 @@ async def test_conflicting_requirement_code_versions_add_an_instruction_to_the_s
             return LlmResponse(text="[S1]", model="spy")
 
     await generation.generate_answer(
-        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert "unterschiedlichen Versionen" in captured["system"]
@@ -305,7 +341,12 @@ async def test_a_single_version_label_adds_no_conflict_instruction(
             return LlmResponse(text="[S1]", model="spy")
 
     await generation.generate_answer(
-        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert "unterschiedlichen Versionen" not in captured["system"]
@@ -381,8 +422,13 @@ async def test_stream_emits_events_in_the_documented_order(monkeypatch: Any) -> 
     events = [
         event
         async for event in generation.generate_answer_stream(
-            object(), object(), object(), FakeLlmClient(),
-            tenant_id=TENANT, question="Welche Lenkkraft?", strategy="structural",
+            object(),
+            object(),
+            object(),
+            FakeLlmClient(),
+            tenant_id=TENANT,
+            question="Welche Lenkkraft?",
+            strategy="structural",
         )
     ]
 
@@ -495,8 +541,12 @@ async def test_stream_abstains_pre_generation_without_calling_the_llm(monkeypatc
     events = [
         event
         async for event in generation.generate_answer_stream(
-            object(), object(), object(), _RefusingStreamLlm(),
-            tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
+            object(),
+            object(),
+            object(),
+            _RefusingStreamLlm(),
+            tenant_id=TENANT,
+            question="Wie hoch ist der Oelpreis?",
         )
     ]
 
@@ -518,7 +568,12 @@ async def test_stream_tokens_are_raw_but_done_citations_exclude_invented_markers
     events = [
         event
         async for event in generation.generate_answer_stream(
-            object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+            object(),
+            object(),
+            object(),
+            llm,
+            tenant_id=TENANT,
+            question="Frage?",
         )
     ]
 
@@ -542,7 +597,12 @@ async def test_stream_adds_the_conflict_instruction_to_the_system_message(
     llm = _StreamSpy(["[S1]"])
 
     async for _ in generation.generate_answer_stream(
-        object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        llm,
+        tenant_id=TENANT,
+        question="Frage?",
     ):
         pass
 
@@ -557,8 +617,12 @@ async def test_an_llm_error_mid_stream_becomes_an_error_event_not_a_dead_stream(
     events = [
         event
         async for event in generation.generate_answer_stream(
-            object(), object(), object(), _FailingStreamLlm(),
-            tenant_id=TENANT, question="Frage?",
+            object(),
+            object(),
+            object(),
+            _FailingStreamLlm(),
+            tenant_id=TENANT,
+            question="Frage?",
         )
     ]
 
@@ -573,7 +637,12 @@ async def test_closing_the_stream_early_cascades_to_the_llm_client(monkeypatch: 
     llm = _FinallyTrackingLlm()
 
     agen = generation.generate_answer_stream(
-        object(), object(), object(), llm, tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        llm,
+        tenant_id=TENANT,
+        question="Frage?",
     )
     async for event in agen:
         if event.event == "token":
@@ -591,8 +660,12 @@ async def test_generate_answer_writes_a_query_log_row(monkeypatch: Any) -> None:
     calls = _stub_query_log(monkeypatch)
 
     result = await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="Welche Lenkkraft?",
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Welche Lenkkraft?",
     )
 
     assert len(calls) == 1
@@ -615,8 +688,12 @@ async def test_generate_answer_logs_pre_generation_abstention_as_a_query(
     calls = _stub_query_log(monkeypatch)
 
     await generation.generate_answer(
-        object(), object(), object(), _RefusingLlm(),
-        tenant_id=TENANT, question="Wie hoch ist der Oelpreis?",
+        object(),
+        object(),
+        object(),
+        _RefusingLlm(),
+        tenant_id=TENANT,
+        question="Wie hoch ist der Oelpreis?",
     )
 
     assert len(calls) == 1
@@ -631,8 +708,12 @@ async def test_generate_answer_stream_writes_a_query_log_row(monkeypatch: Any) -
     calls = _stub_query_log(monkeypatch)
 
     async for _ in generation.generate_answer_stream(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Frage?",
     ):
         pass
 
@@ -654,7 +735,12 @@ async def test_cost_usd_is_computed_for_a_priced_model(monkeypatch: Any) -> None
             )
 
     result = await generation.generate_answer(
-        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     # gpt-4o-mini in pricing.yaml: $0.15/Mtok in, $0.60/Mtok out
@@ -671,12 +757,19 @@ async def test_cost_usd_is_none_for_an_unpriced_model(monkeypatch: Any) -> None:
             self, *, system: str, user: str, temperature: float, max_tokens: int
         ) -> LlmResponse:
             return LlmResponse(
-                text="[S1]", model="some-self-hosted-model",
-                prompt_tokens=100, completion_tokens=50,
+                text="[S1]",
+                model="some-self-hosted-model",
+                prompt_tokens=100,
+                completion_tokens=50,
             )
 
     result = await generation.generate_answer(
-        object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage?",
     )
 
     assert result.cost_usd is None
@@ -697,12 +790,18 @@ async def test_stream_cost_usd_uses_usage_reported_on_the_stream(monkeypatch: An
     events = [
         event
         async for event in generation.generate_answer_stream(
-            object(), object(), object(), _Spy(), tenant_id=TENANT, question="Frage?",
+            object(),
+            object(),
+            object(),
+            _Spy(),
+            tenant_id=TENANT,
+            question="Frage?",
         )
     ]
 
     done = events[-1]
     assert done.data["cost_usd"] == round(1000 / 1_000_000 * 0.15 + 500 / 1_000_000 * 0.60, 6)
+
 
 async def test_query_log_config_hash_reflects_the_applied_overrides(
     monkeypatch: Any,
@@ -719,8 +818,13 @@ async def test_query_log_config_hash_reflects_the_applied_overrides(
         {"candidate_k": 10},
     ):
         await generation.generate_answer(
-            object(), object(), object(), FakeLlmClient(),
-            tenant_id=TENANT, question="Welche Lenkkraft?", **overrides,
+            object(),
+            object(),
+            object(),
+            FakeLlmClient(),
+            tenant_id=TENANT,
+            question="Welche Lenkkraft?",
+            **overrides,
         )
 
     hashes = [call["config_hash"] for call in calls]
@@ -731,8 +835,13 @@ async def test_candidate_k_is_forwarded_to_retrieval(monkeypatch: Any) -> None:
     seen = _stub_retrieval(monkeypatch, [_chunk("5.1")])
 
     await generation.generate_answer(
-        object(), object(), object(), FakeLlmClient(),
-        tenant_id=TENANT, question="Frage?", candidate_k=10,
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Frage?",
+        candidate_k=10,
     )
 
     assert seen["candidate_k"] == 10

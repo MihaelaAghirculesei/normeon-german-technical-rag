@@ -1,4 +1,6 @@
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, inject } from '@angular/core';
+
+import { AuthService } from '../core/auth';
 
 import type { components } from './schema';
 import { readSse } from './sse';
@@ -23,14 +25,21 @@ export class ChatHttpError extends Error {
 
 /** POST a question and yield the typed SSE events as they arrive. Aborting
  * `signal` cancels the request; the backend sees the disconnect and stops
- * the model call. */
+ * the model call. Plain fetch, so the HttpClient interceptor does not run:
+ * the bearer token is passed in explicitly. */
 export async function* streamChat(
   request: ChatRequest,
   signal: AbortSignal,
+  token: string | null,
 ): AsyncGenerator<ChatStreamEvent> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const response = await fetch(CHAT_STREAM_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers,
     body: JSON.stringify(request),
     signal,
   });
@@ -42,10 +51,17 @@ export async function* streamChat(
   }
 }
 
-export type StreamChat = typeof streamChat;
+export type StreamChat = (
+  request: ChatRequest,
+  signal: AbortSignal,
+) => AsyncGenerator<ChatStreamEvent>;
 
-/** Seam for tests: the chat state takes its transport from here. */
+/** Seam for tests: the chat state takes its transport from here. The real
+ * one signs every request with the current session's token. */
 export const STREAM_CHAT = new InjectionToken<StreamChat>('STREAM_CHAT', {
   providedIn: 'root',
-  factory: () => streamChat,
+  factory: () => {
+    const auth = inject(AuthService);
+    return (request, signal) => streamChat(request, signal, auth.token());
+  },
 });

@@ -94,9 +94,7 @@ def test_cohens_kappa_empty_raises() -> None:
 def test_write_human_review_worksheet_has_fifteen_rows_and_a_blank_human_score_column(
     tmp_path: Path,
 ) -> None:
-    questions = [
-        _question(f"Q{i:03d}", category) for category in CATEGORIES for i in range(1, 6)
-    ]
+    questions = [_question(f"Q{i:03d}", category) for category in CATEGORIES for i in range(1, 6)]
     scored = [
         ScoredQuestionRun(
             question_id=q.id,

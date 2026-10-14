@@ -46,12 +46,12 @@ describe('UploadQueue', () => {
         { status: code, statusText: 'OK' },
       );
 
-  it('sends the file with tenant, type and trimmed version', () => {
+  it('sends the file with type and trimmed version, never a tenant', () => {
     queue.add([file('Lastenheft.docx')], OPTIONS);
 
     const request = http.expectOne('/api/v1/documents');
     const form = request.request.body as FormData;
-    expect(form.get('tenant_id')).toBe('00000000-0000-0000-0000-000000000001');
+    expect(form.has('tenant_id')).toBe(false); // the tenant comes from the token
     expect(form.get('doc_type')).toBe('lastenheft');
     expect(form.get('version_label')).toBe('v2.0');
     expect((form.get('file') as File).name).toBe('Lastenheft.docx');

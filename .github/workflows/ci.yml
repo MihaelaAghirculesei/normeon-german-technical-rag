@@ -36,7 +36,12 @@ jobs:
         run: mypy src
 
       - name: Tests
-        run: pytest
+        run: pytest --ignore=tests/security
+
+      # Tenant isolation against a real Postgres with row-level security on:
+      # its own step so a failure here is unmistakable in the run summary.
+      - name: Security tests
+        run: pytest tests/security
 
   frontend:
     runs-on: ubuntu-latest

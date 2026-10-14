@@ -93,5 +93,28 @@ class Settings(BaseSettings):
     # errors, 5xx) -- a 4xx is never retried.
     min_rerank_score_for_answer: float = 0.0
 
+    # Auth (Giorno 25). The default secret only exists so a fresh clone runs;
+    # outside `environment = "development"` / "test" startup refuses it (see
+    # `insecure_settings`). Tokens are short-lived on purpose: there is no
+    # refresh flow, so a working day is the trade-off between convenience
+    # and how long a leaked token stays usable.
+    jwt_secret: str = "dev-only-insecure-secret-change-me"
+    jwt_issuer: str = "normeon"
+    jwt_ttl_minutes: int = 8 * 60
+    # Password for the two demo users `python -m app.db.seed` creates.
+    demo_user_password: str = "normeon-demo"
+
 
 settings = Settings()
+
+_DEV_ENVIRONMENTS = frozenset({"development", "test"})
+
+
+def insecure_settings(s: Settings) -> list[str]:
+    """Settings that are fine on a laptop and dangerous anywhere else."""
+    if s.environment in _DEV_ENVIRONMENTS:
+        return []
+    problems = []
+    if s.jwt_secret == Settings.model_fields["jwt_secret"].default or len(s.jwt_secret) < 32:
+        problems.append("JWT_SECRET must be set to a random value of at least 32 characters")
+    return problems

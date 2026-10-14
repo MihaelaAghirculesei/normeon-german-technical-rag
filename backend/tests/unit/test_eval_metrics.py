@@ -385,8 +385,11 @@ def test_compute_metrics_raises_on_empty_report() -> None:
 
 def _report(results: list[QuestionRun]) -> EvalReport:
     return EvalReport(
-        config=_config(), config_hash="abc123", created_at=datetime.now(UTC),
-        n_questions=len(results), results=results,
+        config=_config(),
+        config_hash="abc123",
+        created_at=datetime.now(UTC),
+        n_questions=len(results),
+        results=results,
     )
 
 
@@ -401,18 +404,22 @@ def test_question_outcomes_follow_the_accuracy_and_recall_rules() -> None:
         _question(id="Q003", category="unanswerable", gold_sources=[], should_abstain=True),
         _question(id="Q004"),
     ]
-    report = _report([
-        _run("Q001", retrieved=[_retrieved()]),
-        _run("Q002", retrieved=[_retrieved(filename="FZV.pdf")]),
-        _run("Q003", abstained=True),
-        _run("Q004", error="boom"),
-    ])
-    scored = _scored_report([
-        _scored("Q001"),
-        _scored("Q002", points_missing=["x"], layer2=JudgeResult(score=1, rationale="partly")),
-        _scored("Q003"),
-        _scored("Q004", points_missing=["x"], layer2=JudgeResult(score=0, rationale="empty")),
-    ])
+    report = _report(
+        [
+            _run("Q001", retrieved=[_retrieved()]),
+            _run("Q002", retrieved=[_retrieved(filename="FZV.pdf")]),
+            _run("Q003", abstained=True),
+            _run("Q004", error="boom"),
+        ]
+    )
+    scored = _scored_report(
+        [
+            _scored("Q001"),
+            _scored("Q002", points_missing=["x"], layer2=JudgeResult(score=1, rationale="partly")),
+            _scored("Q003"),
+            _scored("Q004", points_missing=["x"], layer2=JudgeResult(score=0, rationale="empty")),
+        ]
+    )
 
     outcomes = question_outcomes(report, scored, questions)
 

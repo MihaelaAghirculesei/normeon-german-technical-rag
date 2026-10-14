@@ -1,8 +1,7 @@
-import { Component, inject, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 
 import type { Source } from '../api/chat';
 import { chunkContextResource } from '../api/chunks';
-import { TENANT_ID } from '../core/tenant';
 import { Notice } from '../shared/notice';
 
 /** The source behind a citation: document, section and pages, and the
@@ -15,15 +14,10 @@ import { Notice } from '../shared/notice';
   styleUrl: './citation-panel.css',
 })
 export class CitationPanel {
-  private readonly tenantId = inject(TENANT_ID);
-
   readonly source = input.required<Source>();
   readonly closed = output<void>();
 
-  protected readonly context = chunkContextResource(
-    () => this.source().chunk_id,
-    () => this.tenantId,
-  );
+  protected readonly context = chunkContextResource(() => this.source().chunk_id);
 
   protected pages(from: number, to: number): string {
     return from === to ? `S. ${from}` : `S. ${from}–${to}`;

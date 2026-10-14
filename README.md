@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 24 of 30. Retrieval is feature-complete: structured German
+Status: Day 25 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -63,6 +63,19 @@ indexing, ready) by polling. An identical file is recognised by its hash
 and reported as such, and is never processed twice, even when it arrives
 again while the first copy is still being processed. The document table
 shows chunk counts per chunking strategy.
+Security: login issues a short-lived JWT carrying the user's tenant and
+role, and the tenant comes from that token only, never from the request.
+Tenant isolation has two layers. The application filters every query on
+the tenant, and Postgres row-level security enforces the same boundary
+underneath: row-level security is the seatbelt, the application's filters
+are the braces. The app switches to a dedicated non-superuser role for
+every tenant-scoped transaction, because a superuser connection would
+silently bypass every policy (ADR 0004). `tests/security` proves it:
+- a user asking a question that only another tenant's documents can
+  answer gets `NICHT_GEFUNDEN`, not a 403;
+- unfiltered SQL sees one tenant only;
+- cross-tenant writes are rejected;
+- mutation runs show each layer holding on its own.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
@@ -93,6 +106,20 @@ curl localhost:8010/health
 
 (Ports are offset from the defaults — 8010/5433/8081 — to avoid clashing
 with other local projects. See `docker-compose.yml`.)
+
+Database schema and demo users (two tenants: `anna@demo.normeon.dev`,
+admin of the demo tenant that holds the corpus, and
+`ben@zulieferer.normeon.dev`, reader in an empty second tenant; both with
+the password from `DEMO_USER_PASSWORD`, default `normeon-demo`):
+
+```
+cd backend
+alembic upgrade head
+python -m app.db.seed
+```
+
+Outside development, set `ENVIRONMENT` and a random `JWT_SECRET` (32+
+characters): the backend refuses to start with the default one.
 
 Frontend (Node 22.22.3+), with the backend running:
 

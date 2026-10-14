@@ -13,9 +13,9 @@ from fastapi.testclient import TestClient
 from app.api.v1 import chunks
 from app.core.errors import ChunkNotFoundError
 from app.db.models import Chunk, Document
-from app.db.session import get_session
 from app.main import app
 from app.services.chunks import ChunkContext
+from tests.unit.auth_helpers import authenticate
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 DOCUMENT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -62,7 +62,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Any:
         )
 
     monkeypatch.setattr(chunks, "get_chunk_context", fake_get_chunk_context)
-    app.dependency_overrides[get_session] = lambda: object()
+    authenticate(app, object())
     yield TestClient(app), calls
     app.dependency_overrides.clear()
 
@@ -70,9 +70,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Any:
 def test_context_returns_the_chunk_between_its_neighbours(client: Any) -> None:
     http, calls = client
 
-    response = http.get(
-        f"/api/v1/chunks/{_chunk(2).id}/context", params={"tenant_id": str(TENANT_ID)}
-    )
+    response = http.get(f"/api/v1/chunks/{_chunk(2).id}/context")
 
     assert response.status_code == 200
     body = response.json()
@@ -89,7 +87,7 @@ def test_context_forwards_the_window(client: Any) -> None:
 
     http.get(
         f"/api/v1/chunks/{_chunk(2).id}/context",
-        params={"tenant_id": str(TENANT_ID), "window": 3},
+        params={"window": 3},
     )
 
     assert calls[0]["window"] == 3
@@ -101,7 +99,7 @@ def test_context_rejects_a_window_out_of_range(client: Any, window: int) -> None
 
     response = http.get(
         f"/api/v1/chunks/{_chunk(2).id}/context",
-        params={"tenant_id": str(TENANT_ID), "window": window},
+        params={"window": window},
     )
 
     assert response.status_code == 422
@@ -110,9 +108,7 @@ def test_context_rejects_a_window_out_of_range(client: Any, window: int) -> None
 def test_context_of_an_unknown_chunk_is_a_typed_404(client: Any) -> None:
     http, _ = client
 
-    response = http.get(
-        f"/api/v1/chunks/{uuid.uuid4()}/context", params={"tenant_id": str(TENANT_ID)}
-    )
+    response = http.get(f"/api/v1/chunks/{uuid.uuid4()}/context")
 
     assert response.status_code == 404
     assert response.json()["code"] == "chunk_not_found"

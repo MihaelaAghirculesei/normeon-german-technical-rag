@@ -159,7 +159,9 @@ class _RaisingLlmClient:
 
 async def test_score_layer2_surfaces_a_provider_exception_as_judge_error() -> None:
     result = await score_layer2(
-        _RaisingLlmClient(), question=_question(), answer="irgendeine Antwort"  # type: ignore[arg-type]
+        _RaisingLlmClient(),
+        question=_question(),
+        answer="irgendeine Antwort",  # type: ignore[arg-type]
     )
 
     assert isinstance(result, JudgeError)

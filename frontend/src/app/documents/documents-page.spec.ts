@@ -3,9 +3,9 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 
 import type { DocumentSummary } from '../api/api-types';
+import { AuthService } from '../core/auth';
+import { ANNA, signedIn, signedOut } from '../core/testing';
 import { DocumentsPage } from './documents-page';
-
-const TENANT = '00000000-0000-0000-0000-000000000001';
 
 const LASTENHEFT: DocumentSummary = {
   document_id: '11111111-1111-1111-1111-111111111111',
@@ -31,14 +31,17 @@ describe('DocumentsPage', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    signedOut();
+  });
 
   async function render(respond: (url: string) => void) {
     const fixture = TestBed.createComponent(DocumentsPage);
     // Not whenStable() yet: the app only becomes stable once the request
     // in flight is answered, which is what respond() does.
     TestBed.tick();
-    respond(`/api/v1/documents?tenant_id=${TENANT}`);
+    respond('/api/v1/documents');
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }
@@ -56,6 +59,22 @@ describe('DocumentsPage', () => {
     );
     expect(chunkLines).toEqual(['fixed_500 5', 'structural 6']);
     expect(cells[6]).toBe('Bereit');
+  });
+
+  it('offers no upload to a reader', async () => {
+    TestBed.inject(AuthService).logout();
+    signedIn({ ...ANNA, role: 'reader' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [DocumentsPage],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+
+    const el = await render((url) => http.expectOne(url).flush([]));
+
+    expect(el.querySelector('app-upload-panel')).toBeNull();
+    expect(el.textContent).toContain('Nur Administratoren');
   });
 
   it('says so when there are no documents', async () => {
