@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Response, UploadFile
@@ -22,11 +22,20 @@ class DocumentStatusResponse(BaseModel):
     status: str
 
 
+UploadOutcome = Literal["created", "duplicate", "in_progress", "retrying"]
+
+
 class DocumentUploadResponse(DocumentStatusResponse):
-    # Only meaningful as the answer to an upload: it says whether this
-    # request created the document or found an existing one. Reporting it
-    # on a plain status read would always be a confusing "false".
-    already_ingested: bool
+    # Only meaningful as the answer to an upload, so not on the status read:
+    #   created     -- new document, processing scheduled (201)
+    #   duplicate   -- identical file already ingested, nothing to do (200)
+    #   in_progress -- identical file is being processed right now; it is
+    #                  not scheduled a second time (200)
+    #   retrying    -- identical file failed before; processing resumes (200)
+    outcome: UploadOutcome
+
+
+_IN_FLIGHT = frozenset({"pending", "parsing", "embedding"})
 
 
 @router.post("", response_model=DocumentUploadResponse, status_code=201)
@@ -40,20 +49,34 @@ async def upload_document(
     file: Annotated[UploadFile, File()],
 ) -> DocumentUploadResponse:
     content = await file.read()
-    document, already_ingested = await get_or_create_document(
+    document, created = await get_or_create_document(
         session, tenant_id, file.filename or "unnamed", doc_type, content
     )
-    if already_ingested:
+
+    outcome: UploadOutcome
+    if created:
+        outcome = "created"
+    elif document.status == "ready":
+        outcome = "duplicate"
+    elif document.status in _IN_FLIGHT:
+        # Known limit: a document left in flight by a crashed process stays
+        # so until scripts/ingest_corpus.py (or a later upload after it is
+        # marked failed) resumes it.
+        outcome = "in_progress"
+    else:
+        outcome = "retrying"
+
+    if outcome in ("created", "retrying"):
+        background_tasks.add_task(_process_in_background, document.id, content, embedder)
+    if not created:
         # Nothing was created, so 201 would be a lie -- report the existing
         # resource with a plain 200 instead.
         response.status_code = 200
-    else:
-        background_tasks.add_task(_process_in_background, document.id, content, embedder)
     return DocumentUploadResponse(
         document_id=document.id,
         filename=document.filename,
         status=document.status,
-        already_ingested=already_ingested,
+        outcome=outcome,
     )
 
 

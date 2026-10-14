@@ -63,7 +63,7 @@ class _FakeSession:
 @pytest.fixture
 def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
     def make(
-        document: Document | None, already_ingested: bool = False
+        document: Document | None, created: bool = False
     ) -> tuple[TestClient, list[UUID]]:
         processed: list[UUID] = []
 
@@ -71,7 +71,7 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
             session: Any, tenant_id: UUID, filename: str, doc_type: str, content: bytes
         ) -> tuple[Document, bool]:
             assert document is not None
-            return document, already_ingested
+            return document, created
 
         async def fake_process(document_id: UUID, content: bytes, embedder: Any) -> None:
             processed.append(document_id)
@@ -98,7 +98,7 @@ def _upload(client: TestClient) -> Any:
 def test_uploading_a_new_document_returns_201_and_schedules_processing(
     client_factory: Any,
 ) -> None:
-    client, processed = client_factory(_document("pending"), already_ingested=False)
+    client, processed = client_factory(_document("pending"), created=True)
 
     response = _upload(client)
 
@@ -106,23 +106,46 @@ def test_uploading_a_new_document_returns_201_and_schedules_processing(
     body = response.json()
     assert body["document_id"] == str(DOCUMENT_ID)
     assert body["status"] == "pending"
-    assert body["already_ingested"] is False
+    assert body["outcome"] == "created"
     assert processed == [DOCUMENT_ID]
 
 
 def test_uploading_an_already_ingested_document_returns_200_and_does_no_work(
     client_factory: Any,
 ) -> None:
-    client, processed = client_factory(_document("ready"), already_ingested=True)
+    client, processed = client_factory(_document("ready"))
 
     response = _upload(client)
 
     # 201 Created would be a lie: nothing was created this time.
     assert response.status_code == 200
     body = response.json()
-    assert body["already_ingested"] is True
+    assert body["outcome"] == "duplicate"
     assert body["status"] == "ready"
     assert processed == []
+
+
+@pytest.mark.parametrize("status", ["pending", "parsing", "embedding"])
+def test_uploading_a_document_still_being_processed_does_not_process_it_twice(
+    client_factory: Any, status: str
+) -> None:
+    client, processed = client_factory(_document(status))
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "in_progress"
+    assert processed == []
+
+
+def test_uploading_a_document_that_failed_before_retries_it(client_factory: Any) -> None:
+    client, processed = client_factory(_document("failed"))
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "retrying"
+    assert processed == [DOCUMENT_ID]
 
 
 def test_getting_a_document_returns_its_current_status(client_factory: Any) -> None:
@@ -133,8 +156,8 @@ def test_getting_a_document_returns_its_current_status(client_factory: Any) -> N
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "embedding"
-    # already_ingested belongs to the upload response only.
-    assert "already_ingested" not in body
+    # outcome belongs to the upload response only.
+    assert "outcome" not in body
 
 
 def test_listing_documents_returns_summaries(client_factory: Any) -> None:

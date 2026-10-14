@@ -810,9 +810,15 @@
             "type": "string",
             "title": "Status"
           },
-          "already_ingested": {
-            "type": "boolean",
-            "title": "Already Ingested"
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "duplicate",
+              "in_progress",
+              "retrying"
+            ],
+            "title": "Outcome"
           }
         },
         "type": "object",
@@ -820,7 +826,7 @@
           "document_id",
           "filename",
           "status",
-          "already_ingested"
+          "outcome"
         ],
         "title": "DocumentUploadResponse"
       },
