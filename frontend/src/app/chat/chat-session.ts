@@ -11,7 +11,6 @@ import {
 } from '../api/chat';
 import { signOut } from '../core/auth-http';
 import { AuthService } from '../core/auth';
-import { TENANT_ID } from '../core/tenant';
 
 export type ChatStatus = 'idle' | 'streaming' | 'done' | 'cancelled' | 'error';
 
@@ -36,7 +35,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 @Injectable()
 export class ChatSession {
   private readonly streamChat = inject(STREAM_CHAT);
-  private readonly tenantId = inject(TENANT_ID);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private controller: AbortController | null = null;
@@ -76,7 +74,7 @@ export class ChatSession {
     this.status.set('streaming');
 
     try {
-      const events = this.streamChat({ question, tenant_id: this.tenantId }, controller.signal);
+      const events = this.streamChat({ question }, controller.signal);
       for await (const event of events) {
         if (!current()) return;
         switch (event.event) {

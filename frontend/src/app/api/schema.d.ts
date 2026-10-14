@@ -164,11 +164,6 @@ export interface components {
     schemas: {
         /** Body_upload_document_api_v1_documents_post */
         Body_upload_document_api_v1_documents_post: {
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
             /** Doc Type */
             doc_type: string;
             /** File */
@@ -184,11 +179,6 @@ export interface components {
         ChatRequest: {
             /** Question */
             question: string;
-            /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
             /** Strategy */
             strategy?: ("fixed_500" | "structural") | null;
         };
@@ -473,11 +463,6 @@ export interface components {
             /** Question */
             question: string;
             /**
-             * Tenant Id
-             * Format: uuid
-             */
-            tenant_id: string;
-            /**
              * Mode
              * @default vector
              * @enum {string}
@@ -696,9 +681,7 @@ export interface operations {
     };
     list_documents_api_v1_documents_get: {
         parameters: {
-            query: {
-                tenant_id: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -712,15 +695,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -890,8 +864,7 @@ export interface operations {
     };
     chunk_context_api_v1_chunks__chunk_id__context_get: {
         parameters: {
-            query: {
-                tenant_id: string;
+            query?: {
                 window?: number;
             };
             header?: never;

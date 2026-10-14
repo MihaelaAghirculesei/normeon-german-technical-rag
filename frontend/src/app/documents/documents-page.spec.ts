@@ -5,8 +5,6 @@ import { TestBed } from '@angular/core/testing';
 import type { DocumentSummary } from '../api/api-types';
 import { DocumentsPage } from './documents-page';
 
-const TENANT = '00000000-0000-0000-0000-000000000001';
-
 const LASTENHEFT: DocumentSummary = {
   document_id: '11111111-1111-1111-1111-111111111111',
   filename: 'Lastenheft-EPS-v2.0.docx',
@@ -38,7 +36,7 @@ describe('DocumentsPage', () => {
     // Not whenStable() yet: the app only becomes stable once the request
     // in flight is answered, which is what respond() does.
     TestBed.tick();
-    respond(`/api/v1/documents?tenant_id=${TENANT}`);
+    respond('/api/v1/documents');
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }

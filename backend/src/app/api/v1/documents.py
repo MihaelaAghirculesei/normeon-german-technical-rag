@@ -3,15 +3,15 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.adapters.embedding.base import EmbeddingAdapter
-from app.api.deps import DbSession, EmbedderDep
+from app.api.deps import AdminDep, AuthDep, EmbedderDep, TenantSession
 from app.core.errors import DocumentNotFoundError, UnsupportedFileTypeError
 from app.db.models import Chunk, Document
-from app.db.session import async_session_factory
+from app.db.session import tenant_session
 from app.services.ingestion import SUPPORTED_SUFFIXES, get_or_create_document, process_document
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
@@ -42,10 +42,10 @@ _IN_FLIGHT = frozenset({"pending", "parsing", "embedding"})
 @router.post("", response_model=DocumentUploadResponse, status_code=201)
 async def upload_document(
     background_tasks: BackgroundTasks,
-    session: DbSession,
+    auth: AdminDep,
+    session: TenantSession,
     embedder: EmbedderDep,
     response: Response,
-    tenant_id: Annotated[UUID, Form()],
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
     version_label: Annotated[str | None, Form()] = None,
@@ -65,7 +65,7 @@ async def upload_document(
     content = await file.read()
     document, created = await get_or_create_document(
         session,
-        tenant_id,
+        auth.tenant_id,
         filename,
         doc_type,
         content,
@@ -88,7 +88,9 @@ async def upload_document(
         outcome = "retrying"
 
     if outcome in ("created", "retrying"):
-        background_tasks.add_task(_process_in_background, document.id, content, embedder)
+        background_tasks.add_task(
+            _process_in_background, auth.tenant_id, document.id, content, embedder
+        )
     if not created:
         # Nothing was created, so 201 would be a lie -- report the existing
         # resource with a plain 200 instead.
@@ -102,11 +104,12 @@ async def upload_document(
 
 
 async def _process_in_background(
-    document_id: UUID, content: bytes, embedder: EmbeddingAdapter
+    tenant_id: UUID, document_id: UUID, content: bytes, embedder: EmbeddingAdapter
 ) -> None:
     # Runs after the response has been sent, so it gets its own session
-    # rather than reusing the request's (already torn down by then).
-    async with async_session_factory() as session:
+    # rather than reusing the request's (already torn down by then) --
+    # scoped to the same tenant, so ingestion writes under RLS as well.
+    async with tenant_session(tenant_id) as session:
         document = await session.get(Document, document_id)
         if document is not None:
             await process_document(session, embedder, document, content)
@@ -128,11 +131,8 @@ class DocumentSummary(BaseModel):
 
 
 @router.get("", response_model=list[DocumentSummary])
-async def list_documents(
-    session: DbSession, tenant_id: Annotated[UUID, Query()]
-) -> list[DocumentSummary]:
-    # tenant_id is an explicit parameter until auth lands (Giorno 25);
-    # then it comes from the token instead.
+async def list_documents(auth: AuthDep, session: TenantSession) -> list[DocumentSummary]:
+    tenant_id = auth.tenant_id
     documents = await session.scalars(
         select(Document)
         .where(Document.tenant_id == tenant_id)
@@ -164,8 +164,13 @@ async def list_documents(
 
 
 @router.get("/{document_id}", response_model=DocumentStatusResponse)
-async def get_document_status(document_id: UUID, session: DbSession) -> DocumentStatusResponse:
-    document = await session.get(Document, document_id)
+async def get_document_status(
+    document_id: UUID, auth: AuthDep, session: TenantSession
+) -> DocumentStatusResponse:
+    # Another tenant's document is reported exactly like a missing one.
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id, Document.tenant_id == auth.tenant_id)
+    )
     if document is None:
         raise DocumentNotFoundError(f"document {document_id} not found")
     return DocumentStatusResponse(

@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.api.deps import DbSession, EmbedderDep, RerankerDep
+from app.api.deps import AuthDep, EmbedderDep, RerankerDep, TenantSession
 from app.services.retrieval import (
     fts_search,
     hybrid_search,
@@ -28,7 +28,6 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
 class SearchRequest(BaseModel):
     question: str = Field(min_length=1)
-    tenant_id: UUID
     mode: Literal["vector", "fts", "hybrid", "pipeline"] = "vector"
     strategy: Literal["fixed_500", "structural"] | None = None
     k: int | None = Field(default=None, ge=1, le=100)  # hits to return / rerank_top_k
@@ -63,7 +62,8 @@ class SearchResponse(BaseModel):
 @router.post("", response_model=SearchResponse)
 async def search(
     payload: SearchRequest,
-    session: DbSession,
+    auth: AuthDep,
+    session: TenantSession,
     embedder: EmbedderDep,
     reranker: RerankerDep,
 ) -> SearchResponse:
@@ -72,7 +72,7 @@ async def search(
     if payload.mode == "fts":
         chunks = await fts_search(
             session,
-            tenant_id=payload.tenant_id,
+            tenant_id=auth.tenant_id,
             question=payload.question,
             strategy=payload.strategy,
             k=payload.k,
@@ -81,7 +81,7 @@ async def search(
         chunks = await hybrid_search(
             session,
             embedder,
-            tenant_id=payload.tenant_id,
+            tenant_id=auth.tenant_id,
             question=payload.question,
             strategy=payload.strategy,
             top_k=payload.k,
@@ -92,7 +92,7 @@ async def search(
             session,
             embedder,
             reranker,
-            tenant_id=payload.tenant_id,
+            tenant_id=auth.tenant_id,
             question=payload.question,
             strategy=payload.strategy,
             rerank_top_k=payload.k,
@@ -103,7 +103,7 @@ async def search(
         chunks = await vector_search(
             session,
             embedder,
-            tenant_id=payload.tenant_id,
+            tenant_id=auth.tenant_id,
             question=payload.question,
             strategy=payload.strategy,
             k=payload.k,
