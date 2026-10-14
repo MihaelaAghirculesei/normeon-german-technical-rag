@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -8,10 +9,10 @@ from sqlalchemy import select
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.api.deps import DbSession, EmbedderDep
-from app.core.errors import DocumentNotFoundError
+from app.core.errors import DocumentNotFoundError, UnsupportedFileTypeError
 from app.db.models import Document
 from app.db.session import async_session_factory
-from app.services.ingestion import get_or_create_document, process_document
+from app.services.ingestion import SUPPORTED_SUFFIXES, get_or_create_document, process_document
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -48,9 +49,19 @@ async def upload_document(
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
 ) -> DocumentUploadResponse:
+    filename = file.filename or "unnamed"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        # Rejected before anything is stored: a Document row for a file no
+        # parser can read would only ever end up "failed".
+        raise UnsupportedFileTypeError(
+            f"{suffix or 'no extension'} is not supported; upload "
+            + " or ".join(sorted(SUPPORTED_SUFFIXES))
+        )
+
     content = await file.read()
     document, created = await get_or_create_document(
-        session, tenant_id, file.filename or "unnamed", doc_type, content
+        session, tenant_id, filename, doc_type, content
     )
 
     outcome: UploadOutcome

@@ -28,6 +28,7 @@ _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
     ".pdf": parse_pdf,
     ".docx": parse_docx,
 }
+SUPPORTED_SUFFIXES = frozenset(_PARSERS)
 
 
 async def get_or_create_document(
