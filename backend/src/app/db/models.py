@@ -24,6 +24,22 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 
+class User(Base):
+    """A login. Not tenant-isolated by RLS: login looks a user up by email
+    before any tenant is known."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"))
+    email: Mapped[str] = mapped_column(unique=True)
+    password_hash: Mapped[str]
+    role: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (UniqueConstraint("tenant_id", "content_hash", name="uq_doc_tenant_hash"),)
