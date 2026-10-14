@@ -7,6 +7,8 @@
   </button>
 </app-page-header>
 
+<app-upload-panel (changed)="documents.reload()" />
+
 @if (documents.error()) {
   <app-notice kind="error"
     >Die Dokumente konnten nicht geladen werden. Läuft das Backend?</app-notice

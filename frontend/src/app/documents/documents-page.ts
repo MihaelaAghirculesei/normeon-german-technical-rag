@@ -7,10 +7,11 @@ import { TENANT_ID } from '../core/tenant';
 import { Notice } from '../shared/notice';
 import { PageHeader } from '../shared/page-header';
 import { StatusBadge } from '../shared/status-badge';
+import { UploadPanel } from './upload-panel';
 
 @Component({
   selector: 'app-documents-page',
-  imports: [DatePipe, Notice, PageHeader, StatusBadge],
+  imports: [DatePipe, Notice, PageHeader, StatusBadge, UploadPanel],
   templateUrl: './documents-page.html',
   styleUrl: './documents-page.css',
 })
