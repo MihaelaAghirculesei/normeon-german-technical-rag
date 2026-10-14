@@ -3,6 +3,8 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 
 import type { DocumentSummary } from '../api/api-types';
+import { AuthService } from '../core/auth';
+import { ANNA, signedIn, signedOut } from '../core/testing';
 import { DocumentsPage } from './documents-page';
 
 const LASTENHEFT: DocumentSummary = {
@@ -29,7 +31,10 @@ describe('DocumentsPage', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    signedOut();
+  });
 
   async function render(respond: (url: string) => void) {
     const fixture = TestBed.createComponent(DocumentsPage);
@@ -54,6 +59,22 @@ describe('DocumentsPage', () => {
     );
     expect(chunkLines).toEqual(['fixed_500 5', 'structural 6']);
     expect(cells[6]).toBe('Bereit');
+  });
+
+  it('offers no upload to a reader', async () => {
+    TestBed.inject(AuthService).logout();
+    signedIn({ ...ANNA, role: 'reader' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [DocumentsPage],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+
+    const el = await render((url) => http.expectOne(url).flush([]));
+
+    expect(el.querySelector('app-upload-panel')).toBeNull();
+    expect(el.textContent).toContain('Nur Administratoren');
   });
 
   it('says so when there are no documents', async () => {
