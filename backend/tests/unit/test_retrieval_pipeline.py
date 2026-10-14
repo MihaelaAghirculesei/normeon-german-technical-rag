@@ -117,9 +117,7 @@ class _RecordingReranker:
     def __init__(self) -> None:
         self.seen: tuple[str, int] | None = None
 
-    def rerank(
-        self, query: str, chunks: list[RetrievedChunk], top_k: int
-    ) -> list[RetrievedChunk]:
+    def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
         self.seen = (query, top_k)
         return list(reversed(chunks))[:top_k]
 
@@ -230,9 +228,7 @@ async def test_retrieve_context_forwards_strategy_and_candidate_k_to_hybrid(
 async def test_retrieve_context_leaves_hybrid_defaults_alone_without_candidate_k(
     stub_hybrid: list[RetrievedChunk],
 ) -> None:
-    await retrieve_context(
-        object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q"
-    )
+    await retrieve_context(object(), object(), _RecordingReranker(), tenant_id=TENANT, question="Q")
 
     kwargs = pipeline.hybrid_search.kwargs  # type: ignore[attr-defined]
     assert kwargs["candidate_k"] is None

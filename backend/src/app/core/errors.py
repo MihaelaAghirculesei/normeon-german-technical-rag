@@ -10,6 +10,30 @@ class DocumentNotFoundError(NormeonError):
     status_code = 404
 
 
+class NotAuthenticatedError(NormeonError):
+    """No bearer token, or one that is malformed, forged or expired. One
+    code for all of them: telling an attacker *why* a token was refused
+    helps nobody else."""
+
+    code = "not_authenticated"
+    status_code = 401
+
+
+class InvalidCredentialsError(NormeonError):
+    """Login with an unknown email or a wrong password -- deliberately not
+    distinguished, so the endpoint cannot be used to probe for accounts."""
+
+    code = "invalid_credentials"
+    status_code = 401
+
+
+class ForbiddenError(NormeonError):
+    """Authenticated, but the role does not allow this action."""
+
+    code = "forbidden"
+    status_code = 403
+
+
 class UnsupportedFileTypeError(NormeonError):
     """An upload whose extension no parser handles (only .pdf and .docx)."""
 

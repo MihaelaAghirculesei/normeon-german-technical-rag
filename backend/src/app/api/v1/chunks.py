@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.api.deps import DbSession
+from app.api.deps import AuthDep, TenantSession
 from app.db.models import Chunk
 from app.services.chunks import get_chunk_context
 
@@ -53,13 +53,12 @@ def _chunk_out(chunk: Chunk) -> ChunkOut:
 @router.get("/{chunk_id}/context", response_model=ChunkContextResponse)
 async def chunk_context(
     chunk_id: UUID,
-    session: DbSession,
-    tenant_id: Annotated[UUID, Query()],
+    auth: AuthDep,
+    session: TenantSession,
     window: Annotated[int, Query(ge=0, le=3)] = 1,
 ) -> ChunkContextResponse:
-    # tenant_id is explicit until auth lands (Giorno 25), as for documents.
     context = await get_chunk_context(
-        session, tenant_id=tenant_id, chunk_id=chunk_id, window=window
+        session, tenant_id=auth.tenant_id, chunk_id=chunk_id, window=window
     )
     return ChunkContextResponse(
         document=ContextDocumentOut(

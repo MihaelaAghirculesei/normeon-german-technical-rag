@@ -13,11 +13,11 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_embedder
+from app.api.deps import get_auth, get_embedder
 from app.api.v1 import documents
 from app.db.models import Document
-from app.db.session import get_session
 from app.main import app
+from tests.unit.auth_helpers import authenticate
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 DOCUMENT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -57,6 +57,10 @@ class _FakeSession:
     async def get(self, model: type[Document], pk: UUID) -> Document | None:
         return self._document
 
+    async def scalar(self, statement: Any) -> Document | None:
+        self.statements.append(statement)
+        return self._document
+
     async def scalars(self, statement: Any) -> list[Document]:
         self.statements.append(statement)
         return [] if self._document is None else [self._document]
@@ -89,13 +93,16 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
             create_calls.append({"filename": filename, "doc_type": doc_type, **kwargs})
             return document, created
 
-        async def fake_process(document_id: UUID, content: bytes, embedder: Any) -> None:
+        async def fake_process(
+            tenant_id: UUID, document_id: UUID, content: bytes, embedder: Any
+        ) -> None:
+            assert tenant_id == TENANT_ID  # processing runs as the uploader's tenant
             processed.append(document_id)
 
         monkeypatch.setattr(documents, "get_or_create_document", fake_get_or_create)
         monkeypatch.setattr(documents, "_process_in_background", fake_process)
 
-        app.dependency_overrides[get_session] = lambda: session
+        authenticate(app, session)
         app.dependency_overrides[get_embedder] = _FakeEmbedder
         return TestClient(app), processed, session, create_calls
 
@@ -106,7 +113,7 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
 def _upload(client: TestClient, filename: str = "FZV.pdf", **extra: str) -> Any:
     return client.post(
         "/api/v1/documents",
-        data={"tenant_id": str(TENANT_ID), "doc_type": "norm", **extra},
+        data={"doc_type": "norm", **extra},
         files={"file": (filename, b"%PDF-1.4 fake", "application/octet-stream")},
     )
 
@@ -228,7 +235,7 @@ def test_listing_documents_returns_summaries(client_factory: Any) -> None:
         chunk_counts=[(DOCUMENT_ID, "structural", 114), (DOCUMENT_ID, "fixed_500", 119)],
     )
 
-    response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
+    response = client.get("/api/v1/documents")
 
     assert response.status_code == 200
     [body] = response.json()
@@ -246,7 +253,7 @@ def test_a_document_not_yet_parsed_has_no_chunk_counts(client_factory: Any) -> N
     document.created_at = datetime(2026, 8, 26, 12, 0)
     client, _, _, _ = client_factory(document)
 
-    [body] = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)}).json()
+    [body] = client.get("/api/v1/documents").json()
 
     assert body["chunk_counts"] == {}
 
@@ -254,7 +261,7 @@ def test_a_document_not_yet_parsed_has_no_chunk_counts(client_factory: Any) -> N
 def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
     client, _, session, _ = client_factory(None)
 
-    response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
+    response = client.get("/api/v1/documents")
 
     assert response.status_code == 200
     assert response.json() == []
@@ -265,10 +272,34 @@ def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
         assert compiled.params["tenant_id_1"] == TENANT_ID
 
 
-def test_listing_documents_requires_a_tenant(client_factory: Any) -> None:
+def test_documents_need_an_authenticated_caller(client_factory: Any) -> None:
     client, _, _, _ = client_factory(None)
+    app.dependency_overrides.pop(get_auth)
 
-    assert client.get("/api/v1/documents").status_code == 422
+    response = client.get("/api/v1/documents")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_a_reader_cannot_upload(client_factory: Any) -> None:
+    client, processed, session, create_calls = client_factory(_document("pending"), created=True)
+    authenticate(app, session, role="reader")
+
+    response = _upload(client)
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "forbidden"
+    assert (create_calls, processed) == ([], [])
+
+
+def test_the_status_read_is_confined_to_the_callers_tenant(client_factory: Any) -> None:
+    client, _, session, _ = client_factory(_document("ready"))
+
+    client.get(f"/api/v1/documents/{DOCUMENT_ID}")
+
+    compiled = session.statements[-1].compile()
+    assert compiled.params["tenant_id_1"] == TENANT_ID
 
 
 def test_getting_an_unknown_document_returns_a_typed_404(client_factory: Any) -> None:

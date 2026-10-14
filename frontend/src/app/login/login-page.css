@@ -1,0 +1,49 @@
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 22rem;
+  margin: var(--space-8) auto;
+  padding: var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.login p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+input {
+  font: inherit;
+  font-size: 1rem;
+  padding: var(--space-2);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+button {
+  font: inherit;
+  padding: var(--space-2);
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

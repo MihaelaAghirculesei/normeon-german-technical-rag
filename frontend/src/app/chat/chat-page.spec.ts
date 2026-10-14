@@ -98,9 +98,7 @@ describe('ChatPage', () => {
   });
 
   describe('citations', () => {
-    const TENANT = '00000000-0000-0000-0000-000000000001';
-    const contextUrl = (chunkId: string) =>
-      `/api/v1/chunks/${chunkId}/context?tenant_id=${TENANT}&window=1`;
+    const contextUrl = (chunkId: string) => `/api/v1/chunks/${chunkId}/context?window=1`;
 
     async function answered(): Promise<void> {
       await ask('Welche Lenkkraft?');

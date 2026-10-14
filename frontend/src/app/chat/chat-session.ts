@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 
 import {
   ChatHttpError,
@@ -8,7 +9,8 @@ import {
   type Source,
   type Stage,
 } from '../api/chat';
-import { TENANT_ID } from '../core/tenant';
+import { signOut } from '../core/auth-http';
+import { AuthService } from '../core/auth';
 
 export type ChatStatus = 'idle' | 'streaming' | 'done' | 'cancelled' | 'error';
 
@@ -33,7 +35,8 @@ const ERROR_MESSAGES: Record<string, string> = {
 @Injectable()
 export class ChatSession {
   private readonly streamChat = inject(STREAM_CHAT);
-  private readonly tenantId = inject(TENANT_ID);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   private controller: AbortController | null = null;
 
   readonly status = signal<ChatStatus>('idle');
@@ -71,7 +74,7 @@ export class ChatSession {
     this.status.set('streaming');
 
     try {
-      const events = this.streamChat({ question, tenant_id: this.tenantId }, controller.signal);
+      const events = this.streamChat({ question }, controller.signal);
       for await (const event of events) {
         if (!current()) return;
         switch (event.event) {
@@ -102,6 +105,12 @@ export class ChatSession {
       }
     } catch (error) {
       if (!current()) return;
+      if (error instanceof ChatHttpError && error.status === 401) {
+        // The token expired or was revoked: same as any other 401.
+        this.fail('Die Sitzung ist abgelaufen. Bitte erneut anmelden.');
+        signOut(this.auth, this.router);
+        return;
+      }
       this.fail(
         error instanceof ChatHttpError
           ? error.status === 422

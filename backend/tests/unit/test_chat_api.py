@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_embedder, get_llm_client, get_reranker, get_session
+from app.api.deps import get_auth, get_embedder, get_llm_client, get_reranker
 from app.api.v1 import chat
 from app.core.errors import LlmUnavailableError
 from app.domain.citations import Citation
@@ -22,6 +22,7 @@ from app.domain.context import Source
 from app.domain.models import PipelineTiming
 from app.main import app
 from app.services.generation import AnswerResult, StreamEvent
+from tests.unit.auth_helpers import authenticate
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -91,13 +92,11 @@ def client_with_generator(monkeypatch: pytest.MonkeyPatch) -> Any:
             question: str,
             strategy: str | None = None,
         ) -> AnswerResult:
-            calls.append(
-                {"tenant_id": tenant_id, "question": question, "strategy": strategy}
-            )
+            calls.append({"tenant_id": tenant_id, "question": question, "strategy": strategy})
             return result
 
         monkeypatch.setattr(chat, "generate_answer", fake_generate_answer)
-        app.dependency_overrides[get_session] = lambda: object()
+        authenticate(app, object())
         app.dependency_overrides[get_embedder] = lambda: object()
         app.dependency_overrides[get_reranker] = lambda: object()
         app.dependency_overrides[get_llm_client] = lambda: object()
@@ -130,9 +129,7 @@ def test_chat_returns_answer_sources_and_prompt_identity(client_with_generator: 
 def test_chat_response_carries_a_priced_cost(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer(cost_usd=0.00045))
 
-    body = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
-    ).json()
+    body = client.post("/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}).json()
 
     assert body["cost_usd"] == 0.00045
 
@@ -180,9 +177,7 @@ def test_chat_forwards_question_tenant_and_strategy(client_with_generator: Any) 
 def test_chat_response_carries_validated_citations(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer(citations=[_citation("S1", 14)]))
 
-    body = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}
-    ).json()
+    body = client.post("/api/v1/chat", json={"question": "x", "tenant_id": str(TENANT_ID)}).json()
 
     assert len(body["citations"]) == 1
     citation = body["citations"][0]
@@ -224,21 +219,31 @@ def test_chat_passes_nicht_gefunden_through_untouched(client_with_generator: Any
 def test_chat_rejects_a_blank_question(client_with_generator: Any) -> None:
     client, _ = client_with_generator(_answer())
 
-    response = client.post(
-        "/api/v1/chat", json={"question": "", "tenant_id": str(TENANT_ID)}
-    )
+    response = client.post("/api/v1/chat", json={"question": "", "tenant_id": str(TENANT_ID)})
 
     assert response.status_code == 422
 
 
-def test_chat_rejects_a_bad_tenant_id(client_with_generator: Any) -> None:
-    client, _ = client_with_generator(_answer())
+def test_chat_takes_the_tenant_from_the_token_never_from_the_body(
+    client_with_generator: Any,
+) -> None:
+    client, calls = client_with_generator(_answer())
+    other_tenant = uuid.uuid4()
 
-    response = client.post(
-        "/api/v1/chat", json={"question": "x", "tenant_id": "not-a-uuid"}
-    )
+    response = client.post("/api/v1/chat", json={"question": "x", "tenant_id": str(other_tenant)})
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert calls[0]["tenant_id"] == TENANT_ID
+
+
+def test_chat_needs_an_authenticated_caller(client_with_generator: Any) -> None:
+    client, calls = client_with_generator(_answer())
+    app.dependency_overrides.pop(get_auth)
+
+    response = client.post("/api/v1/chat", json={"question": "x"})
+
+    assert response.status_code == 401
+    assert calls == []
 
 
 def test_chat_rejects_an_unknown_strategy(client_with_generator: Any) -> None:
@@ -263,7 +268,7 @@ def test_an_llm_failure_never_surfaces_as_a_bare_500(
         raise LlmUnavailableError("the model host is down")
 
     monkeypatch.setattr(chat, "generate_answer", raising_generate_answer)
-    app.dependency_overrides[get_session] = lambda: object()
+    authenticate(app, object())
     app.dependency_overrides[get_embedder] = lambda: object()
     app.dependency_overrides[get_reranker] = lambda: object()
     app.dependency_overrides[get_llm_client] = lambda: object()
@@ -314,7 +319,7 @@ def _stream_with(events: list[StreamEvent]) -> Any:
 def stream_client(monkeypatch: pytest.MonkeyPatch) -> Any:
     def make(events: list[StreamEvent]) -> TestClient:
         monkeypatch.setattr(chat, "generate_answer_stream", _stream_with(events))
-        app.dependency_overrides[get_session] = lambda: object()
+        authenticate(app, object())
         app.dependency_overrides[get_embedder] = lambda: object()
         app.dependency_overrides[get_reranker] = lambda: object()
         app.dependency_overrides[get_llm_client] = lambda: object()
@@ -353,7 +358,13 @@ def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
 
     events = _parse_sse(body)
     assert [e for e, _ in events] == [
-        "stage", "stage", "sources", "stage", "token", "token", "done",
+        "stage",
+        "stage",
+        "sources",
+        "stage",
+        "token",
+        "token",
+        "done",
     ]
     assert events[0][1] == {"stage": "retrieving"}
     assert events[4][1] == {"text": "Die "}
