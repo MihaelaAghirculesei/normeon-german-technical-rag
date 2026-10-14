@@ -1,4 +1,7 @@
 import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
+
+import { AuthService } from '../core/auth';
 
 import { ChatHttpError, STREAM_CHAT, type ChatStreamEvent } from '../api/chat';
 import { ChatSession } from './chat-session';
@@ -142,6 +145,19 @@ describe('ChatSession', () => {
 
     expect(chat.status()).toBe('error');
     expect(chat.error()).toBe('Das Sprachmodell hat nicht rechtzeitig geantwortet.');
+  });
+
+  it('ends the session when the stream is refused as unauthenticated', async () => {
+    const auth = TestBed.inject(AuthService);
+    const logout = vi.spyOn(auth, 'logout');
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    const asked = chat.ask('x');
+    fake.fail(new ChatHttpError(401));
+    await asked;
+
+    expect(chat.error()).toContain('Sitzung ist abgelaufen');
+    expect(logout).toHaveBeenCalled();
   });
 
   it('reports a refused request and a dropped connection', async () => {
