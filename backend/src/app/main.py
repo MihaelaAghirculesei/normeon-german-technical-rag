@@ -2,11 +2,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import chat, chunks, documents, health, search
-from app.core.config import settings
+from app.core.config import insecure_settings, settings
 from app.core.errors import NormeonError
 from app.core.logging import configure_logging
 
 configure_logging()
+
+# Refuse to start with laptop-only settings (the default JWT secret) in any
+# environment that is not development or test.
+_problems = insecure_settings(settings)
+if _problems:
+    raise RuntimeError("insecure configuration: " + "; ".join(_problems))
 
 app = FastAPI(title=settings.app_name)
 
