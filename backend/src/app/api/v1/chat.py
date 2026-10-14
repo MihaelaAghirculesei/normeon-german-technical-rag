@@ -38,7 +38,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, RootModel
 
-from app.api.deps import DbSession, EmbedderDep, LlmClientDep, RerankerDep
+from app.api.deps import AuthDep, EmbedderDep, LlmClientDep, RerankerDep, TenantSession
 from app.core.streaming import with_heartbeat
 from app.domain.citations import Citation
 from app.domain.context import Source
@@ -50,7 +50,6 @@ _log = structlog.get_logger(__name__)
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1)
-    tenant_id: UUID
     strategy: Literal["fixed_500", "structural"] | None = None
 
 
@@ -130,7 +129,8 @@ def _citations_out(citations: list[Citation]) -> list[CitationOut]:
 @router.post("", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
-    session: DbSession,
+    auth: AuthDep,
+    session: TenantSession,
     embedder: EmbedderDep,
     reranker: RerankerDep,
     llm: LlmClientDep,
@@ -140,7 +140,7 @@ async def chat(
         embedder,
         reranker,
         llm,
-        tenant_id=payload.tenant_id,
+        tenant_id=auth.tenant_id,
         question=payload.question,
         strategy=payload.strategy,
     )
@@ -270,7 +270,8 @@ def _event_payload(event: StreamEvent) -> BaseModel:
 async def chat_stream(
     payload: ChatRequest,
     request: Request,
-    session: DbSession,
+    auth: AuthDep,
+    session: TenantSession,
     embedder: EmbedderDep,
     reranker: RerankerDep,
     llm: LlmClientDep,
@@ -282,7 +283,7 @@ async def chat_stream(
                 embedder,
                 reranker,
                 llm,
-                tenant_id=payload.tenant_id,
+                tenant_id=auth.tenant_id,
                 question=payload.question,
                 strategy=payload.strategy,
             ),

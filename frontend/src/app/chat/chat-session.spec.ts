@@ -42,9 +42,8 @@ describe('ChatSession', () => {
   it('follows the stream: stage, sources before tokens, then done', async () => {
     const asked = chat.ask('Welche Lenkkraft?');
     expect(chat.status()).toBe('streaming');
-    expect(fake.requests).toEqual([
-      { question: 'Welche Lenkkraft?', tenant_id: '00000000-0000-0000-0000-000000000001' },
-    ]);
+    // No tenant in the request: the backend takes it from the token.
+    expect(fake.requests).toEqual([{ question: 'Welche Lenkkraft?' }]);
 
     fake.push({ event: 'stage', data: { stage: 'retrieving' } });
     await settle();

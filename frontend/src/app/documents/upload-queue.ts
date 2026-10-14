@@ -3,7 +3,6 @@ import { DestroyRef, Injectable, InjectionToken, inject, signal } from '@angular
 import { Subject, defer, repeat, takeWhile, type Subscription } from 'rxjs';
 
 import type { components } from '../api/schema';
-import { TENANT_ID } from '../core/tenant';
 
 type UploadResponse = components['schemas']['DocumentUploadResponse'];
 type StatusResponse = components['schemas']['DocumentStatusResponse'];
@@ -51,7 +50,6 @@ const TERMINAL = new Set(['ready', 'failed']);
 @Injectable()
 export class UploadQueue {
   private readonly http = inject(HttpClient);
-  private readonly tenantId = inject(TENANT_ID);
   private readonly pollMs = inject(POLL_INTERVAL_MS);
   private readonly subscriptions = new Set<Subscription>();
   private nextId = 1;
@@ -95,7 +93,6 @@ export class UploadQueue {
 
   private upload(id: number, file: File, options: UploadOptions): void {
     const form = new FormData();
-    form.append('tenant_id', this.tenantId);
     form.append('doc_type', options.docType);
     if (options.versionLabel.trim()) form.append('version_label', options.versionLabel.trim());
     form.append('file', file, file.name);

@@ -11,10 +11,11 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_embedder, get_reranker, get_session
+from app.api.deps import get_embedder, get_reranker
 from app.api.v1 import search
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.main import app
+from tests.unit.auth_helpers import authenticate
 
 TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -143,7 +144,7 @@ def client_with_retriever(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(search, "fts_search", fake_fts_search)
         monkeypatch.setattr(search, "hybrid_search", fake_hybrid_search)
         monkeypatch.setattr(search, "retrieve_context", fake_retrieve_context)
-        app.dependency_overrides[get_session] = lambda: object()
+        authenticate(app, object())
         app.dependency_overrides[get_embedder] = _FakeEmbedder
         app.dependency_overrides[get_reranker] = lambda: object()
         return TestClient(app), calls
