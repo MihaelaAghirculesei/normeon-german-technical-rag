@@ -56,6 +56,7 @@ class ChatRequest(BaseModel):
 
 class SourceOut(BaseModel):
     marker: str
+    chunk_id: UUID
     document_id: UUID
     filename: str
     page_from: int
@@ -98,6 +99,7 @@ def _sources_out(sources: list[Source]) -> list[SourceOut]:
     return [
         SourceOut(
             marker=s.marker,
+            chunk_id=s.chunk_id,
             document_id=s.document_id,
             filename=s.filename,
             page_from=s.page_from,
