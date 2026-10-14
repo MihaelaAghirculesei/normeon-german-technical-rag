@@ -33,3 +33,8 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.reader-note {
+  margin: 0 0 var(--space-6);
+  font-size: 0.9rem;
+}
