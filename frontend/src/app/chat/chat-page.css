@@ -81,8 +81,11 @@ button:disabled {
 
 .text {
   margin: 0;
-  white-space: pre-wrap;
   line-height: 1.6;
+}
+
+.segment {
+  white-space: pre-wrap;
 }
 
 .state,
@@ -109,16 +112,54 @@ button:disabled {
 }
 
 .sources li {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
 }
 
 .sources li:last-child {
   border-bottom: none;
+}
+
+.source {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.source:hover {
+  background: var(--neutral-bg);
+}
+
+/* A citation marker in the answer text, as a compact clickable chip. */
+.cite {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  line-height: 1.5;
+  vertical-align: 0.1em;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cite:hover,
+.cite.selected {
+  border-color: var(--accent);
+}
+
+.cite.selected {
+  color: var(--surface);
+  background: var(--accent);
 }
 
 .marker {

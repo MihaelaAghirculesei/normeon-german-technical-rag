@@ -39,7 +39,26 @@
             beantwortet.
           </app-notice>
         } @else if (chat.answer()) {
-          <p class="text">{{ chat.answer() }}</p>
+          <p class="text">
+            @for (segment of segments(); track $index) {
+              @if (segment.kind === 'citation') {
+                <button
+                  type="button"
+                  class="cite"
+                  [class.selected]="selectedMarker() === segment.marker"
+                  [attr.aria-pressed]="selectedMarker() === segment.marker"
+                  [attr.aria-label]="'Quelle ' + segment.marker + ' anzeigen'"
+                  (click)="select(segment.marker)"
+                >
+                  {{ segment.marker }}
+                </button>
+              } @else {
+                <!-- In its own span: only the model's text keeps its line
+                     breaks, not the template's indentation around it. -->
+                <span class="segment">{{ segment.text }}</span>
+              }
+            }
+          </p>
         }
 
         @if (chat.status() === 'cancelled') {
@@ -58,23 +77,27 @@
         }
       </div>
 
-      @if (chat.sources().length > 0) {
+      @if (selectedSource(); as source) {
+        <app-citation-panel [source]="source" (closed)="selectedMarker.set(null)" />
+      } @else if (chat.sources().length > 0) {
         <aside class="sources" aria-label="Quellen">
           <h2>Quellen</h2>
           <ol>
             @for (source of chat.sources(); track source.marker) {
-              <li [class.cited]="chat.citedMarkers().has(source.marker)">
-                <span class="marker mono">{{ source.marker }}</span>
-                <span class="where">
-                  <span class="file">{{ source.filename }}</span>
-                  <span class="muted">
-                    {{ source.section_path ?? 'ohne Abschnitt' }} · S. {{ source.page_from
-                    }}{{ source.page_to !== source.page_from ? '–' + source.page_to : '' }}
+              <li>
+                <button type="button" class="source" (click)="select(source.marker)">
+                  <span class="marker mono">{{ source.marker }}</span>
+                  <span class="where">
+                    <span class="file">{{ source.filename }}</span>
+                    <span class="muted">
+                      {{ source.section_path ?? 'ohne Abschnitt' }} · S. {{ source.page_from
+                      }}{{ source.page_to !== source.page_from ? '–' + source.page_to : '' }}
+                    </span>
                   </span>
-                </span>
-                @if (chat.citedMarkers().has(source.marker)) {
-                  <span class="cited-label">zitiert</span>
-                }
+                  @if (chat.citedMarkers().has(source.marker)) {
+                    <span class="cited-label">zitiert</span>
+                  }
+                </button>
               </li>
             }
           </ol>
