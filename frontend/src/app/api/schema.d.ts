@@ -292,6 +292,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Chunk Counts */
+            chunk_counts: {
+                [key: string]: number;
+            };
         };
         /** DocumentUploadResponse */
         DocumentUploadResponse: {
