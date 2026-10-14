@@ -28,6 +28,7 @@ _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
     ".pdf": parse_pdf,
     ".docx": parse_docx,
 }
+SUPPORTED_SUFFIXES = frozenset(_PARSERS)
 
 
 async def get_or_create_document(
@@ -42,15 +43,17 @@ async def get_or_create_document(
     valid_until: date | None = None,
 ) -> tuple[Document, bool]:
     """Fast, synchronous half of ingestion: hash the upload and look up (or
-    create) its Document row. Returns (document, already_ingested) so a
-    caller (the upload endpoint) can respond immediately and only schedule
-    the slow parse/chunk/embed work (`process_document`) when there's
-    actually something left to do.
+    create) its Document row. Returns (document, created) so a caller (the
+    upload endpoint) can respond immediately and decide from `created` and
+    the existing row's `status` whether the slow parse/chunk/embed work
+    (`process_document`) still needs scheduling -- an identical file that
+    is already being processed must not be processed a second time in
+    parallel.
 
-    `version_label`/`valid_from`/`valid_until` are needed for the eval
-    corpus's two Lastenheft documents (`find_version_conflicts`, Giorno 13,
-    groups by `version_label`) -- the HTTP upload endpoint doesn't collect
-    them yet, so they default to `None` there."""
+    `version_label`/`valid_from`/`valid_until` are needed for version-
+    conflict detection (`find_version_conflicts`, Giorno 13, groups by
+    `version_label`). An existing document keeps the values it was first
+    created with."""
     content_hash = hashlib.sha256(content).hexdigest()
 
     existing = await session.scalar(
@@ -59,7 +62,7 @@ async def get_or_create_document(
         )
     )
     if existing is not None:
-        return existing, existing.status == "ready"
+        return existing, False
 
     document = Document(
         tenant_id=tenant_id,
@@ -74,7 +77,7 @@ async def get_or_create_document(
     session.add(document)
     await session.commit()
     await session.refresh(document)
-    return document, False
+    return document, True
 
 
 async def process_document(
@@ -146,7 +149,7 @@ async def ingest_document(
     """Convenience wrapper running both halves in sequence -- used by the
     corpus-loading script and tests, which don't need the HTTP split between
     an immediate response and background processing."""
-    document, already_ingested = await get_or_create_document(
+    document, _ = await get_or_create_document(
         session,
         tenant_id,
         filename,
@@ -156,7 +159,7 @@ async def ingest_document(
         valid_from=valid_from,
         valid_until=valid_until,
     )
-    if already_ingested:
+    if document.status == "ready":
         return document, True
     await process_document(session, embedder, document, content)
     return document, False

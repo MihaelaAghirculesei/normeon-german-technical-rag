@@ -17,6 +17,7 @@ const LASTENHEFT: DocumentSummary = {
   page_count: null,
   status: 'ready',
   created_at: '2026-09-15T10:00:00',
+  chunk_counts: { structural: 6, fixed_500: 5 },
 };
 
 describe('DocumentsPage', () => {
@@ -50,7 +51,11 @@ describe('DocumentsPage', () => {
     expect(cells[2]).toBe('v2.0');
     expect(cells[3]).toContain('01.01.2026');
     expect(cells[3]).toContain('heute');
-    expect(cells[5]).toBe('Bereit');
+    const chunkLines = [...el.querySelectorAll('td.chunks > span')].map((s) =>
+      s.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(chunkLines).toEqual(['fixed_500 5', 'structural 6']);
+    expect(cells[6]).toBe('Bereit');
   });
 
   it('says so when there are no documents', async () => {

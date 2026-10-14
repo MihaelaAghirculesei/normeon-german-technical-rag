@@ -362,6 +362,41 @@
             "type": "string",
             "contentMediaType": "application/octet-stream",
             "title": "File"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
           }
         },
         "type": "object",
@@ -779,6 +814,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "chunk_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Chunk Counts"
           }
         },
         "type": "object",
@@ -791,7 +833,8 @@
           "valid_until",
           "page_count",
           "status",
-          "created_at"
+          "created_at",
+          "chunk_counts"
         ],
         "title": "DocumentSummary"
       },
@@ -810,9 +853,15 @@
             "type": "string",
             "title": "Status"
           },
-          "already_ingested": {
-            "type": "boolean",
-            "title": "Already Ingested"
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "duplicate",
+              "in_progress",
+              "retrying"
+            ],
+            "title": "Outcome"
           }
         },
         "type": "object",
@@ -820,7 +869,7 @@
           "document_id",
           "filename",
           "status",
-          "already_ingested"
+          "outcome"
         ],
         "title": "DocumentUploadResponse"
       },

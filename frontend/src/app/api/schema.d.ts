@@ -139,6 +139,12 @@ export interface components {
             doc_type: string;
             /** File */
             file: string;
+            /** Version Label */
+            version_label?: string | null;
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid Until */
+            valid_until?: string | null;
         };
         /** ChatRequest */
         ChatRequest: {
@@ -286,6 +292,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Chunk Counts */
+            chunk_counts: {
+                [key: string]: number;
+            };
         };
         /** DocumentUploadResponse */
         DocumentUploadResponse: {
@@ -298,8 +308,11 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
-            /** Already Ingested */
-            already_ingested: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "created" | "duplicate" | "in_progress" | "retrying";
         };
         /** DoneData */
         DoneData: {

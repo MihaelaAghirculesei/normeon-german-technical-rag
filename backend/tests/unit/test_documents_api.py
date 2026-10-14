@@ -46,32 +46,48 @@ def _document(status: str) -> Document:
 
 
 class _FakeSession:
-    """Only `get` is exercised by these endpoints; ingestion itself is
+    """Answers the few queries these endpoints make; ingestion itself is
     stubbed out, so nothing else on AsyncSession is reached."""
 
-    def __init__(self, document: Document | None) -> None:
+    def __init__(self, document: Document | None, chunk_counts: list[tuple[UUID, str, int]]):
         self._document = document
+        self._chunk_counts = chunk_counts
+        self.statements: list[Any] = []
 
     async def get(self, model: type[Document], pk: UUID) -> Document | None:
         return self._document
 
     async def scalars(self, statement: Any) -> list[Document]:
-        self.statement = statement
+        self.statements.append(statement)
         return [] if self._document is None else [self._document]
+
+    async def execute(self, statement: Any) -> list[tuple[UUID, str, int]]:
+        self.statements.append(statement)
+        return self._chunk_counts
 
 
 @pytest.fixture
 def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
     def make(
-        document: Document | None, already_ingested: bool = False
-    ) -> tuple[TestClient, list[UUID]]:
+        document: Document | None,
+        created: bool = False,
+        chunk_counts: list[tuple[UUID, str, int]] | None = None,
+    ) -> tuple[TestClient, list[UUID], _FakeSession, list[dict[str, Any]]]:
         processed: list[UUID] = []
+        create_calls: list[dict[str, Any]] = []
+        session = _FakeSession(document, chunk_counts or [])
 
         async def fake_get_or_create(
-            session: Any, tenant_id: UUID, filename: str, doc_type: str, content: bytes
+            session: Any,
+            tenant_id: UUID,
+            filename: str,
+            doc_type: str,
+            content: bytes,
+            **kwargs: Any,
         ) -> tuple[Document, bool]:
             assert document is not None
-            return document, already_ingested
+            create_calls.append({"filename": filename, "doc_type": doc_type, **kwargs})
+            return document, created
 
         async def fake_process(document_id: UUID, content: bytes, embedder: Any) -> None:
             processed.append(document_id)
@@ -79,26 +95,26 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(documents, "get_or_create_document", fake_get_or_create)
         monkeypatch.setattr(documents, "_process_in_background", fake_process)
 
-        app.dependency_overrides[get_session] = lambda: _FakeSession(document)
+        app.dependency_overrides[get_session] = lambda: session
         app.dependency_overrides[get_embedder] = _FakeEmbedder
-        return TestClient(app), processed
+        return TestClient(app), processed, session, create_calls
 
     yield make
     app.dependency_overrides.clear()
 
 
-def _upload(client: TestClient) -> Any:
+def _upload(client: TestClient, filename: str = "FZV.pdf", **extra: str) -> Any:
     return client.post(
         "/api/v1/documents",
-        data={"tenant_id": str(TENANT_ID), "doc_type": "norm"},
-        files={"file": ("FZV.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        data={"tenant_id": str(TENANT_ID), "doc_type": "norm", **extra},
+        files={"file": (filename, b"%PDF-1.4 fake", "application/octet-stream")},
     )
 
 
 def test_uploading_a_new_document_returns_201_and_schedules_processing(
     client_factory: Any,
 ) -> None:
-    client, processed = client_factory(_document("pending"), already_ingested=False)
+    client, processed, _, _ = client_factory(_document("pending"), created=True)
 
     response = _upload(client)
 
@@ -106,35 +122,100 @@ def test_uploading_a_new_document_returns_201_and_schedules_processing(
     body = response.json()
     assert body["document_id"] == str(DOCUMENT_ID)
     assert body["status"] == "pending"
-    assert body["already_ingested"] is False
+    assert body["outcome"] == "created"
     assert processed == [DOCUMENT_ID]
 
 
 def test_uploading_an_already_ingested_document_returns_200_and_does_no_work(
     client_factory: Any,
 ) -> None:
-    client, processed = client_factory(_document("ready"), already_ingested=True)
+    client, processed, _, _ = client_factory(_document("ready"))
 
     response = _upload(client)
 
     # 201 Created would be a lie: nothing was created this time.
     assert response.status_code == 200
     body = response.json()
-    assert body["already_ingested"] is True
+    assert body["outcome"] == "duplicate"
     assert body["status"] == "ready"
     assert processed == []
 
 
+@pytest.mark.parametrize("status", ["pending", "parsing", "embedding"])
+def test_uploading_a_document_still_being_processed_does_not_process_it_twice(
+    client_factory: Any, status: str
+) -> None:
+    client, processed, _, _ = client_factory(_document(status))
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "in_progress"
+    assert processed == []
+
+
+def test_uploading_a_document_that_failed_before_retries_it(client_factory: Any) -> None:
+    client, processed, _, _ = client_factory(_document("failed"))
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "retrying"
+    assert processed == [DOCUMENT_ID]
+
+
+def test_upload_forwards_the_optional_version_fields(client_factory: Any) -> None:
+    client, _, _, create_calls = client_factory(_document("pending"), created=True)
+
+    _upload(client, version_label="v2.0", valid_from="2026-01-01")
+
+    assert create_calls == [
+        {
+            "filename": "FZV.pdf",
+            "doc_type": "norm",
+            "version_label": "v2.0",
+            "valid_from": date(2026, 1, 1),
+            "valid_until": None,
+        }
+    ]
+
+
+def test_upload_treats_a_blank_version_as_none(client_factory: Any) -> None:
+    client, _, _, create_calls = client_factory(_document("pending"), created=True)
+
+    _upload(client, version_label="")
+
+    assert create_calls[0]["version_label"] is None
+
+
+@pytest.mark.parametrize("filename", ["notes.txt", "scan.PNG", "README"])
+def test_upload_rejects_a_file_type_no_parser_reads(client_factory: Any, filename: str) -> None:
+    client, processed, _, create_calls = client_factory(_document("pending"), created=True)
+
+    response = _upload(client, filename=filename)
+
+    assert response.status_code == 415
+    assert response.json()["code"] == "unsupported_file_type"
+    assert create_calls == []
+    assert processed == []
+
+
+def test_upload_accepts_an_uppercase_extension(client_factory: Any) -> None:
+    client, _, _, _ = client_factory(_document("pending"), created=True)
+
+    assert _upload(client, filename="LASTENHEFT.DOCX").status_code == 201
+
+
 def test_getting_a_document_returns_its_current_status(client_factory: Any) -> None:
-    client, _ = client_factory(_document("embedding"))
+    client, _, _, _ = client_factory(_document("embedding"))
 
     response = client.get(f"/api/v1/documents/{DOCUMENT_ID}")
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "embedding"
-    # already_ingested belongs to the upload response only.
-    assert "already_ingested" not in body
+    # outcome belongs to the upload response only.
+    assert "outcome" not in body
 
 
 def test_listing_documents_returns_summaries(client_factory: Any) -> None:
@@ -142,7 +223,10 @@ def test_listing_documents_returns_summaries(client_factory: Any) -> None:
     document.version_label = "v2.0"
     document.valid_from = date(2026, 1, 1)
     document.created_at = datetime(2026, 8, 26, 12, 0)
-    client, _ = client_factory(document)
+    client, _, _, _ = client_factory(
+        document,
+        chunk_counts=[(DOCUMENT_ID, "structural", 114), (DOCUMENT_ID, "fixed_500", 119)],
+    )
 
     response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
 
@@ -154,30 +238,41 @@ def test_listing_documents_returns_summaries(client_factory: Any) -> None:
     assert body["valid_from"] == "2026-01-01"
     assert body["valid_until"] is None
     assert body["status"] == "ready"
+    assert body["chunk_counts"] == {"structural": 114, "fixed_500": 119}
+
+
+def test_a_document_not_yet_parsed_has_no_chunk_counts(client_factory: Any) -> None:
+    document = _document("pending")
+    document.created_at = datetime(2026, 8, 26, 12, 0)
+    client, _, _, _ = client_factory(document)
+
+    [body] = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)}).json()
+
+    assert body["chunk_counts"] == {}
 
 
 def test_listing_documents_is_scoped_to_the_tenant(client_factory: Any) -> None:
-    client, _ = client_factory(None)
-    session = app.dependency_overrides[get_session]()
-    app.dependency_overrides[get_session] = lambda: session
+    client, _, session, _ = client_factory(None)
 
     response = client.get("/api/v1/documents", params={"tenant_id": str(TENANT_ID)})
 
     assert response.status_code == 200
     assert response.json() == []
-    compiled = session.statement.compile()
-    assert "WHERE documents.tenant_id = :tenant_id_1" in str(compiled)
-    assert compiled.params["tenant_id_1"] == TENANT_ID
+    # Both the documents and the chunk-count query filter on the tenant.
+    for statement in session.statements:
+        compiled = statement.compile()
+        assert "tenant_id = :tenant_id_1" in str(compiled)
+        assert compiled.params["tenant_id_1"] == TENANT_ID
 
 
 def test_listing_documents_requires_a_tenant(client_factory: Any) -> None:
-    client, _ = client_factory(None)
+    client, _, _, _ = client_factory(None)
 
     assert client.get("/api/v1/documents").status_code == 422
 
 
 def test_getting_an_unknown_document_returns_a_typed_404(client_factory: Any) -> None:
-    client, _ = client_factory(None)
+    client, _, _, _ = client_factory(None)
 
     response = client.get(f"/api/v1/documents/{uuid.uuid4()}")
 

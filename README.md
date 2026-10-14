@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 23 of 30. Retrieval is feature-complete: structured German
+Status: Day 24 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -57,7 +57,12 @@ first word of the answer, and can cancel a running request, which also
 stops the model call on the server. Every `[S1]` in an answer is a
 clickable chip that opens the cited passage, highlighted between the
 text before and after it, with its document, version, section and page
-(`GET /api/v1/chunks/{id}/context`).
+(`GET /api/v1/chunks/{id}/context`). Documents are uploaded by drag and
+drop with byte progress, then followed through ingestion (parsing,
+indexing, ready) by polling. An identical file is recognised by its hash
+and reported as such, and is never processed twice, even when it arrives
+again while the first copy is still being processed. The document table
+shows chunk counts per chunking strategy.
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
