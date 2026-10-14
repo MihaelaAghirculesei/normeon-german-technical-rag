@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-insecure-secret-change-me"
     jwt_issuer: str = "normeon"
     jwt_ttl_minutes: int = 8 * 60
+    # Password for the two demo users `python -m app.db.seed` creates.
+    demo_user_password: str = "normeon-demo"
 
 
 settings = Settings()

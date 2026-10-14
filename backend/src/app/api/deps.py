@@ -1,7 +1,9 @@
+from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
@@ -14,10 +16,50 @@ from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
 from app.adapters.reranker.noop import NoopReranker
 from app.core.config import settings
-from app.core.errors import EmbeddingMisconfiguredError, LlmMisconfiguredError
-from app.db.session import get_session
+from app.core.errors import (
+    EmbeddingMisconfiguredError,
+    ForbiddenError,
+    LlmMisconfiguredError,
+    NotAuthenticatedError,
+)
+from app.core.security import AuthContext, decode_access_token
+from app.db.session import get_session, tenant_session
 
+# Unscoped: login and health only. Anything touching tenant data uses
+# TenantSession, which also requires a valid token.
 DbSession = Annotated[AsyncSession, Depends(get_session)]
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def get_auth(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> AuthContext:
+    if credentials is None:
+        raise NotAuthenticatedError("missing bearer token")
+    return decode_access_token(credentials.credentials)
+
+
+AuthDep = Annotated[AuthContext, Depends(get_auth)]
+
+
+async def get_tenant_session(auth: AuthDep) -> AsyncIterator[AsyncSession]:
+    """The caller's tenant, from the token, confines every transaction of
+    this session (row-level security, migration 0004)."""
+    async with tenant_session(auth.tenant_id) as session:
+        yield session
+
+
+TenantSession = Annotated[AsyncSession, Depends(get_tenant_session)]
+
+
+def require_admin(auth: AuthDep) -> AuthContext:
+    if auth.role != "admin":
+        raise ForbiddenError("this action needs the admin role")
+    return auth
+
+
+AdminDep = Annotated[AuthContext, Depends(require_admin)]
 
 
 @lru_cache
