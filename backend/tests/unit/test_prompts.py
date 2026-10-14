@@ -53,9 +53,7 @@ def test_render_fills_both_placeholders_and_leaves_the_rest() -> None:
 def test_render_does_not_choke_on_braces_or_percent_in_the_text() -> None:
     prompt = load_prompt("answer_de.v1")
 
-    rendered = prompt.render(
-        context="[S1] Formel: a{b} bei 50 % Last", question="und {jetzt}?"
-    )
+    rendered = prompt.render(context="[S1] Formel: a{b} bei 50 % Last", question="und {jetzt}?")
 
     assert "a{b} bei 50 % Last" in rendered
     assert "und {jetzt}?" in rendered

@@ -34,9 +34,7 @@ class _CountingReranker:
         self._scores = scores
         self.calls: list[tuple[str, str]] = []
 
-    def rerank(
-        self, query: str, chunks: list[RetrievedChunk], top_k: int
-    ) -> list[RetrievedChunk]:
+    def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
         self.calls.extend((query, c.content) for c in chunks)
         scored = [replace(c, score=self._scores[c.content]) for c in chunks]
         return sorted(scored, key=lambda c: c.score, reverse=True)[:top_k]

@@ -61,9 +61,7 @@ def test_removing_a_marker_does_not_leave_a_double_space() -> None:
 def test_zero_valid_citations_with_claims_is_treated_as_abstention() -> None:
     sources = {"S1": _source("S1")}
 
-    answer, citations, invented = extract_and_validate(
-        "Angeblich gilt Regel G [S7].", sources
-    )
+    answer, citations, invented = extract_and_validate("Angeblich gilt Regel G [S7].", sources)
 
     assert answer == "NICHT_GEFUNDEN"
     assert citations == []
@@ -73,9 +71,7 @@ def test_zero_valid_citations_with_claims_is_treated_as_abstention() -> None:
 def test_claims_with_no_marker_at_all_is_also_an_abstention() -> None:
     sources = {"S1": _source("S1")}
 
-    answer, citations, invented = extract_and_validate(
-        "Es gelten diverse Anforderungen.", sources
-    )
+    answer, citations, invented = extract_and_validate("Es gelten diverse Anforderungen.", sources)
 
     assert answer == "NICHT_GEFUNDEN"
     assert citations == []
@@ -145,9 +141,7 @@ def test_citation_carries_the_source_metadata() -> None:
 def test_an_all_invented_answer_abstains_even_after_stripping_leaves_prose() -> None:
     sources = {"S1": _source("S1")}
 
-    answer, citations, invented = extract_and_validate(
-        "Text A [S7] und Text B [S8].", sources
-    )
+    answer, citations, invented = extract_and_validate("Text A [S7] und Text B [S8].", sources)
 
     assert answer == "NICHT_GEFUNDEN"
     assert citations == []
