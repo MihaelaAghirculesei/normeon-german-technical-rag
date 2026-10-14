@@ -1,9 +1,22 @@
 <header class="topbar">
   <a class="brand" routerLink="/">Normeon</a>
-  <nav aria-label="Hauptnavigation">
-    <a routerLink="/fragen" routerLinkActive="active" ariaCurrentWhenActive="page">Fragen</a>
-    <a routerLink="/dokumente" routerLinkActive="active" ariaCurrentWhenActive="page">Dokumente</a>
-  </nav>
+  @if (auth.user(); as user) {
+    <nav aria-label="Hauptnavigation">
+      <a routerLink="/fragen" routerLinkActive="active" ariaCurrentWhenActive="page">Fragen</a>
+      <a routerLink="/dokumente" routerLinkActive="active" ariaCurrentWhenActive="page"
+        >Dokumente</a
+      >
+    </nav>
+    <div class="account">
+      <span class="who">
+        <span>{{ user.email }}</span>
+        <span class="muted"
+          >{{ user.tenant_name }} · {{ user.role === 'admin' ? 'Admin' : 'Leser' }}</span
+        >
+      </span>
+      <button type="button" (click)="logout()">Abmelden</button>
+    </div>
+  }
 </header>
 
 <main class="content">
