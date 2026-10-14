@@ -432,6 +432,11 @@ export interface components {
             /** Marker */
             marker: string;
             /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
              * Document Id
              * Format: uuid
              */
