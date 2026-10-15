@@ -22,6 +22,7 @@ class ChunkOut(BaseModel):
     section_path: str | None
     heading: str | None
     content: str
+    ocr: bool  # recognised by OCR from a scanned page
 
 
 class ContextDocumentOut(BaseModel):
@@ -47,6 +48,7 @@ def _chunk_out(chunk: Chunk) -> ChunkOut:
         section_path=chunk.section_path,
         heading=chunk.heading,
         content=chunk.content,
+        ocr=chunk.ocr,
     )
 
 

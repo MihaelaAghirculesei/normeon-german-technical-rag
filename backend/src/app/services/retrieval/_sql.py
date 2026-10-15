@@ -31,4 +31,5 @@ def row_to_chunk(row: Any) -> RetrievedChunk:
         heading=row.heading,
         score=float(row.score),
         version_label=row.version_label,
+        ocr=row.ocr,
     )

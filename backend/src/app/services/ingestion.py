@@ -142,7 +142,9 @@ async def process_document(
         document.page_count = max((b.page for b in parsed.blocks), default=0)
 
         for strategy in ALL_STRATEGIES:
-            await _insert_chunks(session, document, strategy.name, strategy.chunk(parsed))
+            await _insert_chunks(
+                session, document, strategy.name, strategy.chunk(parsed), parsed.ocr_pages
+            )
 
         document.status = "embedding"
         error_code = "embedding_failed"
@@ -191,7 +193,9 @@ async def ingest_document(
     return document, False
 
 
-def _chunk_row(document: Document, strategy_name: str, dc: DomainChunk) -> dict[str, Any]:
+def _chunk_row(
+    document: Document, strategy_name: str, dc: DomainChunk, ocr_pages: frozenset[int]
+) -> dict[str, Any]:
     return {
         "document_id": document.id,
         "tenant_id": document.tenant_id,
@@ -212,6 +216,8 @@ def _chunk_row(document: Document, strategy_name: str, dc: DomainChunk) -> dict[
         # Same function normalises the query side, so the two agree.
         "content_norm": normalize_de(dc.content),
         "token_count": dc.token_count,
+        # Any of its pages read by OCR: the text may hold recognition errors.
+        "ocr": any(page in ocr_pages for page in range(dc.page_from, dc.page_to + 1)),
     }
 
 
@@ -220,11 +226,12 @@ async def _insert_chunks(
     document: Document,
     strategy_name: str,
     domain_chunks: list[DomainChunk],
+    ocr_pages: frozenset[int] = frozenset(),
 ) -> None:
     if not domain_chunks:
         return
 
-    rows = [_chunk_row(document, strategy_name, dc) for dc in domain_chunks]
+    rows = [_chunk_row(document, strategy_name, dc, ocr_pages) for dc in domain_chunks]
     stmt = pg_insert(Chunk).values(rows).on_conflict_do_nothing(
         index_elements=["document_id", "strategy", "chunk_hash"]
     )

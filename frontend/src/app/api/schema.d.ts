@@ -238,6 +238,8 @@ export interface components {
             heading: string | null;
             /** Content */
             content: string;
+            /** Ocr */
+            ocr: boolean;
         };
         /** CitationOut */
         CitationOut: {
@@ -515,6 +517,8 @@ export interface components {
             section_path: string | null;
             /** Heading */
             heading: string | null;
+            /** Ocr */
+            ocr: boolean;
         };
         /** SourcesData */
         SourcesData: {

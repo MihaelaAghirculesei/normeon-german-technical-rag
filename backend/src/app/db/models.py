@@ -86,6 +86,8 @@ class Chunk(Base):
     char_end: Mapped[int]
     content: Mapped[str]
     content_norm: Mapped[str]
+    # Text recognised by OCR from a scanned page (migration 0006).
+    ocr: Mapped[bool] = mapped_column(server_default=text("false"))
     token_count: Mapped[int]
 
 

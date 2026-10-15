@@ -32,6 +32,7 @@ class Source:
     heading: str | None
     content: str
     version_label: str | None = None
+    ocr: bool = False
 
 
 def _seiten(page_from: int, page_to: int) -> str:
@@ -121,6 +122,7 @@ def build_context(
             heading=chunk.heading,
             content=chunk.content,
             version_label=chunk.version_label,
+            ocr=chunk.ocr,
         )
         sources[marker] = source
         if untrusted:
