@@ -62,6 +62,9 @@ class SourceOut(BaseModel):
     page_to: int
     section_path: str | None
     heading: str | None
+    # The text was recognised by OCR from a scanned page and may hold
+    # recognition errors; the UI says so next to the source.
+    ocr: bool
 
 
 class CitationOut(BaseModel):
@@ -105,6 +108,7 @@ def _sources_out(sources: list[Source]) -> list[SourceOut]:
             page_to=s.page_to,
             section_path=s.section_path,
             heading=s.heading,
+            ocr=s.ocr,
         )
         for s in sources
     ]

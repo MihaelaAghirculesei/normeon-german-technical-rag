@@ -28,6 +28,7 @@ class RetrievedChunk:
     heading: str | None
     score: float
     version_label: str | None = None
+    ocr: bool = False  # text recognised by OCR from a scanned page
 
 
 @dataclass(frozen=True, slots=True)

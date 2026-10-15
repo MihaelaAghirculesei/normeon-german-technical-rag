@@ -181,3 +181,11 @@ button:disabled {
   font-size: 0.75rem;
   color: var(--ok);
 }
+
+.ocr-label {
+  font-size: 0.7rem;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+}
