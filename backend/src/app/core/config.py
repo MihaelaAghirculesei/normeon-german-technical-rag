@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     ocr_dpi: int = 300
     ocr_min_chars: int = 50
 
+    # Metrics (Giorno 27). `/metrics` is open when `metrics_token` is unset
+    # (a scraper on the internal network); set it to require
+    # `Authorization: Bearer <token>`.
+    metrics_token: str | None = None
+
 
 settings = Settings()
 
