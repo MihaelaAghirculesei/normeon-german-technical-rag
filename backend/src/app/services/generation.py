@@ -63,6 +63,7 @@ from app.core.metrics import (
     hallucinated_citation_total,
 )
 from app.core.observability import PhaseTimer, phase
+from app.core.request_context import current_request_id
 from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
 from app.domain.config_hash import compute_config_hash
 from app.domain.conflicts import find_version_conflicts
@@ -300,7 +301,7 @@ async def generate_answer(
     prompt_name: str | None = None,
     request_id: str | None = None,
 ) -> AnswerResult:
-    request_id = request_id or str(uuid4())
+    request_id = request_id or current_request_id() or str(uuid4())
     prep = await _prepare(
         session,
         embedder,
@@ -425,7 +426,7 @@ async def generate_answer_stream(
     and the resolved model is in `pricing.yaml`; otherwise `null`, same
     as the non-streaming path's `calculate_cost` returning `None`.
     """
-    request_id = request_id or str(uuid4())
+    request_id = request_id or current_request_id() or str(uuid4())
     try:
         # Each stage is reported when the request actually enters it:
         # retrieval runs in a task that flags the hand-off to the
