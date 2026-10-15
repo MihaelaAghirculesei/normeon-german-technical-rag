@@ -343,6 +343,7 @@ def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
                 {
                     "latency_ms": {"retrieval_ms": 10.0, "generation_ms": 5.0, "total_ms": 15.0},
                     "cost_usd": None,
+                    "answer": "Die Antwort. [S1]",
                     "citations": [_citation("S1", 14)],
                 },
             ),
@@ -375,6 +376,7 @@ def test_chat_stream_emits_sse_events_in_order(stream_client: Any) -> None:
 
     done_data = events[-1][1]
     assert done_data["cost_usd"] is None
+    assert done_data["answer"] == "Die Antwort. [S1]"
     assert [c["marker"] for c in done_data["citations"]] == ["S1"]
     assert done_data["latency_ms"]["total_ms"] == 15.0
 

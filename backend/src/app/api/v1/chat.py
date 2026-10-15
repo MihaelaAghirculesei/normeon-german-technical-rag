@@ -184,6 +184,8 @@ class StreamLatencyOut(BaseModel):
 class DoneData(BaseModel):
     latency_ms: StreamLatencyOut
     cost_usd: float | None
+    # The validated answer; it replaces the text streamed as `token`s.
+    answer: str
     citations: list[CitationOut]
 
 
@@ -251,6 +253,7 @@ def _event_payload(event: StreamEvent) -> BaseModel:
         return DoneData(
             latency_ms=StreamLatencyOut(**event.data["latency_ms"]),
             cost_usd=event.data["cost_usd"],
+            answer=event.data["answer"],
             citations=_citations_out(event.data["citations"]),
         )
     return ErrorData(**event.data)

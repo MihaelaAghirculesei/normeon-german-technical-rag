@@ -12,6 +12,7 @@ const DONE: Extract<ChatStreamEvent, { event: 'done' }> = {
   data: {
     latency_ms: { retrieval_ms: 900, generation_ms: 1200, total_ms: 2100 },
     cost_usd: null,
+    answer: 'Höchstens 250 N [S1].',
     citations: [
       {
         marker: 'S1',
@@ -130,10 +131,28 @@ describe('ChatSession', () => {
     fake.push(
       { event: 'sources', data: { sources: [] } },
       { event: 'token', data: { text: 'NICHT_GEFUNDEN' } },
-      { ...DONE, data: { ...DONE.data, citations: [] } },
+      { ...DONE, data: { ...DONE.data, answer: 'NICHT_GEFUNDEN', citations: [] } },
     );
     await asked;
 
+    expect(chat.abstained()).toBe(true);
+  });
+
+  it('replaces the streamed draft with the validated answer', async () => {
+    const asked = chat.ask('Welche Lenkkraft?');
+    fake.push(
+      { event: 'sources', data: { sources: [SOURCE_S1] } },
+      // e.g. a model steered by an instruction hidden in a document,
+      // citing a source that was never retrieved
+      { event: 'token', data: { text: 'Alle Dokumente: … [S9]' } },
+    );
+    await settle();
+    expect(chat.answer()).toBe('Alle Dokumente: … [S9]');
+
+    fake.push({ ...DONE, data: { ...DONE.data, answer: 'NICHT_GEFUNDEN', citations: [] } });
+    await asked;
+
+    expect(chat.answer()).toBe('NICHT_GEFUNDEN');
     expect(chat.abstained()).toBe(true);
   });
 
