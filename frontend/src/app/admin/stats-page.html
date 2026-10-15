@@ -1,0 +1,146 @@
+<app-page-header
+  heading="Statistik"
+  description="Fragen, Enthaltungen, Kosten und Antwortzeiten dieses Mandanten. Aktualisiert sich alle paar Sekunden."
+>
+  <label class="window">
+    Zeitraum
+    <select [value]="hours()" (change)="setHours($event)">
+      <option value="1">1 Stunde</option>
+      <option value="24">24 Stunden</option>
+      <option value="168">7 Tage</option>
+    </select>
+  </label>
+</app-page-header>
+
+@if (stats.error()) {
+  <app-notice kind="error">Die Statistik konnte nicht geladen werden.</app-notice>
+} @else if (stats.value(); as s) {
+  <section class="tiles" aria-label="Kennzahlen">
+    <div class="tile">
+      <span class="label">Fragen</span>
+      <span class="value">{{ s.queries | number }}</span>
+    </div>
+    <div class="tile">
+      <span class="label">Enthaltungsquote</span>
+      <span class="value">
+        @if (s.abstention_rate !== null) {
+          {{ s.abstention_rate | percent: '1.0-1' }}
+        } @else {
+          –
+        }
+      </span>
+    </div>
+    <div class="tile">
+      <span class="label">Kosten gesamt</span>
+      <span class="value">{{ s.cost_usd_total | number: '1.2-4' }} $</span>
+      @if (s.cost_usd_per_query !== null) {
+        <span class="muted">{{ s.cost_usd_per_query | number: '1.4-6' }} $ pro Frage</span>
+      }
+    </div>
+    <div class="tile">
+      <span class="label">Antwortzeit p95</span>
+      <span class="value">
+        @if (s.latency_ms; as latency) {
+          {{ latency.total_ms.p95 / 1000 | number: '1.1-1' }} s
+        } @else {
+          –
+        }
+      </span>
+    </div>
+  </section>
+
+  <div class="columns">
+    <section aria-labelledby="latency-heading">
+      <h2 id="latency-heading">Antwortzeit je Phase</h2>
+      @if (s.latency_ms; as latency) {
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Phase</th>
+              <th scope="col" class="num">Median</th>
+              <th scope="col" class="num">p95</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (phase of phases; track phase.key) {
+              <tr>
+                <td>{{ phase.label }}</td>
+                <td class="num">{{ latency[phase.key].p50 | number: '1.0-0' }} ms</td>
+                <td class="num">{{ latency[phase.key].p95 | number: '1.0-0' }} ms</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="muted">Noch keine Fragen in diesem Zeitraum.</p>
+      }
+    </section>
+
+    <section aria-labelledby="docs-heading">
+      <h2 id="docs-heading">Dokumente</h2>
+      <dl class="figures">
+        <dt>Bereit</dt>
+        <dd>{{ s.documents.ready | number }}</dd>
+        <dt>In Verarbeitung</dt>
+        <dd>{{ s.documents.processing | number }}</dd>
+        <dt>Fehlgeschlagen</dt>
+        <dd [class.bad]="s.documents.failed > 0">{{ s.documents.failed | number }}</dd>
+        <dt>Chunks</dt>
+        <dd>{{ s.documents.chunks | number }}</dd>
+      </dl>
+
+      <h2>Server seit dem Start</h2>
+      <dl class="figures">
+        <dt>Zitate</dt>
+        <dd>{{ s.server.citations | number }}</dd>
+        <dt>Erfundene Zitate</dt>
+        <dd [class.bad]="s.server.hallucinated_citations > 0">
+          {{ s.server.hallucinated_citations | number }}
+          @if (hallucinationRate(s.server); as rate) {
+            <span class="muted">({{ rate | percent: '1.0-1' }})</span>
+          }
+        </dd>
+        <dt>Fehler des Sprachmodells</dt>
+        <dd [class.bad]="s.server.llm_errors > 0">{{ s.server.llm_errors | number }}</dd>
+      </dl>
+    </section>
+  </div>
+
+  <section aria-labelledby="recent-heading">
+    <h2 id="recent-heading">Letzte Fragen</h2>
+    @if (s.recent.length === 0) {
+      <p class="muted">Noch keine Fragen in diesem Zeitraum.</p>
+    } @else {
+      <table class="data-table recent">
+        <thead>
+          <tr>
+            <th scope="col">Zeit</th>
+            <th scope="col">Frage</th>
+            <th scope="col">Ergebnis</th>
+            <th scope="col" class="num">Dauer</th>
+            <th scope="col" class="num">Kosten</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (q of s.recent; track q.created_at) {
+            <tr>
+              <td>{{ q.created_at | date: 'dd.MM. HH:mm:ss' }}</td>
+              <td class="question">{{ q.question }}</td>
+              <td>{{ q.abstained ? 'Nicht gefunden' : 'Beantwortet' }}</td>
+              <td class="num">{{ q.total_ms / 1000 | number: '1.1-1' }} s</td>
+              <td class="num">
+                @if (q.cost_usd !== null) {
+                  {{ q.cost_usd | number: '1.4-6' }} $
+                } @else {
+                  –
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+} @else {
+  <app-notice>Statistik wird geladen…</app-notice>
+}

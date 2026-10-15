@@ -6,6 +6,11 @@
       <a routerLink="/dokumente" routerLinkActive="active" ariaCurrentWhenActive="page"
         >Dokumente</a
       >
+      @if (auth.isAdmin()) {
+        <a routerLink="/statistik" routerLinkActive="active" ariaCurrentWhenActive="page"
+          >Statistik</a
+        >
+      }
     </nav>
     <div class="account">
       <span class="who">

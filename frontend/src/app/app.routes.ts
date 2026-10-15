@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { authGuard } from './core/auth-http';
+import { adminGuard, authGuard } from './core/auth-http';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'fragen' },
@@ -20,6 +20,12 @@ export const routes: Routes = [
     title: 'Dokumente · Normeon',
     canActivate: [authGuard],
     loadComponent: () => import('./documents/documents-page').then((m) => m.DocumentsPage),
+  },
+  {
+    path: 'statistik',
+    title: 'Statistik · Normeon',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./admin/stats-page').then((m) => m.StatsPage),
   },
   {
     path: '**',
