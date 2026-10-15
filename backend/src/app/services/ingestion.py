@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
+from app.adapters.ocr.tesseract import default_ocr
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
 from app.core.config import settings
@@ -26,8 +27,13 @@ EMBEDDING_BATCH_SIZE = 32
 
 # Dispatch by file extension -- both parsers produce the same ParsedDocument
 # shape, so everything downstream (chunking, embedding) is format-agnostic.
+def _parse_pdf_with_ocr(path: Path) -> ParsedDocument:
+    # Scanned pages are read by OCR when tesseract is available (Giorno 26).
+    return parse_pdf(path, ocr=default_ocr(), ocr_min_chars=settings.ocr_min_chars)
+
+
 _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
-    ".pdf": parse_pdf,
+    ".pdf": _parse_pdf_with_ocr,
     ".docx": parse_docx,
 }
 SUPPORTED_SUFFIXES = frozenset(_PARSERS)

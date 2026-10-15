@@ -115,6 +115,13 @@ class Settings(BaseSettings):
     max_docx_compression_ratio: int = 100
     upload_check_timeout_s: float = 20.0
     parse_timeout_s: float = 300.0
+    # OCR for scanned pages: a PDF page whose text layer has fewer than
+    # `ocr_min_chars` characters is read with tesseract instead.
+    ocr_enabled: bool = True
+    ocr_language: str = "deu"
+    ocr_dpi: int = 300
+    ocr_min_chars: int = 50
+
 
 settings = Settings()
 

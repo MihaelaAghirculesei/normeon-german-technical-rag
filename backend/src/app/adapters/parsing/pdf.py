@@ -6,6 +6,7 @@ from typing import Any
 
 import pymupdf
 
+from app.adapters.ocr.base import PageOcr
 from app.domain.parsing import Block, ParsedDocument
 
 BBox = tuple[float, float, float, float]
@@ -18,10 +19,17 @@ _HEADER_FOOTER_MIN_PAGES = 2
 _HEADER_FOOTER_RATIO = 0.6
 _BBOX_GROUPING_TOLERANCE = 5.0  # points; groups a header/footer's anchor position across pages
 _BBOX_CONTAINMENT_TOLERANCE = 2.0  # points; slack when checking a text block sits inside a table
+_OCR_MIN_CHARS = 50  # a page with less text than this is treated as a scan
 
 
-def parse_pdf(path: str | Path) -> ParsedDocument:
+def parse_pdf(
+    path: str | Path, *, ocr: PageOcr | None = None, ocr_min_chars: int = _OCR_MIN_CHARS
+) -> ParsedDocument:
+    """Parse a PDF into blocks. With `ocr`, a page whose text layer holds
+    fewer than `ocr_min_chars` characters -- a scan -- is read by OCR
+    instead, and listed in `ParsedDocument.ocr_pages`."""
     doc = pymupdf.open(path)  # type: ignore[no-untyped-call]
+    ocr_pages: set[int] = set()
     try:
         page_count = doc.page_count
         blocks: list[Block] = []
@@ -29,8 +37,14 @@ def parse_pdf(path: str | Path) -> ParsedDocument:
             page = doc[page_index]
             page_num = page_index + 1
             table_bboxes, table_blocks = _extract_tables(page, page_num)
-            text_blocks = _extract_text_blocks(page, page_num, table_bboxes)
+            layer: dict[str, Any] = page.get_text("dict")  # type: ignore[no-untyped-call]
+            text_blocks = _extract_text_blocks(layer, page_num, table_bboxes)
             page_blocks = text_blocks + table_blocks
+            if ocr is not None and sum(len(b.text) for b in page_blocks) < ocr_min_chars:
+                recognised = _extract_text_blocks(ocr.read(page), page_num, [])
+                if sum(len(b.text) for b in recognised) > sum(len(b.text) for b in page_blocks):
+                    page_blocks = recognised
+                    ocr_pages.add(page_num)
             page_blocks.sort(key=lambda b: b.bbox[1])
             blocks.extend(page_blocks)
     finally:
@@ -39,14 +53,16 @@ def parse_pdf(path: str | Path) -> ParsedDocument:
     blocks = _filter_repeated_headers_footers(blocks, page_count)
     blocks = _detect_titles(blocks)
     blocks = _assign_section_paths(blocks)
-    return ParsedDocument(blocks=blocks)
+    return ParsedDocument(blocks=blocks, ocr_pages=frozenset(ocr_pages))
 
 
 def _extract_text_blocks(
-    page: Any, page_num: int, exclude_bboxes: list[BBox]
+    page_dict: dict[str, Any], page_num: int, exclude_bboxes: list[BBox]
 ) -> list[Block]:
+    """Text blocks from a page in `page.get_text("dict")` form -- the text
+    layer or, for a scan, the OCR result."""
     result: list[Block] = []
-    for raw_block in page.get_text("dict")["blocks"]:
+    for raw_block in page_dict["blocks"]:
         if raw_block.get("type") != 0:
             continue
         spans = [s for line in raw_block.get("lines", []) for s in line["spans"]]
