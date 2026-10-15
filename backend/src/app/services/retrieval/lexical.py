@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.observability import phase
 from app.domain.models import RetrievedChunk
 from app.domain.normalization import extract_code, normalize_de
 from app.services.retrieval._sql import FTS_SEARCH_SQL, TRGM_SEARCH_SQL, row_to_chunk
@@ -24,16 +25,17 @@ async def _fts_branch(
     text, so a code or norm reference written differently still lands on
     the token ingestion stored.
     """
-    result = await session.execute(
-        FTS_SEARCH_SQL,
-        {
-            "q": normalize_de(question),
-            "tenant_id": tenant_id,
-            "strategy": strategy,
-            "k": k,
-        },
-    )
-    return [row_to_chunk(row) for row in result]
+    with phase("retrieve.fts"):
+        result = await session.execute(
+            FTS_SEARCH_SQL,
+            {
+                "q": normalize_de(question),
+                "tenant_id": tenant_id,
+                "strategy": strategy,
+                "k": k,
+            },
+        )
+        return [row_to_chunk(row) for row in result]
 
 
 async def _trgm_branch(
@@ -51,17 +53,18 @@ async def _trgm_branch(
     code = extract_code(question)
     if code is None:
         return []
-    await session.execute(
-        text(
-            "SET LOCAL pg_trgm.word_similarity_threshold = "
-            f"{float(settings.trgm_code_threshold)}"
+    with phase("retrieve.trgm"):
+        await session.execute(
+            text(
+                "SET LOCAL pg_trgm.word_similarity_threshold = "
+                f"{float(settings.trgm_code_threshold)}"
+            )
         )
-    )
-    result = await session.execute(
-        TRGM_SEARCH_SQL,
-        {"code": code, "tenant_id": tenant_id, "strategy": strategy, "k": k},
-    )
-    return [row_to_chunk(row) for row in result]
+        result = await session.execute(
+            TRGM_SEARCH_SQL,
+            {"code": code, "tenant_id": tenant_id, "strategy": strategy, "k": k},
+        )
+        return [row_to_chunk(row) for row in result]
 
 
 async def fts_search(

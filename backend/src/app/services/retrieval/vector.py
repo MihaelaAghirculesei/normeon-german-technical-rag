@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.core.config import settings
+from app.core.observability import phase
 from app.domain.models import RetrievedChunk
 from app.services.retrieval._sql import VECTOR_SEARCH_SQL, row_to_chunk
 
@@ -26,16 +27,17 @@ async def vector_search(
     ranked by cosine similarity. `strategy` / `k` / `ef_search` fall back to
     the configured defaults.
     """
-    query_vector = await asyncio.to_thread(embedder.embed_query, question)
-    return await vector_search_by_vector(
-        session,
-        tenant_id=tenant_id,
-        query_vector=query_vector,
-        model=embedder.name,
-        strategy=strategy,
-        k=k,
-        ef_search=ef_search,
-    )
+    with phase("retrieve.vector"):
+        query_vector = await asyncio.to_thread(embedder.embed_query, question)
+        return await vector_search_by_vector(
+            session,
+            tenant_id=tenant_id,
+            query_vector=query_vector,
+            model=embedder.name,
+            strategy=strategy,
+            k=k,
+            ef_search=ef_search,
+        )
 
 
 async def vector_search_by_vector(

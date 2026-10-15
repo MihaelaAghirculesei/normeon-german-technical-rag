@@ -62,6 +62,7 @@ from app.core.metrics import (
     LLM_ERRORS_TOTAL,
     hallucinated_citation_total,
 )
+from app.core.observability import PhaseTimer, phase
 from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
 from app.domain.config_hash import compute_config_hash
 from app.domain.conflicts import find_version_conflicts
@@ -337,12 +338,13 @@ async def generate_answer(
 
     started = time.perf_counter()
     try:
-        completion = await llm.complete(
-            system=prep.system,
-            user=prep.user_message,
-            temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
-        )
+        with phase("generate", model=llm.name):
+            completion = await llm.complete(
+                system=prep.system,
+                user=prep.user_message,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
     except NormeonError as exc:
         _count_llm_error(exc.code)
         raise
@@ -500,6 +502,7 @@ async def generate_answer_stream(
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
         )
+        generating = PhaseTimer("generate")
         try:
             async for delta in token_stream:
                 if delta.model:
@@ -516,6 +519,7 @@ async def generate_answer_stream(
             # client disconnect, api.v1.chat) down to the adapter's own
             # network read -- "annulla il task LLM" from the plan.
             await token_stream.aclose()
+            generating.end()
         generation_ms = round((time.perf_counter() - started) * 1000, 1)
 
         answer_text = "".join(parts)
