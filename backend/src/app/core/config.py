@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     # Password for the two demo users `python -m app.db.seed` creates.
     demo_user_password: str = "normeon-demo"
 
+    # Upload limits (Giorno 26). A body over `max_upload_mb` is refused
+    # before it is read.
+    max_upload_mb: int = 50
+    max_request_kb: int = 256  # every other endpoint takes small JSON
 
 settings = Settings()
 

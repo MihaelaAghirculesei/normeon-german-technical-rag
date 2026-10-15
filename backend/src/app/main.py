@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import auth, chat, chunks, documents, health, search
 from app.core.config import insecure_settings, settings
 from app.core.errors import NormeonError
+from app.core.limits import BodySizeLimit
 from app.core.logging import configure_logging
 
 configure_logging()
@@ -15,6 +16,13 @@ if _problems:
     raise RuntimeError("insecure configuration: " + "; ".join(_problems))
 
 app = FastAPI(title=settings.app_name)
+# Oversized bodies are refused from the headers, before they are read.
+# The upload limit leaves room for the multipart framing around the file.
+app.add_middleware(
+    BodySizeLimit,
+    max_upload_bytes=settings.max_upload_mb * 2**20 + 64 * 2**10,
+    max_request_bytes=settings.max_request_kb * 2**10,
+)
 
 
 @app.exception_handler(NormeonError)
