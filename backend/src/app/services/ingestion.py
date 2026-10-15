@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import tempfile
 from collections.abc import Callable
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
+from app.core.config import settings
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
@@ -95,12 +97,20 @@ async def process_document(
 
     Status transitions each commit on their own, rather than the whole run
     being one transaction, so GET /documents/{id} can observe live progress
-    while a large document is still being embedded."""
+    while a large document is still being embedded.
+
+    A failure records why (`error_code`, Giorno 26): `parse_timeout` when
+    parsing takes longer than `settings.parse_timeout_s`, `parse_failed`
+    or `embedding_failed` otherwise. The parser runs in a worker thread,
+    which cannot be killed: on a timeout the document is marked failed at
+    once, and the thread finishes in the background."""
     if document.status == "ready":
         return
 
+    error_code = "parse_failed"
     try:
         document.status = "parsing"
+        document.error_code = None
         await session.commit()
 
         suffix = Path(document.filename).suffix.lower()
@@ -112,15 +122,24 @@ async def process_document(
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            parsed = await asyncio.to_thread(parser, tmp_path)
+            parsed = await asyncio.wait_for(
+                asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
+            )
+        except TimeoutError:
+            error_code = "parse_timeout"
+            raise
         finally:
-            tmp_path.unlink(missing_ok=True)
+            # After a timeout the parser may still hold the file open,
+            # which Windows refuses to delete; the OS temp dir cleans up.
+            with contextlib.suppress(OSError):
+                tmp_path.unlink(missing_ok=True)
         document.page_count = max((b.page for b in parsed.blocks), default=0)
 
         for strategy in ALL_STRATEGIES:
             await _insert_chunks(session, document, strategy.name, strategy.chunk(parsed))
 
         document.status = "embedding"
+        error_code = "embedding_failed"
         await session.commit()
 
         pending = await _chunks_missing_embeddings(session, document, embedder.name)
@@ -130,6 +149,7 @@ async def process_document(
         await session.commit()
     except Exception:
         document.status = "failed"
+        document.error_code = error_code
         await session.commit()
         raise
 
