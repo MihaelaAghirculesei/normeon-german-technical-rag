@@ -11,7 +11,7 @@ from typing import Any
 from app.adapters.llm.base import Delta, LlmResponse
 from app.adapters.llm.fake import FakeLlmClient
 from app.core.errors import LlmTimeoutError
-from app.core.metrics import hallucinated_citation_total
+from app.core.metrics import sample
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services import generation
 
@@ -264,7 +264,7 @@ async def test_an_invented_citation_marker_is_dropped_and_counted(
         ) -> LlmResponse:
             return LlmResponse(text="Es gilt Regel A [S1] und angeblich [S9].", model="spy")
 
-    before = hallucinated_citation_total.value
+    before = sample("normeon_hallucinated_citations_total")
 
     result = await generation.generate_answer(
         object(),
@@ -278,7 +278,7 @@ async def test_an_invented_citation_marker_is_dropped_and_counted(
     assert "[S9]" not in result.answer
     assert "[S1]" in result.answer
     assert [c.marker for c in result.citations] == ["S1"]
-    assert hallucinated_citation_total.value == before + 1
+    assert sample("normeon_hallucinated_citations_total") == before + 1
 
 
 async def test_claims_with_zero_valid_citations_become_an_abstention(
