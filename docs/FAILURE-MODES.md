@@ -220,13 +220,16 @@ validated list -- it simply may not match everything the client already
 rendered from the raw token stream. The non-streaming `POST /api/v1/chat`
 does not have this problem: it validates before returning anything.
 
-**Mitigation / status.** Not fixed by construction -- buffering the
-whole answer before streaming any of it would remove the point of
-streaming (perceived responsiveness, `sources` arriving before the
-text). A frontend that wants to be defensive here can treat `done.
-citations` as authoritative and visually flag/retract a rendered answer
-whose citations came back empty; that UI behaviour is a later
-(Angular, Week 5) concern, not something the backend can paper over.
+**Mitigation / status.** Fixed on Day 26. The streamed tokens are now
+a draft: `done` carries the validated `answer` as well as the
+citations, and the chat page replaces the draft with it. The draft
+stays on screen only while the answer is being written. It mattered
+more than it looked: in an indirect prompt-injection test, a model that
+obeyed an instruction hidden in a document had its answer discarded on
+the non-streaming path, but on the streaming path that answer stayed
+visible (`tests/security/test_injection.py`). Buffering the whole
+answer before streaming was rejected, because the sources arriving
+before the text is the point of streaming.
 
 ### The LLM adapter's stream() does not retry
 

@@ -343,6 +343,8 @@ export interface components {
             latency_ms: components["schemas"]["StreamLatencyOut"];
             /** Cost Usd */
             cost_usd: number | null;
+            /** Answer */
+            answer: string;
             /** Citations */
             citations: components["schemas"]["CitationOut"][];
         };

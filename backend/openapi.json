@@ -947,6 +947,10 @@
             ],
             "title": "Cost Usd"
           },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
           "citations": {
             "items": {
               "$ref": "#/components/schemas/CitationOut"
@@ -959,6 +963,7 @@
         "required": [
           "latency_ms",
           "cost_usd",
+          "answer",
           "citations"
         ],
         "title": "DoneData"
