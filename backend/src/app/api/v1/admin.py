@@ -8,7 +8,7 @@ query; they come from this process's Prometheus counters, since it started
 """
 
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -97,10 +97,11 @@ async def stats(
             ).where(in_window)
         )
     ).one()
-    queries, abstained, cost_total = int(row[0]), int(row[1]), float(row[2])
+    queries, abstained, cost_total = int(row[0]), int(row[1]), float(row[2] or 0)
     latency = None
     if queries:
-        values = [float(v) for v in row[3:]]
+        percentiles: tuple[Any, ...] = tuple(row[3:])
+        values = [float(v) for v in percentiles]
         latency = LatencyStats(
             **{
                 key: Percentiles(p50=round(values[2 * i], 1), p95=round(values[2 * i + 1], 1))
