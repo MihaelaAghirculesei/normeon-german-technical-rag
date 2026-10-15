@@ -8,6 +8,7 @@ import { Notice } from '../shared/notice';
 import { PageHeader } from '../shared/page-header';
 import { StatusBadge } from '../shared/status-badge';
 import { UploadPanel } from './upload-panel';
+import { ingestionErrorMessage } from './upload-queue';
 
 @Component({
   selector: 'app-documents-page',
@@ -18,6 +19,8 @@ import { UploadPanel } from './upload-panel';
 export class DocumentsPage {
   protected readonly auth = inject(AuthService);
   protected readonly documents = documentsResource();
+
+  protected readonly failure = ingestionErrorMessage;
 
   /** Chunk counts per strategy, in a stable order for the table. */
   protected chunkCounts(doc: DocumentSummary): { strategy: string; count: number }[] {

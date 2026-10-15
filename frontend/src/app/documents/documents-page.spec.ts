@@ -62,6 +62,15 @@ describe('DocumentsPage', () => {
     expect(cells[6]).toBe('Bereit');
   });
 
+  it('says why a document failed', async () => {
+    const failed = { ...LASTENHEFT, status: 'failed', error_code: 'parse_timeout' };
+    const el = await render((url) => http.expectOne(url).flush([failed]));
+
+    expect(el.querySelector('.failure')?.textContent).toBe(
+      'Das Lesen des Dokuments hat zu lange gedauert.',
+    );
+  });
+
   it('offers no upload to a reader', async () => {
     TestBed.inject(AuthService).logout();
     signedIn({ ...ANNA, role: 'reader' });
