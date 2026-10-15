@@ -413,10 +413,134 @@
           }
         }
       }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Stats",
+        "operationId": "stats_api_v1_admin_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 168,
+              "minimum": 1,
+              "default": 24,
+              "title": "Hours"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AdminStats": {
+        "properties": {
+          "window_hours": {
+            "type": "integer",
+            "title": "Window Hours"
+          },
+          "queries": {
+            "type": "integer",
+            "title": "Queries"
+          },
+          "abstention_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstention Rate"
+          },
+          "cost_usd_total": {
+            "type": "number",
+            "title": "Cost Usd Total"
+          },
+          "cost_usd_per_query": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd Per Query"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatencyStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "documents": {
+            "$ref": "#/components/schemas/DocumentStats"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/RecentQuery"
+            },
+            "type": "array",
+            "title": "Recent"
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerCounters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "window_hours",
+          "queries",
+          "abstention_rate",
+          "cost_usd_total",
+          "cost_usd_per_query",
+          "latency_ms",
+          "documents",
+          "recent",
+          "server"
+        ],
+        "title": "AdminStats"
+      },
       "Body_upload_document_api_v1_documents_post": {
         "properties": {
           "doc_type": {
@@ -784,6 +908,34 @@
         ],
         "title": "ContextDocumentOut"
       },
+      "DocumentStats": {
+        "properties": {
+          "ready": {
+            "type": "integer",
+            "title": "Ready"
+          },
+          "processing": {
+            "type": "integer",
+            "title": "Processing"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "chunks": {
+            "type": "integer",
+            "title": "Chunks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ready",
+          "processing",
+          "failed",
+          "chunks"
+        ],
+        "title": "DocumentStats"
+      },
       "DocumentStatusResponse": {
         "properties": {
           "document_id": {
@@ -1099,6 +1251,26 @@
         ],
         "title": "HealthResponse"
       },
+      "LatencyStats": {
+        "properties": {
+          "retrieval_ms": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "generation_ms": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "total_ms": {
+            "$ref": "#/components/schemas/Percentiles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "retrieval_ms",
+          "generation_ms",
+          "total_ms"
+        ],
+        "title": "LatencyStats"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -1150,6 +1322,24 @@
         ],
         "title": "LoginResponse"
       },
+      "Percentiles": {
+        "properties": {
+          "p50": {
+            "type": "number",
+            "title": "P50"
+          },
+          "p95": {
+            "type": "number",
+            "title": "P95"
+          }
+        },
+        "type": "object",
+        "required": [
+          "p50",
+          "p95"
+        ],
+        "title": "Percentiles"
+      },
       "PipelineTimingOut": {
         "properties": {
           "hybrid_ms": {
@@ -1177,6 +1367,47 @@
           "total_ms"
         ],
         "title": "PipelineTimingOut"
+      },
+      "RecentQuery": {
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "abstained": {
+            "type": "boolean",
+            "title": "Abstained"
+          },
+          "total_ms": {
+            "type": "integer",
+            "title": "Total Ms"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_at",
+          "question",
+          "abstained",
+          "total_ms",
+          "cost_usd"
+        ],
+        "title": "RecentQuery"
       },
       "RetrievalTimingOut": {
         "properties": {
@@ -1371,6 +1602,29 @@
           "took_ms"
         ],
         "title": "SearchResponse"
+      },
+      "ServerCounters": {
+        "properties": {
+          "citations": {
+            "type": "integer",
+            "title": "Citations"
+          },
+          "hallucinated_citations": {
+            "type": "integer",
+            "title": "Hallucinated Citations"
+          },
+          "llm_errors": {
+            "type": "integer",
+            "title": "Llm Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "citations",
+          "hallucinated_citations",
+          "llm_errors"
+        ],
+        "title": "ServerCounters"
       },
       "SourceOut": {
         "properties": {
