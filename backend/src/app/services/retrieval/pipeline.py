@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
+from app.core.observability import phase
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
 from app.services.retrieval.hybrid import hybrid_search
 from app.services.retrieval.vector import vector_search
@@ -98,30 +99,32 @@ async def retrieve_context(
     )
 
     started = time.perf_counter()
-    if retrieval_mode == "vector":
-        candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
-        fused = await vector_search(
-            session,
-            embedder,
-            tenant_id=tenant_id,
-            question=question,
-            strategy=strategy,
-            k=candidates,
-        )
-    else:
-        fused = await hybrid_search(
-            session,
-            embedder,
-            tenant_id=tenant_id,
-            question=question,
-            strategy=strategy,
-            candidate_k=candidate_k,
-            top_k=candidate_k,
-        )
+    with phase("retrieve", mode=retrieval_mode or "hybrid"):
+        if retrieval_mode == "vector":
+            candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
+            fused = await vector_search(
+                session,
+                embedder,
+                tenant_id=tenant_id,
+                question=question,
+                strategy=strategy,
+                k=candidates,
+            )
+        else:
+            fused = await hybrid_search(
+                session,
+                embedder,
+                tenant_id=tenant_id,
+                question=question,
+                strategy=strategy,
+                candidate_k=candidate_k,
+                top_k=candidate_k,
+            )
     after_hybrid = time.perf_counter()
     if on_rerank_start is not None:
         on_rerank_start()
-    reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
+    with phase("rerank", candidates=len(fused)):
+        reranked = await asyncio.to_thread(reranker.rerank, question, fused, rerank_top_k)
     after_rerank = time.perf_counter()
     context = _select_context(reranked, token_budget)
     after_select = time.perf_counter()

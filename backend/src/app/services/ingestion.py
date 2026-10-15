@@ -17,6 +17,7 @@ from app.adapters.ocr.tesseract import default_ocr
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
 from app.core.config import settings
+from app.core.observability import phase
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
@@ -128,9 +129,10 @@ async def process_document(
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            parsed = await asyncio.wait_for(
-                asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
-            )
+            with phase("parse", suffix=suffix):
+                parsed = await asyncio.wait_for(
+                    asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
+                )
         except TimeoutError:
             error_code = "parse_timeout"
             raise
@@ -151,7 +153,8 @@ async def process_document(
         await session.commit()
 
         pending = await _chunks_missing_embeddings(session, document, embedder.name)
-        await _embed_and_store(session, embedder, pending)
+        with phase("embed", chunks=len(pending), model=embedder.name):
+            await _embed_and_store(session, embedder, pending)
 
         document.status = "ready"
         await session.commit()
