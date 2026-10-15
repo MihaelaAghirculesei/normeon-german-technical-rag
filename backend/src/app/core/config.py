@@ -106,13 +106,15 @@ class Settings(BaseSettings):
 
     # Upload limits (Giorno 26). A body over `max_upload_mb` is refused
     # before it is read; a file is opened and checked (encryption, page
-    # count, zip-bomb shape) before anything is stored.
+    # count, zip-bomb shape) before anything is stored; parsing in the
+    # background gives up after `parse_timeout_s`.
     max_upload_mb: int = 50
     max_request_kb: int = 256  # every other endpoint takes small JSON
     max_document_pages: int = 2000
     max_docx_uncompressed_mb: int = 200
     max_docx_compression_ratio: int = 100
     upload_check_timeout_s: float = 20.0
+    parse_timeout_s: float = 300.0
 
 settings = Settings()
 

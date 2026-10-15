@@ -58,6 +58,8 @@ class Document(Base):
     page_count: Mapped[int | None]
     uploaded_by: Mapped[str | None]
     status: Mapped[str] = mapped_column(server_default="pending")
+    # Why ingestion failed (migration 0005); None unless status is "failed".
+    error_code: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 

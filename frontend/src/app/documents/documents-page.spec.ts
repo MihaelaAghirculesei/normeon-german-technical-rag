@@ -16,6 +16,7 @@ const LASTENHEFT: DocumentSummary = {
   valid_until: null,
   page_count: null,
   status: 'ready',
+  error_code: null,
   created_at: '2026-09-15T10:00:00',
   chunk_counts: { structural: 6, fixed_500: 5 },
 };

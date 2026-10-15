@@ -289,6 +289,8 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
         };
         /** DocumentSummary */
         DocumentSummary: {
@@ -311,6 +313,8 @@ export interface components {
             page_count: number | null;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
             /**
              * Created At
              * Format: date-time
@@ -332,6 +336,8 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
             /**
              * Outcome
              * @enum {string}

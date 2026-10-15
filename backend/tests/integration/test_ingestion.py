@@ -4,6 +4,7 @@ criterion from the plan, made into a regression test.
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 import pymupdf
@@ -15,6 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 from app.db.models import Chunk, Document, Embedding, Tenant
+from app.services import ingestion
 from app.services.ingestion import ingest_document
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "migrations"
@@ -195,6 +197,7 @@ async def _interrupt_then_resume(database_url: str, tmp_path: Path) -> None:
     async with session_factory() as session:
         document = await session.scalar(select(Document))
         assert document is not None and document.status == "failed"
+        assert document.error_code == "embedding_failed"
         total_chunks = await session.scalar(select(func.count()).select_from(Chunk))
         embedded = await session.scalar(select(func.count()).select_from(Embedding))
         assert total_chunks is not None and total_chunks > 2
@@ -206,10 +209,50 @@ async def _interrupt_then_resume(database_url: str, tmp_path: Path) -> None:
         )
         assert already_ingested is False
         assert document.status == "ready"
+        assert document.error_code is None
 
     async with session_factory() as session:
         total_chunks = await session.scalar(select(func.count()).select_from(Chunk))
         embedded = await session.scalar(select(func.count()).select_from(Embedding))
         assert embedded == total_chunks
+
+    await engine.dispose()
+
+
+def test_a_parser_that_hangs_fails_the_document_with_parse_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hanging_parser(path: Path) -> None:
+        time.sleep(2)
+
+    monkeypatch.setitem(ingestion._PARSERS, ".pdf", hanging_parser)
+    monkeypatch.setattr(ingestion.settings, "parse_timeout_s", 0.2)
+    with PostgresContainer("pgvector/pgvector:pg18", driver="asyncpg") as pg:
+        database_url = pg.get_connection_url()
+        command.upgrade(_alembic_config(database_url), "head")
+        asyncio.run(_ingest_with_a_hanging_parser(database_url, tmp_path))
+
+
+async def _ingest_with_a_hanging_parser(database_url: str, tmp_path: Path) -> None:
+    engine = create_async_engine(database_url)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with session_factory() as session:
+        tenant = Tenant(name="Demo Tenant")
+        session.add(tenant)
+        await session.commit()
+        started = time.perf_counter()
+        with pytest.raises(TimeoutError):
+            await ingest_document(
+                session, _FakeEmbedder(), tenant.id, "slow.pdf", "norm", _build_test_pdf(tmp_path)
+            )
+        # Marked failed at the deadline, not when the parser gives up.
+        assert time.perf_counter() - started < 1.5
+
+    async with session_factory() as session:
+        document = await session.scalar(select(Document))
+        assert document is not None
+        assert (document.status, document.error_code) == ("failed", "parse_timeout")
+        assert await session.scalar(select(func.count()).select_from(Chunk)) == 0
 
     await engine.dispose()

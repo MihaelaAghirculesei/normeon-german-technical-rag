@@ -793,13 +793,25 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
           }
         },
         "type": "object",
         "required": [
           "document_id",
           "filename",
-          "status"
+          "status",
+          "error_code"
         ],
         "title": "DocumentStatusResponse"
       },
@@ -868,6 +880,17 @@
             "type": "string",
             "title": "Status"
           },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -891,6 +914,7 @@
           "valid_until",
           "page_count",
           "status",
+          "error_code",
           "created_at",
           "chunk_counts"
         ],
@@ -911,6 +935,17 @@
             "type": "string",
             "title": "Status"
           },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
           "outcome": {
             "type": "string",
             "enum": [
@@ -927,6 +962,7 @@
           "document_id",
           "filename",
           "status",
+          "error_code",
           "outcome"
         ],
         "title": "DocumentUploadResponse"

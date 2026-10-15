@@ -28,6 +28,9 @@ class DocumentStatusResponse(BaseModel):
     document_id: UUID
     filename: str
     status: str
+    # Why ingestion failed: parse_timeout, parse_failed or embedding_failed;
+    # null unless status is "failed".
+    error_code: str | None
 
 
 UploadOutcome = Literal["created", "duplicate", "in_progress", "retrying"]
@@ -117,6 +120,7 @@ async def upload_document(
         document_id=document.id,
         filename=document.filename,
         status=document.status,
+        error_code=document.error_code,
         outcome=outcome,
     )
 
@@ -150,6 +154,7 @@ class DocumentSummary(BaseModel):
     valid_until: date | None
     page_count: int | None
     status: str
+    error_code: str | None
     created_at: datetime
     # Chunks per chunking strategy, e.g. {"fixed_500": 233, "structural": 114};
     # empty until the document has been parsed.
@@ -182,6 +187,7 @@ async def list_documents(auth: AuthDep, session: TenantSession) -> list[Document
             valid_until=d.valid_until,
             page_count=d.page_count,
             status=d.status,
+            error_code=d.error_code,
             created_at=d.created_at,
             chunk_counts=chunk_counts.get(d.id, {}),
         )
@@ -200,5 +206,8 @@ async def get_document_status(
     if document is None:
         raise DocumentNotFoundError(f"document {document_id} not found")
     return DocumentStatusResponse(
-        document_id=document.id, filename=document.filename, status=document.status
+        document_id=document.id,
+        filename=document.filename,
+        status=document.status,
+        error_code=document.error_code,
     )
