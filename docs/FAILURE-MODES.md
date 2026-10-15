@@ -330,6 +330,23 @@ What this does not cover:
   scanned page yields no text, as before.
 - **Images inside Word files are not read.**
 
+## Observability (Day 27)
+
+- **Metrics are per process.** Prometheus counters live in the worker
+  that recorded them. A scraper sums the workers, but the "server since
+  start" figures on the statistics page are the current worker's only.
+  The answer statistics come from `query_logs` and are exact.
+- **`/metrics` is open by default.** That is the norm for a scraper on
+  an internal network. On a public host, set `METRICS_TOKEN` or block
+  the path at the proxy: the cost series is business information.
+- **The streamed answer's span is not current.** It is opened as a
+  detached span, so that nothing is attached to a context the generator
+  could be resumed from elsewhere. Any span created inside the token loop
+  would therefore not nest under `generate`; today there is none.
+- **The readable trace keeps unfinished traces in memory**, up to 1000,
+  then drops the oldest. A trace whose request span never ends is lost,
+  not leaked.
+
 ## Parsing / chunking
 
 Carried over from earlier days, revisit if Week 4 eval shows they matter:
