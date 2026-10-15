@@ -37,6 +37,13 @@ export const authGuard: CanActivateFn = (_route, state) => {
     : inject(Router).createUrlTree(['/anmelden'], { queryParams: { weiter: state.url } });
 };
 
+/** Pages for admins only; anyone else signed in lands on the chat. */
+export const adminGuard: CanActivateFn = (route, state) => {
+  const auth = inject(AuthService);
+  if (!auth.isAuthenticated()) return authGuard(route, state);
+  return auth.isAdmin() ? true : inject(Router).createUrlTree(['/fragen']);
+};
+
 export function signOut(auth: AuthService, router: Router): void {
   auth.logout();
   void router.navigate(['/anmelden'], { queryParams: { weiter: router.url } });

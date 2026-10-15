@@ -5,7 +5,7 @@ import { Router, provideRouter, type UrlTree } from '@angular/router';
 
 import { safeTarget } from '../login/login-page';
 import { AuthService } from './auth';
-import { authGuard, authInterceptor } from './auth-http';
+import { adminGuard, authGuard, authInterceptor } from './auth-http';
 import { ANNA, signedIn, signedOut } from './testing';
 
 describe('auth', () => {
@@ -110,6 +110,33 @@ describe('auth', () => {
       const tree = run('/dokumente') as UrlTree;
 
       expect(TestBed.inject(Router).serializeUrl(tree)).toBe('/anmelden?weiter=%2Fdokumente');
+    });
+  });
+
+  describe('adminGuard', () => {
+    const run = (url: string) =>
+      TestBed.runInInjectionContext(() => adminGuard({} as never, { url } as never));
+    const url = (result: unknown) => TestBed.inject(Router).serializeUrl(result as UrlTree);
+
+    it('lets an admin through', () => {
+      signedIn();
+      setup();
+
+      expect(run('/statistik')).toBe(true);
+    });
+
+    it('sends a reader to the chat', () => {
+      signedIn({ ...ANNA, role: 'reader' });
+      setup();
+
+      expect(url(run('/statistik'))).toBe('/fragen');
+    });
+
+    it('sends a visitor to the login page first', () => {
+      signedOut();
+      setup();
+
+      expect(url(run('/statistik'))).toBe('/anmelden?weiter=%2Fstatistik');
     });
   });
 
