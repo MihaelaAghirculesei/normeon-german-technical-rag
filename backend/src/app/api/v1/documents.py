@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Literal
@@ -8,8 +9,14 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.adapters.embedding.base import EmbeddingAdapter
+from app.adapters.parsing.inspect import UploadLimits, inspect_upload
 from app.api.deps import AdminDep, AuthDep, EmbedderDep, TenantSession
-from app.core.errors import DocumentNotFoundError, UnsupportedFileTypeError
+from app.core.config import settings
+from app.core.errors import (
+    DocumentNotFoundError,
+    MalformedDocumentError,
+    UnsupportedFileTypeError,
+)
 from app.db.models import Chunk, Document
 from app.db.session import tenant_session
 from app.services.ingestion import SUPPORTED_SUFFIXES, get_or_create_document, process_document
@@ -63,6 +70,17 @@ async def upload_document(
         )
 
     content = await file.read()
+    # Opened and checked before anything is stored: an encrypted, broken or
+    # zip-bomb file is refused here with a clear error instead of becoming
+    # a document stuck in "failed" (Giorno 26).
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(inspect_upload, suffix, content, _upload_limits()),
+            settings.upload_check_timeout_s,
+        )
+    except TimeoutError as exc:
+        raise MalformedDocumentError("the file could not be checked in time") from exc
+
     document, created = await get_or_create_document(
         session,
         auth.tenant_id,
@@ -100,6 +118,14 @@ async def upload_document(
         filename=document.filename,
         status=document.status,
         outcome=outcome,
+    )
+
+
+def _upload_limits() -> UploadLimits:
+    return UploadLimits(
+        max_pages=settings.max_document_pages,
+        max_uncompressed_bytes=settings.max_docx_uncompressed_mb * 2**20,
+        max_compression_ratio=settings.max_docx_compression_ratio,
     )
 
 
