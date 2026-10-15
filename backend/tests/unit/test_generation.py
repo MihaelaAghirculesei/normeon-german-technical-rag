@@ -112,7 +112,7 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
     assert [c.marker for c in result.citations] == ["S1", "S2"]
-    assert result.prompt_name == "answer_de.v1"
+    assert result.prompt_name == "answer_de.v2"
     assert len(result.prompt_sha256) == 64
     assert result.model == "fake"
     assert "[S1]" in result.answer
@@ -145,9 +145,41 @@ async def test_the_model_sees_the_rendered_prompt_with_the_context_block(
         question="Frage X?",
     )
 
-    assert "[S1] Quelle: StVZO.pdf | Seite 12 | Abschnitt 5.1" in captured["user"]
+    # Prompt v2: the source is delimited untrusted data, and the model sees
+    # neither the filename nor the page (it cites the marker only).
+    assert '<quelle marker="[S1]" abschnitt="5.1">' in captured["user"]
+    assert "StVZO.pdf" not in captured["user"]
     assert "Frage: Frage X?" in captured["user"]
     assert "Antworte auf Deutsch." in captured["user"]
+
+
+async def test_prompt_v1_still_renders_the_plain_context_block(monkeypatch: Any) -> None:
+    """Earlier evaluation runs used v1; asking for it must reproduce them."""
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    captured: dict[str, str] = {}
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            captured["user"] = user
+            return LlmResponse(text="ok [S1]", model="spy")
+
+    result = await generation.generate_answer(
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage X?",
+        prompt_name="answer_de.v1",
+    )
+
+    assert result.prompt_name == "answer_de.v1"
+    assert "[S1] Quelle: StVZO.pdf | Seite 12 | Abschnitt 5.1" in captured["user"]
+    assert "<quelle" not in captured["user"]
 
 
 class _RefusingLlm:

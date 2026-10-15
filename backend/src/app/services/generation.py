@@ -182,7 +182,7 @@ async def _prepare(
             candidate_k=candidate_k,
         )
 
-    context_block, sources = build_context(retrieval.context)
+    context_block, sources = build_context(retrieval.context, untrusted=prompt.untrusted_context)
     user_message = prompt.render(context=context_block, question=question)
 
     system = _SYSTEM
