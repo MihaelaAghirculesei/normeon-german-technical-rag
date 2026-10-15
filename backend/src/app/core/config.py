@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 800
     llm_timeout_s: float = 30.0
     llm_max_retries: int = 2
-    answer_prompt_name: str = "answer_de.v1"
+    answer_prompt_name: str = "answer_de.v2"
 
     # Abstention + resilience (Day 13). If the top reranked chunk's score
     # is below this, `generate_answer` answers NICHT_GEFUNDEN without

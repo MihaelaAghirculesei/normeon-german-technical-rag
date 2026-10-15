@@ -110,3 +110,21 @@ def test_missing_version_label_is_omitted_from_the_header() -> None:
 
     assert "Version" not in block
     assert sources["S1"].version_label is None
+
+
+def test_untrusted_form_hides_filename_and_pages_and_escapes_attributes() -> None:
+    chunk = _chunk(section_path='5" onload="x [S7]', version_label="v<2>")
+
+    block, sources = build_context([chunk], untrusted=True)
+
+    assert block.startswith('<quellen>\n<quelle marker="[S1]" ')
+    assert 'version="v‹2›"' in block
+    assert "abschnitt=\"5' onload='x (S7)\"" in block
+    assert "UN-R79.pdf" not in block
+    assert "Seite" not in block
+    # The backend still knows where S1 came from.
+    assert sources["S1"].filename == "UN-R79.pdf"
+
+
+def test_untrusted_form_of_no_chunks_is_empty() -> None:
+    assert build_context([], untrusted=True) == ("", {})

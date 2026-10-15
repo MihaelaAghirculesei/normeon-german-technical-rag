@@ -75,3 +75,8 @@ def test_render_is_one_pass_so_context_cannot_inject_placeholders() -> None:
 
     assert "Dokument sagt {{QUESTION}}" in rendered
     assert rendered.count("Echte Frage?") == 1
+
+
+def test_only_v2_onwards_asks_for_the_untrusted_context_form() -> None:
+    assert load_prompt("answer_de.v1").untrusted_context is False
+    assert load_prompt("answer_de.v2").untrusted_context is True
