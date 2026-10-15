@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 26 of 30. Retrieval is feature-complete: structured German
+Status: Day 27 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -90,6 +90,19 @@ Robustness:
   a failed document says why.
 - **Scanned pages.** They are read by OCR (tesseract, German), and
   passages recognised that way are labelled in the UI.
+
+Observability:
+- **Request id.** Every request carries one (`X-Request-ID`). It is on
+  every JSON log line, on the trace, and on the `query_logs` row.
+- **Traces.** OpenTelemetry spans for parse, embed, vector and full-text
+  retrieval, fusion, rerank and generation. In development each request
+  logs one readable trace with the time of every phase; in production
+  the spans go to an OTLP collector.
+- **Metrics.** `/metrics` exposes Prometheus metrics: latency per phase,
+  cumulative cost, answers by outcome (abstention rate), invented
+  citations and LLM errors per provider.
+- **Statistics page.** Admins get a live page with these numbers for
+  their own tenant.
 
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
