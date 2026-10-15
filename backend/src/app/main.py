@@ -8,6 +8,7 @@ from app.core.errors import NormeonError
 from app.core.limits import BodySizeLimit
 from app.core.logging import configure_logging
 from app.core.observability import configure_tracing
+from app.core.request_context import RequestIdMiddleware
 
 configure_logging()
 
@@ -25,6 +26,8 @@ app.add_middleware(
     max_upload_bytes=settings.max_upload_mb * 2**20 + 64 * 2**10,
     max_request_bytes=settings.max_request_kb * 2**10,
 )
+# Added last, so outermost: even a refused upload gets a request id.
+app.add_middleware(RequestIdMiddleware)
 configure_tracing(app)
 
 

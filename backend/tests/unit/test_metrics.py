@@ -1,5 +1,6 @@
-"""Observability (Giorno 27): the Prometheus metrics, and the phase timer
-that feeds them and the traces, with the readable trace summary."""
+"""Observability (Giorno 27): the Prometheus metrics, the phase timer that
+feeds them and the traces, the readable trace summary, and the request id
+that ties logs, traces and query_logs together."""
 
 from typing import Any
 
@@ -169,3 +170,22 @@ def test_the_summary_is_logged_once_when_the_request_span_ends(
     assert logged[0]["event"] == "trace.completed"
     assert logged[0]["root"] == "POST /api/v1/chat"
     assert len(logged[0]["phases"]) == 5
+
+
+# -- request id -----------------------------------------------------------------
+
+
+def test_every_response_carries_a_request_id() -> None:
+    response = TestClient(app).get("/metrics")
+
+    assert len(response.headers["x-request-id"]) == 32
+
+
+def test_a_callers_request_id_is_kept_and_a_bad_one_replaced() -> None:
+    client = TestClient(app)
+
+    kept = client.get("/metrics", headers={"X-Request-ID": "frontend-42"})
+    replaced = client.get("/metrics", headers={"X-Request-ID": "not valid; drop table"})
+
+    assert kept.headers["x-request-id"] == "frontend-42"
+    assert replaced.headers["x-request-id"] != "not valid; drop table"
