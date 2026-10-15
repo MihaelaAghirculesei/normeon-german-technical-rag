@@ -158,10 +158,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stats */
+        get: operations["stats_api_v1_admin_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminStats */
+        AdminStats: {
+            /** Window Hours */
+            window_hours: number;
+            /** Queries */
+            queries: number;
+            /** Abstention Rate */
+            abstention_rate: number | null;
+            /** Cost Usd Total */
+            cost_usd_total: number;
+            /** Cost Usd Per Query */
+            cost_usd_per_query: number | null;
+            latency_ms: components["schemas"]["LatencyStats"] | null;
+            documents: components["schemas"]["DocumentStats"];
+            /** Recent */
+            recent: components["schemas"]["RecentQuery"][];
+            server: components["schemas"]["ServerCounters"];
+        };
         /** Body_upload_document_api_v1_documents_post */
         Body_upload_document_api_v1_documents_post: {
             /** Doc Type */
@@ -280,6 +315,17 @@ export interface components {
             /** Version Label */
             version_label: string | null;
         };
+        /** DocumentStats */
+        DocumentStats: {
+            /** Ready */
+            ready: number;
+            /** Processing */
+            processing: number;
+            /** Failed */
+            failed: number;
+            /** Chunks */
+            chunks: number;
+        };
         /** DocumentStatusResponse */
         DocumentStatusResponse: {
             /**
@@ -395,6 +441,12 @@ export interface components {
             /** Pgvector */
             pgvector: string;
         };
+        /** LatencyStats */
+        LatencyStats: {
+            retrieval_ms: components["schemas"]["Percentiles"];
+            generation_ms: components["schemas"]["Percentiles"];
+            total_ms: components["schemas"]["Percentiles"];
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -419,6 +471,13 @@ export interface components {
             expires_at: string;
             user: components["schemas"]["UserOut"];
         };
+        /** Percentiles */
+        Percentiles: {
+            /** P50 */
+            p50: number;
+            /** P95 */
+            p95: number;
+        };
         /** PipelineTimingOut */
         PipelineTimingOut: {
             /** Hybrid Ms */
@@ -429,6 +488,22 @@ export interface components {
             select_ms: number;
             /** Total Ms */
             total_ms: number;
+        };
+        /** RecentQuery */
+        RecentQuery: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Question */
+            question: string;
+            /** Abstained */
+            abstained: boolean;
+            /** Total Ms */
+            total_ms: number;
+            /** Cost Usd */
+            cost_usd: number | null;
         };
         /** RetrievalTimingOut */
         RetrievalTimingOut: {
@@ -492,6 +567,15 @@ export interface components {
             /** Took Ms */
             took_ms: number;
             timing?: components["schemas"]["PipelineTimingOut"] | null;
+        };
+        /** ServerCounters */
+        ServerCounters: {
+            /** Citations */
+            citations: number;
+            /** Hallucinated Citations */
+            hallucinated_citations: number;
+            /** Llm Errors */
+            llm_errors: number;
         };
         /** SourceOut */
         SourceOut: {
@@ -894,6 +978,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChunkContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stats_api_v1_admin_stats_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStats"];
                 };
             };
             /** @description Validation Error */

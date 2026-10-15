@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api import metrics
-from app.api.v1 import auth, chat, chunks, documents, health, search
+from app.api.v1 import admin, auth, chat, chunks, documents, health, search
 from app.core.config import insecure_settings, settings
 from app.core.errors import NormeonError
 from app.core.limits import BodySizeLimit
@@ -48,3 +48,4 @@ app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(chunks.router)
+app.include_router(admin.router)
