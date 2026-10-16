@@ -149,7 +149,7 @@ async def _run(database_url: str, tmp_path: Path) -> None:
 
     assert result.answer != "NICHT_GEFUNDEN"
     assert "[S1]" in result.answer
-    assert result.prompt_name == "answer_de.v1"
+    assert result.prompt_name == "answer_de.v2"
     assert len(result.prompt_sha256) == 64
     assert result.model == "fake"
 

@@ -88,6 +88,10 @@ export class ChatSession {
             this.answer.update((text) => text + event.data.text);
             break;
           case 'done':
+            // The validated answer replaces the streamed draft: invented
+            // citations removed, unsupported answers turned into
+            // NICHT_GEFUNDEN.
+            this.answer.set(event.data.answer);
             this.citations.set(event.data.citations);
             this.latency.set(event.data.latency_ms);
             this.costUsd.set(event.data.cost_usd);

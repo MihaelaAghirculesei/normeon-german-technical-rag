@@ -2,7 +2,7 @@ import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { DUPLICATE_MESSAGE, POLL_INTERVAL_MS, UploadQueue } from './upload-queue';
+import { DUPLICATE_MESSAGE, MAX_UPLOAD_MB, POLL_INTERVAL_MS, UploadQueue } from './upload-queue';
 
 const DOC_ID = '11111111-1111-1111-1111-111111111111';
 const STATUS_URL = `/api/v1/documents/${DOC_ID}`;
@@ -128,6 +128,40 @@ describe('UploadQueue', () => {
 
     expect(item().state).toBe('failed');
     expect(item().message).toContain('nur PDF und DOCX');
+  });
+
+  it('rejects a file over the size limit before sending it', () => {
+    const big = file('Gesamtfahrzeug.pdf');
+    Object.defineProperty(big, 'size', { value: (MAX_UPLOAD_MB + 1) * 1024 * 1024 });
+
+    queue.add([big], OPTIONS);
+
+    expect(item().state).toBe('rejected');
+    expect(item().message).toContain(`höchstens ${MAX_UPLOAD_MB} MB`);
+    http.expectNone('/api/v1/documents');
+  });
+
+  it('explains a password-protected file in words, not a status code', () => {
+    queue.add([file('FZV.pdf')], OPTIONS);
+    http
+      .expectOne('/api/v1/documents')
+      .flush({ code: 'encrypted_document' }, { status: 422, statusText: 'Unprocessable' });
+
+    expect(item().message).toContain('passwortgeschützt');
+  });
+
+  it('says why processing failed', () => {
+    queue.add([file('FZV.pdf')], OPTIONS);
+    respond('created');
+    http.expectOne(STATUS_URL).flush({
+      document_id: DOC_ID,
+      filename: 'x',
+      status: 'failed',
+      error_code: 'parse_timeout',
+    });
+
+    expect(item().state).toBe('failed');
+    expect(item().message).toBe('Das Lesen des Dokuments hat zu lange gedauert.');
   });
 
   it('lists the newest file first and clears only finished ones', () => {

@@ -3,6 +3,7 @@ import type { ChatRequest, ChatStreamEvent, Source, StreamChat } from '../api/ch
 export const SOURCE_S1: Source = {
   marker: 'S1',
   chunk_id: 'aaaaaaaa-0000-0000-0000-000000000001',
+  ocr: false,
   document_id: '11111111-1111-1111-1111-111111111111',
   filename: 'Lastenheft-EPS-v2.0.docx',
   page_from: 1,

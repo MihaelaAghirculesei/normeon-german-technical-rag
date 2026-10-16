@@ -19,6 +19,13 @@
   }
 </dl>
 
+@if (source().ocr) {
+  <app-notice
+    >Dieser Text wurde per Texterkennung (OCR) aus einem Scan gewonnen und kann Erkennungsfehler
+    enthalten. Im Zweifel das Original prüfen.</app-notice
+  >
+}
+
 @if (context.error()) {
   <app-notice kind="error">Der Quelltext konnte nicht geladen werden.</app-notice>
 } @else if (context.value(); as ctx) {

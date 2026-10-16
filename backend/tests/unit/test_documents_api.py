@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_auth, get_embedder
 from app.api.v1 import documents
+from app.core.errors import EncryptedDocumentError
 from app.db.models import Document
 from app.main import app
 from tests.unit.auth_helpers import authenticate
@@ -101,6 +102,9 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
 
         monkeypatch.setattr(documents, "get_or_create_document", fake_get_or_create)
         monkeypatch.setattr(documents, "_process_in_background", fake_process)
+        # The fake bytes below are no real PDF: file inspection has its own
+        # tests (test_upload_inspection.py); here it only has to pass.
+        monkeypatch.setattr(documents, "inspect_upload", lambda *args: None)
 
         authenticate(app, session)
         app.dependency_overrides[get_embedder] = _FakeEmbedder
@@ -211,6 +215,23 @@ def test_upload_accepts_an_uppercase_extension(client_factory: Any) -> None:
     client, _, _, _ = client_factory(_document("pending"), created=True)
 
     assert _upload(client, filename="LASTENHEFT.DOCX").status_code == 201
+
+
+def test_a_file_refused_by_inspection_is_never_stored(
+    client_factory: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, processed, _, create_calls = client_factory(_document("pending"), created=True)
+
+    def refuse(*args: Any) -> None:
+        raise EncryptedDocumentError("the PDF is password-protected")
+
+    monkeypatch.setattr(documents, "inspect_upload", refuse)
+
+    response = _upload(client)
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "encrypted_document"
+    assert (create_calls, processed) == ([], [])
 
 
 def test_getting_a_document_returns_its_current_status(client_factory: Any) -> None:

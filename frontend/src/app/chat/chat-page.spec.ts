@@ -137,6 +137,7 @@ describe('ChatPage', () => {
       page_to: 1,
       section_path: SOURCE_S1.section_path,
       heading: null,
+      ocr: false,
     });
     const chips = () => [...el.querySelectorAll<HTMLButtonElement>('button.cite')];
 
@@ -165,6 +166,20 @@ describe('ChatPage', () => {
       ]);
       expect(chips()[0].getAttribute('aria-pressed')).toBe('true');
       expect(el.querySelector('.sources')).toBeNull();
+    });
+
+    it('marks a source read by OCR, in the list and in the panel', async () => {
+      await ask('Welche Lenkkraft?');
+      fake.push({ event: 'sources', data: { sources: [{ ...SOURCE_S1, ocr: true }, SOURCE_S2] } });
+      await render();
+
+      const labels = [...el.querySelectorAll('button.source')].map(
+        (b) => b.querySelector('.ocr-label') !== null,
+      );
+      expect(labels).toEqual([true, false]);
+
+      await open(el.querySelectorAll<HTMLButtonElement>('button.source')[0], SOURCE_S1.chunk_id);
+      expect(el.querySelector('app-citation-panel')?.textContent).toContain('Texterkennung (OCR)');
     });
 
     it('opens from the source list too, and Escape closes the panel', async () => {

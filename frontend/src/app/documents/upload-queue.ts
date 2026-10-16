@@ -9,6 +9,32 @@ type StatusResponse = components['schemas']['DocumentStatusResponse'];
 
 export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx'] as const;
 
+/** Mirrors the backend's default `max_upload_mb`, so a file that would be
+ * refused is not sent first. The server stays the authority. */
+export const MAX_UPLOAD_MB = 50;
+
+/** Why the backend could not ingest a document (`error_code`). */
+const INGESTION_ERRORS: Record<string, string> = {
+  parse_timeout: 'Das Lesen des Dokuments hat zu lange gedauert.',
+  parse_failed: 'Das Dokument konnte nicht gelesen werden.',
+  embedding_failed: 'Die Indexierung ist fehlgeschlagen.',
+};
+
+export function ingestionErrorMessage(code: string | null | undefined): string {
+  return (code && INGESTION_ERRORS[code]) || 'Verarbeitung fehlgeschlagen.';
+}
+
+/** Why the backend refused an upload (`code` of the error body). */
+const UPLOAD_ERRORS: Record<string, string> = {
+  upload_too_large: `Die Datei ist zu groß (höchstens ${MAX_UPLOAD_MB} MB).`,
+  too_many_pages: 'Das Dokument hat zu viele Seiten.',
+  encrypted_document: 'Die Datei ist passwortgeschützt. Bitte eine ungeschützte Kopie hochladen.',
+  malformed_document: 'Die Datei ist beschädigt oder kein gültiges PDF- bzw. Word-Dokument.',
+  suspicious_archive: 'Die Word-Datei würde beim Entpacken ungewöhnlich groß und wurde abgelehnt.',
+  unsupported_file_type: 'Dateityp wird nicht unterstützt (nur PDF und DOCX).',
+  forbidden: 'Nur Administratoren können Dokumente hochladen.',
+};
+
 /** Milliseconds between two status reads while a document is processed. */
 export const POLL_INTERVAL_MS = new InjectionToken<number>('POLL_INTERVAL_MS', {
   providedIn: 'root',
@@ -78,6 +104,10 @@ export class UploadQueue {
 
       if (!SUPPORTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
         this.patch(item.id, { state: 'rejected', message: 'Nur PDF- und DOCX-Dateien.' });
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+        this.patch(item.id, { state: 'rejected', message: UPLOAD_ERRORS['upload_too_large'] });
         continue;
       }
       this.upload(item.id, file, options);
@@ -150,7 +180,7 @@ export class UploadQueue {
             this.patch(id, { status: s.status });
             if (s.status === 'ready') this.patch(id, { state: 'ready', message: null });
             if (s.status === 'failed') {
-              this.patch(id, { state: 'failed', message: 'Verarbeitung fehlgeschlagen.' });
+              this.patch(id, { state: 'failed', message: ingestionErrorMessage(s.error_code) });
             }
           },
           complete: () => this.changed.next(),
@@ -171,7 +201,8 @@ export class UploadQueue {
 
 function describe(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
-    if (error.status === 415) return 'Dateityp wird nicht unterstützt (nur PDF und DOCX).';
+    const code: unknown = (error.error as { code?: unknown } | null)?.code;
+    if (typeof code === 'string' && UPLOAD_ERRORS[code]) return UPLOAD_ERRORS[code];
     if (error.status === 0) return 'Keine Verbindung zum Server.';
     return `Hochladen fehlgeschlagen (HTTP ${error.status}).`;
   }

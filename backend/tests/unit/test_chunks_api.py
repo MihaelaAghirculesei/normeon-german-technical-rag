@@ -37,6 +37,7 @@ def _chunk(ordinal: int) -> Chunk:
         char_end=10,
         content=f"Absatz {ordinal}",
         content_norm=f"absatz {ordinal}",
+        ocr=False,
         token_count=2,
     )
 

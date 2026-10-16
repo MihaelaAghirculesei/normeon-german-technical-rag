@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 800
     llm_timeout_s: float = 30.0
     llm_max_retries: int = 2
-    answer_prompt_name: str = "answer_de.v1"
+    answer_prompt_name: str = "answer_de.v2"
 
     # Abstention + resilience (Day 13). If the top reranked chunk's score
     # is below this, `generate_answer` answers NICHT_GEFUNDEN without
@@ -103,6 +103,24 @@ class Settings(BaseSettings):
     jwt_ttl_minutes: int = 8 * 60
     # Password for the two demo users `python -m app.db.seed` creates.
     demo_user_password: str = "normeon-demo"
+
+    # Upload limits (Giorno 26). A body over `max_upload_mb` is refused
+    # before it is read; a file is opened and checked (encryption, page
+    # count, zip-bomb shape) before anything is stored; parsing in the
+    # background gives up after `parse_timeout_s`.
+    max_upload_mb: int = 50
+    max_request_kb: int = 256  # every other endpoint takes small JSON
+    max_document_pages: int = 2000
+    max_docx_uncompressed_mb: int = 200
+    max_docx_compression_ratio: int = 100
+    upload_check_timeout_s: float = 20.0
+    parse_timeout_s: float = 300.0
+    # OCR for scanned pages: a PDF page whose text layer has fewer than
+    # `ocr_min_chars` characters is read with tesseract instead.
+    ocr_enabled: bool = True
+    ocr_language: str = "deu"
+    ocr_dpi: int = 300
+    ocr_min_chars: int = 50
 
 
 settings = Settings()

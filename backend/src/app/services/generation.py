@@ -21,10 +21,11 @@ Past that gate, citation validation (`domain.citations.
 extract_and_validate`) drops any marker the model invented and turns an
 answer with claims but zero valid citations into an abstention -- never
 a failed request. **For the streaming path this runs only after the full
-answer has been assembled**, so a marker already sent to the client as a
-`token` event cannot be un-sent if it later turns out to be invented;
-the `done` event's `citations` is still the honest, validated list even
-when it disagrees with what was streamed (see docs/FAILURE-MODES.md). A
+answer has been assembled**, so the `token` events are a draft: the
+`done` event carries the validated `answer` and `citations`, and the
+client replaces the draft with them (Giorno 26 -- before that, a draft
+steered by an instruction hidden in a document stayed on screen; see
+docs/FAILURE-MODES.md). A
 retrieval whose sources disagree by version on the same requirement code
 (`domain.conflicts.find_version_conflicts`) adds an explicit instruction
 to the system message asking the model to flag the discrepancy and cite
@@ -182,7 +183,7 @@ async def _prepare(
             candidate_k=candidate_k,
         )
 
-    context_block, sources = build_context(retrieval.context)
+    context_block, sources = build_context(retrieval.context, untrusted=prompt.untrusted_context)
     user_message = prompt.render(context=context_block, question=question)
 
     system = _SYSTEM
@@ -459,6 +460,7 @@ async def generate_answer_stream(
                         "total_ms": prep.retrieval.timing.total_ms,
                     },
                     "cost_usd": None,
+                    "answer": ABSTENTION_TEXT,
                     "citations": [],
                 },
             )
@@ -521,8 +523,9 @@ async def generate_answer_stream(
         cost = await _log_query(
             session, prep,
             request_id=request_id, tenant_id=tenant_id, question=question, strategy=strategy,
-            # The raw streamed text, not the validated `answer` -- this is
-            # what the client actually received (see the docstring above).
+            # The raw streamed text, not the validated `answer`: the log
+            # keeps what the model actually wrote; the client replaces it
+            # with `answer` from the `done` event.
             answer=answer_text, abstained=answer == ABSTENTION_TEXT,
             generation_ms=generation_ms, model=resolved_model,
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
@@ -537,6 +540,12 @@ async def generate_answer_stream(
                     "total_ms": prep.retrieval.timing.total_ms + generation_ms,
                 },
                 "cost_usd": cost,
+                # The validated answer: the streamed tokens are only a draft.
+                # Invented markers are stripped, and an answer with no real
+                # citation becomes NICHT_GEFUNDEN -- the same rule as the
+                # non-streaming path, so an answer steered by an injected
+                # instruction is not left standing on screen (Giorno 26).
+                "answer": answer,
                 "citations": citations,
             },
         )
