@@ -220,13 +220,16 @@ validated list -- it simply may not match everything the client already
 rendered from the raw token stream. The non-streaming `POST /api/v1/chat`
 does not have this problem: it validates before returning anything.
 
-**Mitigation / status.** Not fixed by construction -- buffering the
-whole answer before streaming any of it would remove the point of
-streaming (perceived responsiveness, `sources` arriving before the
-text). A frontend that wants to be defensive here can treat `done.
-citations` as authoritative and visually flag/retract a rendered answer
-whose citations came back empty; that UI behaviour is a later
-(Angular, Week 5) concern, not something the backend can paper over.
+**Mitigation / status.** Fixed on Day 26. The streamed tokens are now
+a draft: `done` carries the validated `answer` as well as the
+citations, and the chat page replaces the draft with it. The draft
+stays on screen only while the answer is being written. It mattered
+more than it looked: in an indirect prompt-injection test, a model that
+obeyed an instruction hidden in a document had its answer discarded on
+the non-streaming path, but on the streaming path that answer stayed
+visible (`tests/security/test_injection.py`). Buffering the whole
+answer before streaming was rejected, because the sources arriving
+before the text is the point of streaming.
 
 ### The LLM adapter's stream() does not retry
 
@@ -265,6 +268,67 @@ stream and the streamed answer's `cost_usd`/`query_logs.tokens` come
 back empty, exactly like a `complete()` response from a server that
 doesn't report `usage` at all -- not a bug, just no signal to work
 with.
+
+## Robustness (Day 26)
+
+### Prompt injection is contained, not solved
+
+Retrieved text reaches the model as delimited, untrusted data (prompt
+`answer_de.v2`). A document cannot close that delimiter, forge a
+citation marker or rewrite a template placeholder. The model never sees
+filenames or pages. An answer without a real citation becomes
+`NICHT_GEFUNDEN`, on the streaming path too. `tests/security/
+test_injection.py` checks all of this with a model double that *obeys*
+the injected paragraph: the point is that the system stays safe even
+when the model falls for it.
+
+What this does not cover:
+- **A document that lies.** "Die Lenkkraft betraegt 999 N" in an
+  uploaded file is not an instruction; it is false content, and it will
+  be cited like true content. No prompt can tell a wrong document from a
+  right one. The mitigation is who may upload: admins only (Day 25).
+- **How often a real model obeys.** The tests prove containment, not
+  resistance. How often the real model follows an injected instruction
+  inside its rules (for example, answering in a different tone) has not
+  been measured. That needs real LLM calls; it belongs in the Day 28 run.
+- **The eval numbers predate v2.** Every figure in `EVALUATION.md` was
+  measured with `answer_de.v1`, which shows filenames and pages and has
+  no data delimiters. v1 is kept, so those runs stay reproducible, but
+  the new default has to be measured again (Day 28).
+
+### Upload limits
+
+- **The size check trusts `Content-Length`.** The server accepts no more
+  bytes than declared, so the declared length is a real bound. A body
+  without one (chunked transfer) is refused with 411. Browsers always
+  declare the length of a form upload.
+- **A parsing timeout does not stop the parser.** Python cannot kill a
+  thread. The document is marked `failed` (`parse_timeout`) at the
+  deadline, but the worker thread keeps running until the parser
+  returns. A hostile PDF can therefore tie up one worker thread.
+  Isolating parsing in a process pool, which can be killed, is the fix
+  if that ever matters.
+- **Inspection reads metadata only.** It catches encrypted files, broken
+  files, page-count overruns and zip-bomb ratios before anything is
+  stored. A PDF that opens fine but trips the parser later still fails
+  in the background, now with a reason the UI shows (`parse_failed`).
+- **The frontend repeats the 50 MB limit** so that it does not send a
+  file only to have it refused. The server stays the authority. If
+  `MAX_UPLOAD_MB` changes, `upload-queue.ts` has to follow.
+
+### OCR
+
+- **Recognition errors stay in the text.** A chunk from a scanned page
+  is flagged `ocr` in the database, the API and the UI, so a reader
+  knows to check the original.
+- **No tables from scans.** Table detection runs on the text layer, so
+  an OCR page yields plain text blocks.
+- **It costs CPU time.** OCR runs at 300 dpi, roughly one to three
+  seconds per page.
+- **It only runs where tesseract is installed.** That is the Docker
+  image and CI. Anywhere else, ingestion logs `ocr.unavailable` and a
+  scanned page yields no text, as before.
+- **Images inside Word files are not read.**
 
 ## Parsing / chunking
 

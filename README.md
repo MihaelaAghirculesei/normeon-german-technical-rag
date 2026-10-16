@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 25 of 30. Retrieval is feature-complete: structured German
+Status: Day 26 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -76,6 +76,21 @@ silently bypass every policy (ADR 0004). `tests/security` proves it:
 - unfiltered SQL sees one tenant only;
 - cross-tenant writes are rejected;
 - mutation runs show each layer holding on its own.
+
+Robustness:
+- **Prompt injection.** Retrieved text reaches the model as delimited,
+  untrusted data, without filenames or pages. A document cannot close
+  the delimiter, forge a citation or rewrite the prompt template. An
+  answer without a real citation is discarded, on the streaming path
+  too. `tests/security/test_injection.py` runs this against a model that
+  obeys the injected instruction, and nothing leaks.
+- **Uploads.** Oversized uploads are refused from their headers, before
+  being read. Encrypted, broken or zip-bomb files are refused with a
+  clear message before anything is stored. Parsing has a deadline, and
+  a failed document says why.
+- **Scanned pages.** They are read by OCR (tesseract, German), and
+  passages recognised that way are labelled in the UI.
+
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 

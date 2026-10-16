@@ -259,6 +259,14 @@ Giorno 20 tunes `min_rerank_score_for_answer`.
 
 ## First matrix run (Giorno 20)
 
+> **Prompt version.** Every number in this section was measured with
+> `answer_de.v1`. Since Giorno 26 the default is `answer_de.v2`. It
+> passes sources as delimited, untrusted data without filenames or
+> pages, as a prompt-injection defence (`FAILURE-MODES.md`, "Robustness
+> (Day 26)"). v1 is kept, so this run stays reproducible
+> (`prompt_name="answer_de.v1"`). The default has to be measured again
+> in the full matrix run (Giorno 28) before these numbers describe it.
+
 `{structural, fixed_500} x {hybrid, vector}`, cross-encoder reranker
 (`bge-reranker-v2-m3`, max_length 512), 10 candidates, `top_k=5`, answers
 and judge on `gemini-flash-lite-latest`, 50 questions. Decision recorded

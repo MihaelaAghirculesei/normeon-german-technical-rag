@@ -62,6 +62,9 @@ class SourceOut(BaseModel):
     page_to: int
     section_path: str | None
     heading: str | None
+    # The text was recognised by OCR from a scanned page and may hold
+    # recognition errors; the UI says so next to the source.
+    ocr: bool
 
 
 class CitationOut(BaseModel):
@@ -105,6 +108,7 @@ def _sources_out(sources: list[Source]) -> list[SourceOut]:
             page_to=s.page_to,
             section_path=s.section_path,
             heading=s.heading,
+            ocr=s.ocr,
         )
         for s in sources
     ]
@@ -184,6 +188,8 @@ class StreamLatencyOut(BaseModel):
 class DoneData(BaseModel):
     latency_ms: StreamLatencyOut
     cost_usd: float | None
+    # The validated answer; it replaces the text streamed as `token`s.
+    answer: str
     citations: list[CitationOut]
 
 
@@ -251,6 +257,7 @@ def _event_payload(event: StreamEvent) -> BaseModel:
         return DoneData(
             latency_ms=StreamLatencyOut(**event.data["latency_ms"]),
             cost_usd=event.data["cost_usd"],
+            answer=event.data["answer"],
             citations=_citations_out(event.data["citations"]),
         )
     return ErrorData(**event.data)

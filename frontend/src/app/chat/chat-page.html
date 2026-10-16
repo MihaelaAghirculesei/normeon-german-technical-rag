@@ -94,6 +94,11 @@
                       }}{{ source.page_to !== source.page_from ? '–' + source.page_to : '' }}
                     </span>
                   </span>
+                  @if (source.ocr) {
+                    <span class="ocr-label" title="Text per Texterkennung (OCR) aus einem Scan"
+                      >OCR</span
+                    >
+                  }
                   @if (chat.citedMarkers().has(source.marker)) {
                     <span class="cited-label">zitiert</span>
                   }

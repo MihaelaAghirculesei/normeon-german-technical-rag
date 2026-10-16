@@ -34,6 +34,12 @@ button:disabled {
   white-space: nowrap;
 }
 
+.failure {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 0.8rem;
+}
+
 .reader-note {
   margin: 0 0 var(--space-6);
   font-size: 0.9rem;

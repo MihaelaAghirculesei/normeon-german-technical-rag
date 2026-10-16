@@ -41,6 +41,35 @@ class UnsupportedFileTypeError(NormeonError):
     status_code = 415
 
 
+class TooManyPagesError(NormeonError):
+    """A readable document with more pages than ingestion accepts."""
+
+    code = "too_many_pages"
+    status_code = 413
+
+
+class EncryptedDocumentError(NormeonError):
+    """A password-protected PDF or Word file: nothing in it can be read."""
+
+    code = "encrypted_document"
+    status_code = 422
+
+
+class MalformedDocumentError(NormeonError):
+    """The file claims to be a PDF or Word file but cannot be opened as one."""
+
+    code = "malformed_document"
+    status_code = 422
+
+
+class SuspiciousArchiveError(NormeonError):
+    """A Word file (a zip archive) that would unpack to far more than it
+    weighs -- the shape of a zip bomb."""
+
+    code = "suspicious_archive"
+    status_code = 422
+
+
 class ChunkNotFoundError(NormeonError):
     """No chunk with that id for this tenant -- a chunk of another tenant
     is reported the same way, so the endpoint never confirms it exists."""

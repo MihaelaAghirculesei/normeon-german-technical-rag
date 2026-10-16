@@ -16,6 +16,7 @@ const LASTENHEFT: DocumentSummary = {
   valid_until: null,
   page_count: null,
   status: 'ready',
+  error_code: null,
   created_at: '2026-09-15T10:00:00',
   chunk_counts: { structural: 6, fixed_500: 5 },
 };
@@ -59,6 +60,15 @@ describe('DocumentsPage', () => {
     );
     expect(chunkLines).toEqual(['fixed_500 5', 'structural 6']);
     expect(cells[6]).toBe('Bereit');
+  });
+
+  it('says why a document failed', async () => {
+    const failed = { ...LASTENHEFT, status: 'failed', error_code: 'parse_timeout' };
+    const el = await render((url) => http.expectOne(url).flush([failed]));
+
+    expect(el.querySelector('.failure')?.textContent).toBe(
+      'Das Lesen des Dokuments hat zu lange gedauert.',
+    );
   });
 
   it('offers no upload to a reader', async () => {

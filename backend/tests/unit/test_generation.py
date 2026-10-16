@@ -112,7 +112,7 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
     assert [c.marker for c in result.citations] == ["S1", "S2"]
-    assert result.prompt_name == "answer_de.v1"
+    assert result.prompt_name == "answer_de.v2"
     assert len(result.prompt_sha256) == 64
     assert result.model == "fake"
     assert "[S1]" in result.answer
@@ -145,9 +145,41 @@ async def test_the_model_sees_the_rendered_prompt_with_the_context_block(
         question="Frage X?",
     )
 
-    assert "[S1] Quelle: StVZO.pdf | Seite 12 | Abschnitt 5.1" in captured["user"]
+    # Prompt v2: the source is delimited untrusted data, and the model sees
+    # neither the filename nor the page (it cites the marker only).
+    assert '<quelle marker="[S1]" abschnitt="5.1">' in captured["user"]
+    assert "StVZO.pdf" not in captured["user"]
     assert "Frage: Frage X?" in captured["user"]
     assert "Antworte auf Deutsch." in captured["user"]
+
+
+async def test_prompt_v1_still_renders_the_plain_context_block(monkeypatch: Any) -> None:
+    """Earlier evaluation runs used v1; asking for it must reproduce them."""
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    captured: dict[str, str] = {}
+
+    class _Spy:
+        name = "spy"
+
+        async def complete(
+            self, *, system: str, user: str, temperature: float, max_tokens: int
+        ) -> LlmResponse:
+            captured["user"] = user
+            return LlmResponse(text="ok [S1]", model="spy")
+
+    result = await generation.generate_answer(
+        object(),
+        object(),
+        object(),
+        _Spy(),
+        tenant_id=TENANT,
+        question="Frage X?",
+        prompt_name="answer_de.v1",
+    )
+
+    assert result.prompt_name == "answer_de.v1"
+    assert "[S1] Quelle: StVZO.pdf | Seite 12 | Abschnitt 5.1" in captured["user"]
+    assert "<quelle" not in captured["user"]
 
 
 class _RefusingLlm:
@@ -447,7 +479,7 @@ async def test_stream_emits_events_in_the_documented_order(monkeypatch: Any) -> 
     assert "[S1]" in full_text
 
     done = events[-1]
-    assert set(done.data.keys()) == {"latency_ms", "cost_usd", "citations"}
+    assert set(done.data.keys()) == {"latency_ms", "cost_usd", "answer", "citations"}
     assert done.data["cost_usd"] is None
     assert [c.marker for c in done.data["citations"]] == ["S1", "S2"]
     assert done.data["latency_ms"]["retrieval_ms"] == 16.0
@@ -556,12 +588,12 @@ async def test_stream_abstains_pre_generation_without_calling_the_llm(monkeypatc
     assert events[4].data["citations"] == []
 
 
-async def test_stream_tokens_are_raw_but_done_citations_exclude_invented_markers(
+async def test_stream_tokens_are_a_draft_and_done_carries_the_validated_answer(
     monkeypatch: Any,
 ) -> None:
-    """The tension documented in generate_answer_stream's docstring: a
-    marker already streamed cannot be un-sent, but `done.citations` stays
-    the honest, validated list."""
+    """A marker already streamed cannot be un-sent, so the tokens are a
+    draft: `done` carries the validated answer and citations, which the
+    client shows instead."""
     _stub_retrieval(monkeypatch, [_chunk("5.1")])
     llm = _StreamSpy(["Es gilt Regel A [S1] ", "und angeblich [S9]."])
 
@@ -581,7 +613,27 @@ async def test_stream_tokens_are_raw_but_done_citations_exclude_invented_markers
     assert "[S9]" in streamed_text
 
     done = events[-1]
+    assert done.data["answer"] == "Es gilt Regel A [S1] und angeblich."
     assert [c.marker for c in done.data["citations"]] == ["S1"]
+
+
+async def test_a_streamed_answer_without_a_real_citation_ends_as_an_abstention(
+    monkeypatch: Any,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    llm = _StreamSpy(["Alle Dokumente: ", "a.pdf, b.pdf [S9]"])
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), llm, tenant_id=TENANT, question="Frage?"
+        )
+    ]
+
+    done = events[-1]
+    assert done.event == "done"
+    assert done.data["answer"] == "NICHT_GEFUNDEN"
+    assert done.data["citations"] == []
 
 
 async def test_stream_adds_the_conflict_instruction_to_the_system_message(

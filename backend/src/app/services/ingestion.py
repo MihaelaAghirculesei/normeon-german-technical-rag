@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import tempfile
 from collections.abc import Callable
@@ -12,8 +13,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
+from app.adapters.ocr.tesseract import default_ocr
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
+from app.core.config import settings
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
@@ -24,8 +27,13 @@ EMBEDDING_BATCH_SIZE = 32
 
 # Dispatch by file extension -- both parsers produce the same ParsedDocument
 # shape, so everything downstream (chunking, embedding) is format-agnostic.
+def _parse_pdf_with_ocr(path: Path) -> ParsedDocument:
+    # Scanned pages are read by OCR when tesseract is available (Giorno 26).
+    return parse_pdf(path, ocr=default_ocr(), ocr_min_chars=settings.ocr_min_chars)
+
+
 _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
-    ".pdf": parse_pdf,
+    ".pdf": _parse_pdf_with_ocr,
     ".docx": parse_docx,
 }
 SUPPORTED_SUFFIXES = frozenset(_PARSERS)
@@ -95,12 +103,20 @@ async def process_document(
 
     Status transitions each commit on their own, rather than the whole run
     being one transaction, so GET /documents/{id} can observe live progress
-    while a large document is still being embedded."""
+    while a large document is still being embedded.
+
+    A failure records why (`error_code`, Giorno 26): `parse_timeout` when
+    parsing takes longer than `settings.parse_timeout_s`, `parse_failed`
+    or `embedding_failed` otherwise. The parser runs in a worker thread,
+    which cannot be killed: on a timeout the document is marked failed at
+    once, and the thread finishes in the background."""
     if document.status == "ready":
         return
 
+    error_code = "parse_failed"
     try:
         document.status = "parsing"
+        document.error_code = None
         await session.commit()
 
         suffix = Path(document.filename).suffix.lower()
@@ -112,15 +128,26 @@ async def process_document(
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            parsed = await asyncio.to_thread(parser, tmp_path)
+            parsed = await asyncio.wait_for(
+                asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
+            )
+        except TimeoutError:
+            error_code = "parse_timeout"
+            raise
         finally:
-            tmp_path.unlink(missing_ok=True)
+            # After a timeout the parser may still hold the file open,
+            # which Windows refuses to delete; the OS temp dir cleans up.
+            with contextlib.suppress(OSError):
+                tmp_path.unlink(missing_ok=True)
         document.page_count = max((b.page for b in parsed.blocks), default=0)
 
         for strategy in ALL_STRATEGIES:
-            await _insert_chunks(session, document, strategy.name, strategy.chunk(parsed))
+            await _insert_chunks(
+                session, document, strategy.name, strategy.chunk(parsed), parsed.ocr_pages
+            )
 
         document.status = "embedding"
+        error_code = "embedding_failed"
         await session.commit()
 
         pending = await _chunks_missing_embeddings(session, document, embedder.name)
@@ -130,6 +157,7 @@ async def process_document(
         await session.commit()
     except Exception:
         document.status = "failed"
+        document.error_code = error_code
         await session.commit()
         raise
 
@@ -165,7 +193,9 @@ async def ingest_document(
     return document, False
 
 
-def _chunk_row(document: Document, strategy_name: str, dc: DomainChunk) -> dict[str, Any]:
+def _chunk_row(
+    document: Document, strategy_name: str, dc: DomainChunk, ocr_pages: frozenset[int]
+) -> dict[str, Any]:
     return {
         "document_id": document.id,
         "tenant_id": document.tenant_id,
@@ -186,6 +216,8 @@ def _chunk_row(document: Document, strategy_name: str, dc: DomainChunk) -> dict[
         # Same function normalises the query side, so the two agree.
         "content_norm": normalize_de(dc.content),
         "token_count": dc.token_count,
+        # Any of its pages read by OCR: the text may hold recognition errors.
+        "ocr": any(page in ocr_pages for page in range(dc.page_from, dc.page_to + 1)),
     }
 
 
@@ -194,11 +226,12 @@ async def _insert_chunks(
     document: Document,
     strategy_name: str,
     domain_chunks: list[DomainChunk],
+    ocr_pages: frozenset[int] = frozenset(),
 ) -> None:
     if not domain_chunks:
         return
 
-    rows = [_chunk_row(document, strategy_name, dc) for dc in domain_chunks]
+    rows = [_chunk_row(document, strategy_name, dc, ocr_pages) for dc in domain_chunks]
     stmt = pg_insert(Chunk).values(rows).on_conflict_do_nothing(
         index_elements=["document_id", "strategy", "chunk_hash"]
     )

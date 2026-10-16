@@ -238,6 +238,8 @@ export interface components {
             heading: string | null;
             /** Content */
             content: string;
+            /** Ocr */
+            ocr: boolean;
         };
         /** CitationOut */
         CitationOut: {
@@ -289,6 +291,8 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
         };
         /** DocumentSummary */
         DocumentSummary: {
@@ -311,6 +315,8 @@ export interface components {
             page_count: number | null;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
             /**
              * Created At
              * Format: date-time
@@ -332,6 +338,8 @@ export interface components {
             filename: string;
             /** Status */
             status: string;
+            /** Error Code */
+            error_code: string | null;
             /**
              * Outcome
              * @enum {string}
@@ -343,6 +351,8 @@ export interface components {
             latency_ms: components["schemas"]["StreamLatencyOut"];
             /** Cost Usd */
             cost_usd: number | null;
+            /** Answer */
+            answer: string;
             /** Citations */
             citations: components["schemas"]["CitationOut"][];
         };
@@ -507,6 +517,8 @@ export interface components {
             section_path: string | null;
             /** Heading */
             heading: string | null;
+            /** Ocr */
+            ocr: boolean;
         };
         /** SourcesData */
         SourcesData: {

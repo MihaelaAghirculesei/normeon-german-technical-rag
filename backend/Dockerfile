@@ -2,6 +2,9 @@ FROM python:3.13-slim AS base
 
 WORKDIR /app
 
+# OCR for scanned PDF pages (Giorno 26): tesseract with German language data.
+RUN apt-get update     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu     && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir --upgrade pip
 
 COPY pyproject.toml ./
