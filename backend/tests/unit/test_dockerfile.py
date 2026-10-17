@@ -59,3 +59,10 @@ def test_secrets_and_the_virtualenv_stay_out_of_the_build_context() -> None:
 
     assert ".env" in ignored
     assert ".venv/" in ignored
+
+
+def test_the_image_does_not_run_as_root() -> None:
+    lines = (BACKEND / "Dockerfile").read_text(encoding="utf-8").splitlines()
+    users = [line.split()[1] for line in lines if line.startswith("USER ")]
+
+    assert users and users[-1] not in {"root", "0"}
