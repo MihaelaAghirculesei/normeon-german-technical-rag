@@ -1,0 +1,13 @@
+# Keep the build context small and free of secrets: the image is built
+# from pyproject.toml, src/, the prompts, the price list and migrations.
+.env
+.env.*
+.venv/
+**/__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+tests/
+eval/
+scripts/
+openapi.json
