@@ -52,3 +52,10 @@ def test_the_app_is_installed_where_its_runtime_files_are() -> None:
 
 def test_migrations_ship_with_the_image() -> None:
     assert {"migrations", "alembic.ini"} <= _copied()
+
+
+def test_secrets_and_the_virtualenv_stay_out_of_the_build_context() -> None:
+    ignored = (BACKEND / ".dockerignore").read_text(encoding="utf-8").splitlines()
+
+    assert ".env" in ignored
+    assert ".venv/" in ignored
