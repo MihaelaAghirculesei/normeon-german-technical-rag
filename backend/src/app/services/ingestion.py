@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import structlog
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
@@ -17,6 +19,7 @@ from app.adapters.ocr.tesseract import default_ocr
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
 from app.core.config import settings
+from app.core.observability import phase
 from app.db.models import Chunk, Document, Embedding
 from app.domain.chunking import ALL_STRATEGIES
 from app.domain.chunking import Chunk as DomainChunk
@@ -37,6 +40,8 @@ _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
     ".docx": parse_docx,
 }
 SUPPORTED_SUFFIXES = frozenset(_PARSERS)
+
+_log = structlog.get_logger(__name__)
 
 
 async def get_or_create_document(
@@ -83,7 +88,21 @@ async def get_or_create_document(
         status="pending",
     )
     session.add(document)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Two uploads of the same new file raced past the lookup above and
+        # the other one inserted first (uq_doc_tenant_hash): that document
+        # is this one.
+        await session.rollback()
+        raced = await session.scalar(
+            select(Document).where(
+                Document.tenant_id == tenant_id, Document.content_hash == content_hash
+            )
+        )
+        if raced is None:
+            raise
+        return raced, False
     await session.refresh(document)
     return document, True
 
@@ -128,9 +147,10 @@ async def process_document(
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            parsed = await asyncio.wait_for(
-                asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
-            )
+            with phase("parse", suffix=suffix):
+                parsed = await asyncio.wait_for(
+                    asyncio.to_thread(parser, tmp_path), settings.parse_timeout_s
+                )
         except TimeoutError:
             error_code = "parse_timeout"
             raise
@@ -151,11 +171,25 @@ async def process_document(
         await session.commit()
 
         pending = await _chunks_missing_embeddings(session, document, embedder.name)
-        await _embed_and_store(session, embedder, pending)
+        with phase("embed", chunks=len(pending), model=embedder.name):
+            await _embed_and_store(session, embedder, pending)
 
         document.status = "ready"
         await session.commit()
+        _log.info(
+            "ingestion.ready",
+            document_id=str(document.id),
+            pages=document.page_count,
+            ocr_pages=len(parsed.ocr_pages),
+            embedded=len(pending),
+        )
     except Exception:
+        _log.exception(
+            "ingestion.failed",
+            document_id=str(document.id),
+            filename=document.filename,
+            error_code=error_code,
+        )
         document.status = "failed"
         document.error_code = error_code
         await session.commit()

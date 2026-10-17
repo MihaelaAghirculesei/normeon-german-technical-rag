@@ -19,14 +19,8 @@ JSON and gets `max_request_bytes`.
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, MutableMapping
-from typing import Any
 
-Scope = MutableMapping[str, Any]
-Message = MutableMapping[str, Any]
-Receive = Callable[[], Awaitable[Message]]
-Send = Callable[[Message], Awaitable[None]]
-ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
+from app.core.asgi import ASGIApp, Receive, Scope, Send
 
 _UPLOAD_PATH = "/api/v1/documents"
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})

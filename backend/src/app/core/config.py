@@ -122,6 +122,14 @@ class Settings(BaseSettings):
     ocr_dpi: int = 300
     ocr_min_chars: int = 50
 
+    # Observability (Giorno 27). Traces: `console` logs one readable line per
+    # request; `otlp` sends them to a collector at `otel_endpoint`.
+    # `/metrics` is open when `metrics_token` is unset (a scraper on the
+    # internal network); set it to require `Authorization: Bearer <token>`.
+    otel_exporter: Literal["console", "otlp", "none"] = "console"
+    otel_endpoint: str = "http://localhost:4318/v1/traces"
+    metrics_token: str | None = None
+
 
 settings = Settings()
 

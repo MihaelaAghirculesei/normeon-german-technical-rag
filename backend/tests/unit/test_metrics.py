@@ -1,56 +1,191 @@
-"""Unit tests for the minimal in-process Counter (core/metrics.py)."""
+"""Observability (Giorno 27): the Prometheus metrics, the phase timer that
+feeds them and the traces, the readable trace summary, and the request id
+that ties logs, traces and query_logs together."""
+
+from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from app.core.metrics import Counter, hallucinated_citation_total
+from app.adapters.llm.base import LlmResponse
+from app.core import observability
+from app.core.config import settings
+from app.core.errors import LlmUnavailableError
+from app.core.metrics import sample
+from app.core.observability import TraceSummary, phase, summarise
+from app.main import app
+from app.services import generation
+from tests.unit.test_generation import TENANT, _chunk, _stub_retrieval
 
-
-def test_counter_starts_at_zero() -> None:
-    counter = Counter("test_counter")
-
-    assert counter.value == 0
-
-
-def test_counter_increments_by_one_by_default() -> None:
-    counter = Counter("test_counter")
-
-    counter.inc()
-    counter.inc()
-
-    assert counter.value == 2
-
-
-def test_counter_increments_by_the_given_amount() -> None:
-    counter = Counter("test_counter")
-
-    counter.inc(3)
-    counter.inc(4)
-
-    assert counter.value == 7
+# -- /metrics -------------------------------------------------------------------
 
 
-def test_counter_rejects_a_negative_increment() -> None:
-    counter = Counter("test_counter")
+def test_metrics_are_exposed_for_prometheus() -> None:
+    response = TestClient(app).get("/metrics")
 
-    with pytest.raises(ValueError, match="amount must be >= 0"):
-        counter.inc(-1)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    for series in (
+        "normeon_phase_seconds",
+        "normeon_answers_total",
+        "normeon_llm_cost_usd_total",
+        "normeon_hallucinated_citations_total",
+        "normeon_llm_errors_total",
+    ):
+        assert f"# HELP {series}" in response.text
 
 
-def test_counters_are_independent_instances() -> None:
-    a, b = Counter("a"), Counter("b")
+def test_a_metrics_token_closes_the_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "metrics_token", "scrape-me")
+    client = TestClient(app)
 
-    a.inc(5)
+    assert client.get("/metrics").status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert client.get("/metrics", headers={"Authorization": "Bearer scrape-me"}).status_code == 200
 
-    assert a.value == 5
-    assert b.value == 0
+
+# -- what generation records ----------------------------------------------------
 
 
-def test_hallucinated_citation_total_is_a_shared_counter() -> None:
-    # A module-level singleton, so this only checks its identity and
-    # interface, not a specific value -- other tests in the same process
-    # increment it too.
-    before = hallucinated_citation_total.value
+class _Llm:
+    name = "spy"
 
-    hallucinated_citation_total.inc()
+    def __init__(self, text: str = "", error: Exception | None = None) -> None:
+        self.text = text
+        self.error = error
 
-    assert hallucinated_citation_total.value == before + 1
+    async def complete(
+        self, *, system: str, user: str, temperature: float, max_tokens: int
+    ) -> LlmResponse:
+        if self.error is not None:
+            raise self.error
+        return LlmResponse(text=self.text, model="spy")
+
+
+async def _answer(llm: _Llm) -> Any:
+    return await generation.generate_answer(
+        object(), object(), object(), llm, tenant_id=TENANT, question="Frage?"
+    )
+
+
+async def test_an_answer_is_counted_with_its_citations_and_generate_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    answered = sample("normeon_answers_total", {"outcome": "answered"})
+    citations = sample("normeon_citations_total")
+    generated = sample("normeon_phase_seconds_count", {"phase": "generate"})
+
+    await _answer(_Llm("Es gilt Regel A [S1]."))
+
+    assert sample("normeon_answers_total", {"outcome": "answered"}) == answered + 1
+    assert sample("normeon_citations_total") == citations + 1
+    assert sample("normeon_phase_seconds_count", {"phase": "generate"}) == generated + 1
+
+
+async def test_an_abstention_is_counted_as_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    abstained = sample("normeon_answers_total", {"outcome": "abstained"})
+
+    await _answer(_Llm("NICHT_GEFUNDEN"))
+
+    assert sample("normeon_answers_total", {"outcome": "abstained"}) == abstained + 1
+
+
+async def test_an_llm_failure_is_counted_per_provider_and_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    labels = {"provider": settings.llm_provider, "code": "llm_unavailable"}
+    before = sample("normeon_llm_errors_total", labels)
+
+    with pytest.raises(LlmUnavailableError):
+        await _answer(_Llm(error=LlmUnavailableError("host down")))
+
+    assert sample("normeon_llm_errors_total", labels) == before + 1
+
+
+# -- phases and traces ----------------------------------------------------------
+
+
+def test_a_phase_is_a_latency_observation() -> None:
+    before = sample("normeon_phase_seconds_count", {"phase": "unit.test"})
+
+    with phase("unit.test"):
+        pass
+
+    assert sample("normeon_phase_seconds_count", {"phase": "unit.test"}) == before + 1
+
+
+def _trace() -> list[Any]:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer("test")
+    with tracer.start_as_current_span("POST /api/v1/chat"):
+        with tracer.start_as_current_span("retrieve"):
+            with tracer.start_as_current_span("retrieve.vector"):
+                pass
+            with tracer.start_as_current_span("fuse"):
+                pass
+        with tracer.start_as_current_span("generate"):
+            pass
+    return list(exporter.get_finished_spans())
+
+
+def test_a_trace_reads_as_indented_phases_in_order() -> None:
+    lines = summarise(_trace())
+
+    names = [line.rsplit(" ", 2)[0] for line in lines]
+    assert names == [
+        "POST /api/v1/chat",
+        "  retrieve",
+        "    retrieve.vector",
+        "    fuse",
+        "  generate",
+    ]
+    assert all(line.endswith(" ms") for line in lines)
+
+
+def test_the_summary_is_logged_once_when_the_request_span_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logged: list[dict[str, Any]] = []
+
+    class _Recorder:
+        def info(self, event: str, **fields: Any) -> None:
+            logged.append({"event": event, **fields})
+
+    monkeypatch.setattr(observability, "_log", _Recorder())
+    summary = TraceSummary()
+
+    # Children end before their parent, as in a real trace.
+    for span in _trace():
+        summary.on_end(span)
+
+    assert len(logged) == 1
+    assert logged[0]["event"] == "trace.completed"
+    assert logged[0]["root"] == "POST /api/v1/chat"
+    assert len(logged[0]["phases"]) == 5
+
+
+# -- request id -----------------------------------------------------------------
+
+
+def test_every_response_carries_a_request_id() -> None:
+    response = TestClient(app).get("/metrics")
+
+    assert len(response.headers["x-request-id"]) == 32
+
+
+def test_a_callers_request_id_is_kept_and_a_bad_one_replaced() -> None:
+    client = TestClient(app)
+
+    kept = client.get("/metrics", headers={"X-Request-ID": "frontend-42"})
+    replaced = client.get("/metrics", headers={"X-Request-ID": "not valid; drop table"})
+
+    assert kept.headers["x-request-id"] == "frontend-42"
+    assert replaced.headers["x-request-id"] != "not valid; drop table"
