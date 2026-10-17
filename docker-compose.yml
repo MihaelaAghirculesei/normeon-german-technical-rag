@@ -29,6 +29,8 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/src:/app/src
+      # The e5 embedding model (~2 GB) is downloaded once, not on every start.
+      - hf_cache:/home/normeon/.cache/huggingface
 
   adminer:
     image: adminer
@@ -38,4 +40,5 @@ services:
       - db
 
 volumes:
+  hf_cache:
   normeon_db_data:
