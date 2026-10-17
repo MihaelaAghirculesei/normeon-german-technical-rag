@@ -11,6 +11,8 @@ source tree.
 import re
 from pathlib import Path
 
+import yaml
+
 BACKEND = Path(__file__).parents[2]
 SRC = BACKEND / "src" / "app"
 # Read only by evaluation scripts, which run from a checkout, not the image.
@@ -66,3 +68,21 @@ def test_the_image_does_not_run_as_root() -> None:
     users = [line.split()[1] for line in lines if line.startswith("USER ")]
 
     assert users and users[-1] not in {"root", "0"}
+
+
+def test_volumes_in_the_users_home_are_created_by_the_user() -> None:
+    # A fresh named volume takes the owner of the image directory it is
+    # mounted on, and root's if that directory does not exist.
+    compose = yaml.safe_load((BACKEND.parent / "docker-compose.yml").read_text(encoding="utf-8"))
+    home = "/home/normeon/"
+    targets = [
+        volume.split(":")[1]
+        for volume in compose["services"]["backend"]["volumes"]
+        if volume.split(":")[1].startswith(home)
+    ]
+    dockerfile = (BACKEND / "Dockerfile").read_text(encoding="utf-8")
+    after_user = dockerfile[dockerfile.rindex("\nUSER ") :]
+
+    assert targets
+    for target in targets:
+        assert f"mkdir -p {target}" in after_user, target
