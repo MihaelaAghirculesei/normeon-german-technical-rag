@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { App } from './app';
-import { signedIn, signedOut } from './core/testing';
+import { ANNA, signedIn, signedOut } from './core/testing';
 
 describe('App', () => {
   afterEach(() => signedOut());
@@ -23,9 +23,18 @@ describe('App', () => {
     const el = await render();
 
     const links = [...el.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
-    expect(links).toEqual(['/fragen', '/dokumente']);
+    // Anna is an admin, so she also gets the statistics.
+    expect(links).toEqual(['/fragen', '/dokumente', '/statistik']);
     expect(el.querySelector('.who')?.textContent).toContain('anna@demo.normeon.dev');
     expect(el.querySelector('.who')?.textContent).toContain('Demo Tenant');
+  });
+
+  it('offers no statistics to a reader', async () => {
+    signedIn({ ...ANNA, role: 'reader' });
+    const el = await render();
+
+    const links = [...el.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/fragen', '/dokumente']);
   });
 
   it('shows no navigation to a signed-out visitor', async () => {

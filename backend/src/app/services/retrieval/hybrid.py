@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.core.config import settings
+from app.core.observability import phase
 from app.domain.fusion import rrf
 from app.domain.models import RetrievedChunk
 from app.services.retrieval.lexical import _fts_branch, _trgm_branch
@@ -73,13 +74,14 @@ async def hybrid_search(
         for hit in branch:
             by_id.setdefault(str(hit.chunk_id), hit)
 
-    fused = rrf(
-        [
-            [str(hit.chunk_id) for hit in vec_hits],
-            [str(hit.chunk_id) for hit in fts_hits],
-            [str(hit.chunk_id) for hit in trgm_hits],
-        ],
-        k=rrf_k,
-        weights=list(weights),
-    )
+    with phase("fuse"):
+        fused = rrf(
+            [
+                [str(hit.chunk_id) for hit in vec_hits],
+                [str(hit.chunk_id) for hit in fts_hits],
+                [str(hit.chunk_id) for hit in trgm_hits],
+            ],
+            k=rrf_k,
+            weights=list(weights),
+        )
     return [replace(by_id[chunk_id], score=score) for chunk_id, score in fused[:top_k]]

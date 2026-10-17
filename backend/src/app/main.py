@@ -1,11 +1,14 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, chat, chunks, documents, health, search
+from app.api import metrics
+from app.api.v1 import admin, auth, chat, chunks, documents, health, search
 from app.core.config import insecure_settings, settings
 from app.core.errors import NormeonError
 from app.core.limits import BodySizeLimit
 from app.core.logging import configure_logging
+from app.core.observability import configure_tracing
+from app.core.request_context import RequestIdMiddleware
 
 configure_logging()
 
@@ -23,6 +26,9 @@ app.add_middleware(
     max_upload_bytes=settings.max_upload_mb * 2**20 + 64 * 2**10,
     max_request_bytes=settings.max_request_kb * 2**10,
 )
+# Added last, so outermost: even a refused upload gets a request id.
+app.add_middleware(RequestIdMiddleware)
+configure_tracing(app)
 
 
 @app.exception_handler(NormeonError)
@@ -36,8 +42,10 @@ async def normeon_error_handler(request: Request, exc: NormeonError) -> JSONResp
 
 
 app.include_router(health.router)
+app.include_router(metrics.router)
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(chunks.router)
+app.include_router(admin.router)

@@ -54,7 +54,16 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.llm.base import LlmClient
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
-from app.core.metrics import hallucinated_citation_total
+from app.core.errors import NormeonError
+from app.core.metrics import (
+    ANSWERS_TOTAL,
+    CITATIONS_TOTAL,
+    LLM_COST_USD_TOTAL,
+    LLM_ERRORS_TOTAL,
+    hallucinated_citation_total,
+)
+from app.core.observability import PhaseTimer, phase
+from app.core.request_context import current_request_id
 from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
 from app.domain.config_hash import compute_config_hash
 from app.domain.conflicts import find_version_conflicts
@@ -83,6 +92,11 @@ _CONFLICT_INSTRUCTION = (
 )
 
 _log = structlog.get_logger(__name__)
+
+
+def _count_llm_error(code: str) -> None:
+    if code.startswith("llm_"):
+        LLM_ERRORS_TOTAL.labels(provider=settings.llm_provider, code=code).inc()
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +263,9 @@ async def _log_query(
     row, and return the cost so the caller can also put it on the
     response it hands back to the client."""
     cost = calculate_cost(model, prompt_tokens, completion_tokens)
+    ANSWERS_TOTAL.labels(outcome="abstained" if abstained else "answered").inc()
+    if cost is not None:
+        LLM_COST_USD_TOTAL.labels(model=model).inc(cost)
     await record_query_log(
         session,
         request_id=request_id,
@@ -284,7 +301,7 @@ async def generate_answer(
     prompt_name: str | None = None,
     request_id: str | None = None,
 ) -> AnswerResult:
-    request_id = request_id or str(uuid4())
+    request_id = request_id or current_request_id() or str(uuid4())
     prep = await _prepare(
         session,
         embedder,
@@ -321,15 +338,21 @@ async def generate_answer(
         )
 
     started = time.perf_counter()
-    completion = await llm.complete(
-        system=prep.system,
-        user=prep.user_message,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens,
-    )
+    try:
+        with phase("generate", model=llm.name):
+            completion = await llm.complete(
+                system=prep.system,
+                user=prep.user_message,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
+    except NormeonError as exc:
+        _count_llm_error(exc.code)
+        raise
     generation_ms = round((time.perf_counter() - started) * 1000, 1)
 
     answer, citations, invented_markers = extract_and_validate(completion.text, prep.sources)
+    CITATIONS_TOTAL.inc(len(citations))
     if invented_markers:
         hallucinated_citation_total.inc(len(invented_markers))
         _log.warning(
@@ -403,7 +426,7 @@ async def generate_answer_stream(
     and the resolved model is in `pricing.yaml`; otherwise `null`, same
     as the non-streaming path's `calculate_cost` returning `None`.
     """
-    request_id = request_id or str(uuid4())
+    request_id = request_id or current_request_id() or str(uuid4())
     try:
         # Each stage is reported when the request actually enters it:
         # retrieval runs in a task that flags the hand-off to the
@@ -480,6 +503,7 @@ async def generate_answer_stream(
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
         )
+        generating = PhaseTimer("generate")
         try:
             async for delta in token_stream:
                 if delta.model:
@@ -496,10 +520,12 @@ async def generate_answer_stream(
             # client disconnect, api.v1.chat) down to the adapter's own
             # network read -- "annulla il task LLM" from the plan.
             await token_stream.aclose()
+            generating.end()
         generation_ms = round((time.perf_counter() - started) * 1000, 1)
 
         answer_text = "".join(parts)
         answer, citations, invented_markers = extract_and_validate(answer_text, prep.sources)
+        CITATIONS_TOTAL.inc(len(citations))
         if invented_markers:
             hallucinated_citation_total.inc(len(invented_markers))
             _log.warning(
@@ -552,5 +578,6 @@ async def generate_answer_stream(
     except Exception as exc:  # deliberately broad: an SSE client must
         # never see a silently dead connection -- see the docstring.
         code = getattr(exc, "code", "internal_error")
+        _count_llm_error(code)
         _log.warning("chat_stream.failed", code=code, error=str(exc))
         yield StreamEvent("error", {"code": code, "message": str(exc)})
