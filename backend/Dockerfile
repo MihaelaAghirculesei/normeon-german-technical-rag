@@ -3,14 +3,24 @@ FROM python:3.13-slim AS base
 WORKDIR /app
 
 # OCR for scanned PDF pages (Giorno 26): tesseract with German language data.
-RUN apt-get update     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip
 
 COPY pyproject.toml ./
 COPY src ./src
+# Editable: the code stays in /app/src, where it finds prompts/ and
+# pricing.yaml next to it. A regular install copies it into site-packages,
+# where those paths do not exist for anything but uvicorn's --app-dir.
+RUN pip install --no-cache-dir -e .
 
-RUN pip install --no-cache-dir .
+# Read at runtime relative to /app (services/prompts.py, services/pricing.py),
+# and the migrations, so the schema can be upgraded from this image.
+COPY prompts ./prompts
+COPY pricing.yaml alembic.ini ./
+COPY migrations ./migrations
 
 EXPOSE 8000
 
