@@ -53,6 +53,7 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         retrieval_mode: str | None = None,
         rerank_top_k: int | None = None,
         candidate_k: int | None = None,
+        fts_match: str | None = None,
         on_rerank_start: Callable[[], None] | None = None,
     ) -> RetrievalResult:
         if on_rerank_start is not None:
@@ -63,6 +64,7 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         seen["retrieval_mode"] = retrieval_mode
         seen["rerank_top_k"] = rerank_top_k
         seen["candidate_k"] = candidate_k
+        seen["fts_match"] = fts_match
         timing = PipelineTiming(hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0)
         return RetrievalResult(context=chunks, reranked=chunks, timing=timing)
 
@@ -109,6 +111,7 @@ async def test_composes_retrieval_context_prompt_and_llm(monkeypatch: Any) -> No
         "retrieval_mode": None,
         "rerank_top_k": None,
         "candidate_k": None,
+        "fts_match": "all",
     }
     assert [s.marker for s in result.sources] == ["S1", "S2"]
     assert [c.marker for c in result.citations] == ["S1", "S2"]
@@ -858,8 +861,9 @@ async def test_stream_cost_usd_uses_usage_reported_on_the_stream(monkeypatch: An
 async def test_query_log_config_hash_reflects_the_applied_overrides(
     monkeypatch: Any,
 ) -> None:
-    """An eval run overriding retrieval_mode/top_k/candidate_k must not be
-    logged under the same config_hash as a request on the defaults."""
+    """An eval run overriding retrieval_mode/top_k/candidate_k/fts_match
+    must not be logged under the same config_hash as a request on the
+    defaults."""
     _stub_retrieval(monkeypatch, [_chunk("5.1")])
     calls = _stub_query_log(monkeypatch)
 
@@ -868,6 +872,7 @@ async def test_query_log_config_hash_reflects_the_applied_overrides(
         {"retrieval_mode": "vector"},
         {"rerank_top_k": 3},
         {"candidate_k": 10},
+        {"fts_match": "any"},
     ):
         await generation.generate_answer(
             object(),
@@ -880,7 +885,7 @@ async def test_query_log_config_hash_reflects_the_applied_overrides(
         )
 
     hashes = [call["config_hash"] for call in calls]
-    assert len(set(hashes)) == 4
+    assert len(set(hashes)) == 5
 
 
 async def test_candidate_k_is_forwarded_to_retrieval(monkeypatch: Any) -> None:
@@ -897,3 +902,18 @@ async def test_candidate_k_is_forwarded_to_retrieval(monkeypatch: Any) -> None:
     )
 
     assert seen["candidate_k"] == 10
+
+
+async def test_fts_match_is_forwarded_to_retrieval_resolved_against_settings(
+    monkeypatch: Any,
+) -> None:
+    seen = _stub_retrieval(monkeypatch, [_chunk("5.1")])
+    kwargs: dict[str, Any] = {"tenant_id": TENANT, "question": "Frage?"}
+
+    await generation.generate_answer(object(), object(), object(), FakeLlmClient(), **kwargs)
+    assert seen["fts_match"] == "all"
+
+    await generation.generate_answer(
+        object(), object(), object(), FakeLlmClient(), fts_match="any", **kwargs
+    )
+    assert seen["fts_match"] == "any"

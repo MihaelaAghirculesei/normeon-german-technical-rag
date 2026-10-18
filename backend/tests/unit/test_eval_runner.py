@@ -104,6 +104,7 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
         rerank_top_k: int | None = None,
         candidate_k: int | None = None,
         prompt_name: str | None = None,
+        fts_match: str | None = None,
         request_id: str | None = None,
     ) -> AnswerResult:
         calls.append(
@@ -115,6 +116,7 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
                 "rerank_top_k": rerank_top_k,
                 "candidate_k": candidate_k,
                 "prompt_name": prompt_name,
+                "fts_match": fts_match,
             }
         )
         outcome = by_id[question]
@@ -347,8 +349,8 @@ async def test_rerank_candidates_is_forwarded_as_candidate_k(monkeypatch: Any) -
 
 def test_unset_new_knobs_leave_the_config_hash_unchanged() -> None:
     """Reports written before rerank_candidates/reranker_max_length/
-    prompt_name existed keep the hash they were filed under."""
-    new_knobs = {"rerank_candidates", "reranker_max_length", "prompt_name"}
+    prompt_name/fts_match existed keep the hash they were filed under."""
+    new_knobs = {"rerank_candidates", "reranker_max_length", "prompt_name", "fts_match"}
     legacy = compute_config_hash(**CONFIG.model_dump(exclude=new_knobs))
     assert runner.config_hash(CONFIG) == legacy
     assert runner.config_hash(CONFIG.model_copy(update={"rerank_candidates": 10})) != legacy
