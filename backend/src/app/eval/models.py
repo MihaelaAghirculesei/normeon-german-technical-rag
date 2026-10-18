@@ -63,7 +63,12 @@ class EvalConfig(BaseModel):
     the runner. `reranker_max_length` is recorded, not applied -- it is a
     property of the reranker object the caller builds -- but it changes
     every score, so it belongs in the hash. Both default to `None` so a
-    report written before they existed still loads."""
+    report written before they existed still loads.
+
+    `prompt_name` is the answer prompt, applied by the runner. It changes
+    every answer, so a configuration that names it never reuses a report
+    produced under another prompt. `None` (the configured default, as in
+    reports written before it existed) keeps their hash."""
 
     chunking_strategy: Literal["fixed_500", "structural"]
     retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
@@ -71,6 +76,7 @@ class EvalConfig(BaseModel):
     top_k: int = 5
     rerank_candidates: int | None = None
     reranker_max_length: int | None = None
+    prompt_name: str | None = None
     embedding_provider: str
     llm_provider: str
     llm_model: str

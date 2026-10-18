@@ -166,6 +166,7 @@ async def _run_one(
         top_k=args.top_k,
         rerank_candidates=args.candidates,
         reranker_max_length=args.max_length,
+        prompt_name=settings.answer_prompt_name,
         embedding_provider=settings.embedding_provider,
         llm_provider=settings.llm_provider,
         llm_model=settings.llm_model,
