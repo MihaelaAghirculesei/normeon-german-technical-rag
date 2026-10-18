@@ -3,7 +3,12 @@ imports here -- `services/` and `api/` depend on this, never the reverse.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
+
+# The first retrieval phase: hybrid (vector + full-text + trigram, fused
+# by RRF) by default; one branch alone for the evaluation matrix.
+RetrievalMode = Literal["vector", "fts", "hybrid"]
 
 
 @dataclass(frozen=True, slots=True)
