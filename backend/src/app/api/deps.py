@@ -101,16 +101,24 @@ def get_llm_client() -> LlmClient:
     """Cached for the process. `fake` needs nothing (deterministic, no
     network); `openai_compatible` needs a base URL and a model -- any
     server speaking POST /chat/completions."""
+    return build_llm_client()
+
+
+def build_llm_client(model: str | None = None) -> LlmClient:
+    """A client for the configured provider, on `model` instead of the
+    configured one when given -- the evaluation compares models while its
+    judge stays on the configured one."""
     if settings.llm_provider == "fake":
         return FakeLlmClient()
-    if not settings.llm_api_base_url or not settings.llm_model:
+    model = model or settings.llm_model
+    if not settings.llm_api_base_url or not model:
         raise LlmMisconfiguredError(
             "llm_api_base_url and llm_model must be set when llm_provider=openai_compatible"
         )
     return OpenAICompatibleClient(
         base_url=settings.llm_api_base_url,
         api_key=settings.llm_api_key,
-        model=settings.llm_model,
+        model=model,
         timeout=settings.llm_timeout_s,
         max_retries=settings.llm_max_retries,
     )
