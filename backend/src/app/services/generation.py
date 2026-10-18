@@ -44,7 +44,7 @@ import contextlib
 import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
@@ -68,7 +68,7 @@ from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
 from app.domain.config_hash import compute_config_hash
 from app.domain.conflicts import find_version_conflicts
 from app.domain.context import Source, build_context
-from app.domain.models import PipelineTiming, RetrievalResult
+from app.domain.models import PipelineTiming, RetrievalMode, RetrievalResult
 from app.services.pricing import calculate_cost
 from app.services.prompts import Prompt, load_prompt
 from app.services.query_log import record_query_log
@@ -140,7 +140,7 @@ class _Prepared:
     # The retrieval knobs actually applied to this request (overrides
     # resolved against settings), so `_config_hash` records what ran
     # rather than the configured defaults.
-    retrieval_mode: Literal["vector", "hybrid"]
+    retrieval_mode: RetrievalMode
     rerank_top_k: int
     candidate_k: int | None
 
@@ -153,14 +153,14 @@ async def _prepare(
     tenant_id: UUID,
     question: str,
     strategy: str | None,
-    retrieval_mode: Literal["vector", "hybrid"] | None,
+    retrieval_mode: RetrievalMode | None,
     rerank_top_k: int | None,
     candidate_k: int | None,
     prompt_name: str | None,
     on_rerank_start: Callable[[], None] | None = None,
 ) -> _Prepared:
     prompt = load_prompt(prompt_name or settings.answer_prompt_name)
-    applied_mode: Literal["vector", "hybrid"] = retrieval_mode or "hybrid"
+    applied_mode: RetrievalMode = retrieval_mode or "hybrid"
     applied_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
 
     retrieval = await retrieve_context(
@@ -295,7 +295,7 @@ async def generate_answer(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
-    retrieval_mode: Literal["vector", "hybrid"] | None = None,
+    retrieval_mode: RetrievalMode | None = None,
     rerank_top_k: int | None = None,
     candidate_k: int | None = None,
     prompt_name: str | None = None,

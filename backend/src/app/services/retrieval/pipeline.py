@@ -5,7 +5,6 @@ context selection, as one instrumented call.
 import asyncio
 import time
 from collections.abc import Callable
-from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +13,9 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.core.observability import phase
-from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
+from app.domain.models import PipelineTiming, RetrievalMode, RetrievalResult, RetrievedChunk
 from app.services.retrieval.hybrid import hybrid_search
+from app.services.retrieval.lexical import fts_search
 from app.services.retrieval.vector import vector_search
 
 
@@ -63,7 +63,7 @@ async def retrieve_context(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
-    retrieval_mode: Literal["vector", "hybrid"] | None = None,
+    retrieval_mode: RetrievalMode | None = None,
     candidate_k: int | None = None,
     rerank_top_k: int | None = None,
     token_budget: int | None = None,
@@ -71,7 +71,7 @@ async def retrieve_context(
 ) -> RetrievalResult:
     """The full retrieval pipeline as one instrumented call:
 
-        tenant filter + retrieval (vector-only, or hybrid + RRF)
+        tenant filter + retrieval (hybrid + RRF, or one branch alone)
           -> cross-encoder rerank                (off-thread, CPU-bound)
           -> token-budget context selection      (`_select_context`)
 
@@ -79,10 +79,12 @@ async def retrieve_context(
     `retrieval_mode` (Giorno 20's matrix variable) picks the first phase:
     `"hybrid"` (default, unchanged behaviour) fuses vector + full-text +
     trigram via RRF; `"vector"` skips fusion entirely and ranks purely on
-    cosine similarity, so the matrix can isolate hybrid's actual lift.
+    cosine similarity, so the matrix can isolate hybrid's actual lift;
+    `"fts"` is the full-text branch alone (plus the trigram branch on a
+    code-shaped question, as in `fts_search`), with no embedding at all.
     `rerank_top_k` and `token_budget` fall back to the configured
     defaults. `candidate_k`, when given, is how many candidates the
-    reranker sees in *either* mode: vector-only retrieves that many;
+    reranker sees in *any* mode: a single branch retrieves that many;
     hybrid pulls that many from each branch and keeps that many after
     fusion -- so a vector-vs-hybrid comparison hands the reranker the
     same budget and differs only in *which* chunks fill it. Left `None`,
@@ -99,12 +101,20 @@ async def retrieve_context(
     )
 
     started = time.perf_counter()
-    with phase("retrieve", mode=retrieval_mode or "hybrid"):
+    candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
+    with phase("retrieve", mode=retrieval_mode):
         if retrieval_mode == "vector":
-            candidates = candidate_k if candidate_k is not None else settings.hybrid_candidate_k
             fused = await vector_search(
                 session,
                 embedder,
+                tenant_id=tenant_id,
+                question=question,
+                strategy=strategy,
+                k=candidates,
+            )
+        elif retrieval_mode == "fts":
+            fused = await fts_search(
+                session,
                 tenant_id=tenant_id,
                 question=question,
                 strategy=strategy,

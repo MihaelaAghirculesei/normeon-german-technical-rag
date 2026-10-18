@@ -17,6 +17,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.domain.models import RetrievalMode
+
 CATEGORIES = (
     "requirement_lookup",
     "cross_reference",
@@ -71,7 +73,7 @@ class EvalConfig(BaseModel):
     reports written before it existed) keeps their hash."""
 
     chunking_strategy: Literal["fixed_500", "structural"]
-    retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
+    retrieval_mode: RetrievalMode = "hybrid"
     reranker: Literal["noop", "cross_encoder"]
     top_k: int = 5
     rerank_candidates: int | None = None
