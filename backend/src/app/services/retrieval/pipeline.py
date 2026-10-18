@@ -13,7 +13,13 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.core.observability import phase
-from app.domain.models import PipelineTiming, RetrievalMode, RetrievalResult, RetrievedChunk
+from app.domain.models import (
+    FtsMatch,
+    PipelineTiming,
+    RetrievalMode,
+    RetrievalResult,
+    RetrievedChunk,
+)
 from app.services.retrieval.hybrid import hybrid_search
 from app.services.retrieval.lexical import fts_search
 from app.services.retrieval.vector import vector_search
@@ -67,6 +73,7 @@ async def retrieve_context(
     candidate_k: int | None = None,
     rerank_top_k: int | None = None,
     token_budget: int | None = None,
+    fts_match: FtsMatch | None = None,
     on_rerank_start: Callable[[], None] | None = None,
 ) -> RetrievalResult:
     """The full retrieval pipeline as one instrumented call:
@@ -88,7 +95,9 @@ async def retrieve_context(
     hybrid pulls that many from each branch and keeps that many after
     fusion -- so a vector-vs-hybrid comparison hands the reranker the
     same budget and differs only in *which* chunks fill it. Left `None`,
-    each branch's configured defaults apply.
+    each branch's configured defaults apply. `fts_match` (all or any of
+    the question's terms) reaches the full-text branch in `"fts"` and
+    `"hybrid"` mode.
 
     `on_rerank_start`, when given, is called once retrieval is done and
     reranking is about to begin -- the streaming endpoint uses it to report
@@ -119,6 +128,7 @@ async def retrieve_context(
                 question=question,
                 strategy=strategy,
                 k=candidates,
+                fts_match=fts_match,
             )
         else:
             fused = await hybrid_search(
@@ -129,6 +139,7 @@ async def retrieve_context(
                 strategy=strategy,
                 candidate_k=candidate_k,
                 top_k=candidate_k,
+                fts_match=fts_match,
             )
     after_hybrid = time.perf_counter()
     if on_rerank_start is not None:

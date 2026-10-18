@@ -17,7 +17,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.domain.models import RetrievalMode
+from app.domain.models import FtsMatch, RetrievalMode
 
 CATEGORIES = (
     "requirement_lookup",
@@ -70,7 +70,8 @@ class EvalConfig(BaseModel):
     `prompt_name` is the answer prompt, applied by the runner. It changes
     every answer, so a configuration that names it never reuses a report
     produced under another prompt. `None` (the configured default, as in
-    reports written before it existed) keeps their hash."""
+    reports written before it existed) keeps their hash. `fts_match`, applied
+    the same way, likewise."""
 
     chunking_strategy: Literal["fixed_500", "structural"]
     retrieval_mode: RetrievalMode = "hybrid"
@@ -79,6 +80,7 @@ class EvalConfig(BaseModel):
     rerank_candidates: int | None = None
     reranker_max_length: int | None = None
     prompt_name: str | None = None
+    fts_match: FtsMatch | None = None
     embedding_provider: str
     llm_provider: str
     llm_model: str

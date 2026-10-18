@@ -320,4 +320,10 @@ async def test_retrieve_context_fts_mode_uses_full_text_alone(
 
     assert [c.content for c in result.reranked] == ["eta", "zeta"]
     kwargs = pipeline.fts_search.kwargs  # type: ignore[attr-defined]
-    assert kwargs == {"tenant_id": TENANT, "question": "Q", "strategy": "structural", "k": 30}
+    assert kwargs == {
+        "tenant_id": TENANT,
+        "question": "Q",
+        "strategy": "structural",
+        "k": 30,
+        "fts_match": None,
+    }

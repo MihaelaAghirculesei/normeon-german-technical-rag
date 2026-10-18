@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.observability import phase
-from app.domain.models import RetrievedChunk
+from app.domain.models import FtsMatch, RetrievedChunk
 from app.domain.normalization import extract_code, normalize_de
 from app.services.retrieval._sql import FTS_SEARCH_SQL, TRGM_SEARCH_SQL, row_to_chunk
 
@@ -19,17 +19,21 @@ async def _fts_branch(
     question: str,
     strategy: str,
     k: int,
+    match: FtsMatch | None = None,
 ) -> list[RetrievedChunk]:
-    """The `websearch_to_tsquery('german')` / `ts_rank_cd` branch on its
-    own. The question goes through the same `normalize_de` as the indexed
-    text, so a code or norm reference written differently still lands on
-    the token ingestion stored.
+    """The German full-text / `ts_rank_cd` branch on its own, matching all
+    of the question's terms or any of them (`match`, default: the
+    `fts_match` setting). The question goes through the same
+    `normalize_de` as the indexed text, so a code or norm reference
+    written differently still lands on the token ingestion stored.
     """
-    with phase("retrieve.fts"):
+    match = match or settings.fts_match
+    with phase("retrieve.fts", match=match):
         result = await session.execute(
             FTS_SEARCH_SQL,
             {
                 "q": normalize_de(question),
+                "match_any": match == "any",
                 "tenant_id": tenant_id,
                 "strategy": strategy,
                 "k": k,
@@ -74,6 +78,7 @@ async def fts_search(
     question: str,
     strategy: str | None = None,
     k: int | None = None,
+    fts_match: FtsMatch | None = None,
 ) -> list[RetrievedChunk]:
     """German full-text search for this tenant, ranked by `ts_rank_cd`.
 
@@ -87,7 +92,7 @@ async def fts_search(
     k = k if k is not None else settings.retrieval_top_k
 
     hits = await _fts_branch(
-        session, tenant_id=tenant_id, question=question, strategy=strategy, k=k
+        session, tenant_id=tenant_id, question=question, strategy=strategy, k=k, match=fts_match
     )
     trgm_hits = await _trgm_branch(
         session, tenant_id=tenant_id, question=question, strategy=strategy, k=k

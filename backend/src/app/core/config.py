@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # code ("LH-3.2.1", "UN R79"): pg_trgm.word_similarity_threshold for
     # `:code <% content_norm`. 0.5 tolerates a little spacing/spelling drift.
     trgm_code_threshold: float = 0.5
+    # Full-text match on all of the question's terms or on any of them
+    # (Giorno 28). "all" finds nothing for a question that names one word
+    # the text does not use; "any" lets ts_rank_cd sort it out.
+    fts_match: Literal["all", "any"] = "all"
 
     # Hybrid retrieval (Day 8): fuse the vector, full-text and trigram
     # rankings with Reciprocal Rank Fusion. `hybrid_candidate_k` is how

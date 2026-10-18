@@ -10,6 +10,10 @@ from uuid import UUID
 # by RRF) by default; one branch alone for the evaluation matrix.
 RetrievalMode = Literal["vector", "fts", "hybrid"]
 
+# Which of the question's terms a full-text match needs: all of them (the
+# default, `websearch_to_tsquery`), or any one, ranked by how many match.
+FtsMatch = Literal["all", "any"]
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievedChunk:
