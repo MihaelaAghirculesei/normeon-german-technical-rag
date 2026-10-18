@@ -1,6 +1,14 @@
-"""Run the Giorno 20 experiment matrix -- {fixed_500, structural} x
-{vector, hybrid}, cross-encoder reranker, top_k=5 -- and write a
-comparison report.
+"""Run the Giorno 28 ablation matrix and write a comparison report.
+
+One baseline -- structural chunking, hybrid retrieval, cross-encoder
+reranker, top_k=5, the configured model -- and one row per experiment that
+changes exactly one of those knobs (`EXPERIMENTS`), so every difference
+against the baseline has one cause. The judge is the configured model in
+every row, including the one that changes the answering model.
+
+Not run: E7 (an embedding API in place of local e5). The schema stores
+1024-dimension vectors and no hosted e5 endpoint is configured; another
+embedding model would mean a second index, not a knob.
 
     cd backend
     DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \\
@@ -30,8 +38,9 @@ reranker in *both* retrieval modes (hybrid keeps that many after fusion),
 so vector vs. hybrid differ only in which chunks fill the budget, not in
 how many. It also bounds the rerank cost, linear in it on CPU.
 
-**Cost-bearing**: 4 x 50 answer-generation calls plus 4 x 50 judge calls
-against the configured (non-"fake") LLM. Use `--questions` with the
+**Cost-bearing**: up to 8 x 50 answer-generation calls (fewer: the
+confidence gate abstains without one) plus 8 x 50 judge calls against the
+configured (non-"fake") LLM. Use `--questions` with the
 smoke set and `--reports-dir` pointing at a scratch directory for a
 dry run first.
 """
@@ -40,14 +49,20 @@ import argparse
 import asyncio
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
+from app.adapters.llm.base import LlmClient
+from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.caching import CachingReranker
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
-from app.api.deps import get_embedder, get_llm_client
+from app.adapters.reranker.noop import NoopReranker
+from app.api.deps import build_llm_client, get_embedder
 from app.core.config import settings
 from app.db.seed import DEMO_TENANT_ID
 from app.db.session import async_session_factory
+from app.domain.models import RetrievalMode
 from app.eval.dataset import DATASET_DIR, load_questions
 from app.eval.matrix import MatrixRow, write_matrix_report
 from app.eval.metrics import EvalMetrics, compute_metrics
@@ -61,15 +76,32 @@ from app.eval.scoring import (
     write_scored_report,
 )
 
-# (label, chunking_strategy, retrieval_mode). The first row is the
-# plan's ablation baseline (structural chunking + hybrid retrieval);
-# every other row is compared against it question by question.
-BASELINE = "structural / hybrid"
-_MATRIX = [
-    (BASELINE, "structural", "hybrid"),
-    ("structural / vector", "structural", "vector"),
-    ("fixed_500 / hybrid", "fixed_500", "hybrid"),
-    ("fixed_500 / vector", "fixed_500", "vector"),
+
+@dataclass(frozen=True)
+class Experiment:
+    """One row: the baseline with at most one knob changed. `model=None`
+    is the configured model; `"B"` is the one given by `--model-b`."""
+
+    label: str
+    chunking: Literal["fixed_500", "structural"] = "structural"
+    mode: RetrievalMode = "hybrid"
+    rerank: bool = True
+    top_k: int | None = None  # None: --top-k
+    model: Literal["B"] | None = None
+
+
+# The first row is the baseline; every other row is compared against it
+# question by question.
+BASELINE = "baseline"
+EXPERIMENTS = [
+    Experiment(BASELINE),
+    Experiment("E1 fixed_500 chunks", chunking="fixed_500"),
+    Experiment("E2 vector only", mode="vector"),
+    Experiment("E3 full-text only", mode="fts"),
+    Experiment("E4 no reranker", rerank=False),
+    Experiment("E5 top-k 3", top_k=3),
+    Experiment("E6 top-k 10", top_k=10),
+    Experiment("E8 model B", model="B"),
 ]
 
 
@@ -80,7 +112,8 @@ def _covers(report: EvalReport, questions: list[EvalQuestion]) -> bool:
 async def _report_for(
     config: EvalConfig,
     questions: list[EvalQuestion],
-    reranker: CachingReranker,
+    reranker: Reranker,
+    llm: LlmClient,
     *,
     reports_dir: Path,
     concurrency: int,
@@ -101,7 +134,7 @@ async def _report_for(
         session_factory=async_session_factory,
         embedder=get_embedder(),
         reranker=reranker,
-        llm=get_llm_client(),
+        llm=llm,
         tenant_id=DEMO_TENANT_ID,
         concurrency=concurrency,
         checkpoint=checkpoint,
@@ -121,19 +154,18 @@ async def _report_for(
 async def _scored_for(
     report: EvalReport,
     questions: list[EvalQuestion],
+    judge: LlmClient,
     *,
     reports_dir: Path,
     judge_interval: float,
 ) -> ScoredReport:
     path = reports_dir / f"{report.config_hash}.scored.json"
     if not path.exists():
-        scored = await score_report(
-            report, questions, get_llm_client(), min_interval_s=judge_interval
-        )
+        scored = await score_report(report, questions, judge, min_interval_s=judge_interval)
     else:
         existing = ScoredReport.model_validate_json(path.read_text(encoding="utf-8"))
         scored, n_rejudged = await rescore_stale(
-            report, existing, questions, get_llm_client(), min_interval_s=judge_interval
+            report, existing, questions, judge, min_interval_s=judge_interval
         )
         if not n_rejudged:
             print(f"scored report exists, reusing -> {path}", flush=True)
@@ -151,40 +183,43 @@ async def _scored_for(
 
 
 async def _run_one(
-    label: str,
-    chunking_strategy: str,
-    retrieval_mode: str,
+    experiment: Experiment,
     *,
     questions: list[EvalQuestion],
     reranker: CachingReranker,
+    judge: LlmClient,
     args: argparse.Namespace,
 ) -> MatrixRow:
+    model = args.model_b if experiment.model == "B" else settings.llm_model
     config = EvalConfig(
-        chunking_strategy=chunking_strategy,  # type: ignore[arg-type]
-        retrieval_mode=retrieval_mode,  # type: ignore[arg-type]
-        reranker="cross_encoder",
-        top_k=args.top_k,
+        chunking_strategy=experiment.chunking,
+        retrieval_mode=experiment.mode,
+        reranker="cross_encoder" if experiment.rerank else "noop",
+        top_k=experiment.top_k or args.top_k,
         rerank_candidates=args.candidates,
-        reranker_max_length=args.max_length,
+        # the cross-encoder's input cap; meaningless without it
+        reranker_max_length=args.max_length if experiment.rerank else None,
         prompt_name=settings.answer_prompt_name,
         embedding_provider=settings.embedding_provider,
         llm_provider=settings.llm_provider,
-        llm_model=settings.llm_model,
+        llm_model=model,
     )
     reports_dir = Path(args.reports_dir)
+    label = experiment.label
 
     print(f"\n=== {label} ({config_hash(config)[:12]}) ===", flush=True)
     started = time.perf_counter()
     report = await _report_for(
         config,
         questions,
-        reranker,
+        reranker if experiment.rerank else NoopReranker(),
+        judge if model == settings.llm_model else build_llm_client(model),
         reports_dir=reports_dir,
         concurrency=args.concurrency,
         question_interval=args.question_interval,
     )
     scored = await _scored_for(
-        report, questions, reports_dir=reports_dir, judge_interval=args.judge_interval
+        report, questions, judge, reports_dir=reports_dir, judge_interval=args.judge_interval
     )
     metrics: EvalMetrics = compute_metrics(report, scored, questions)
     metrics_path = reports_dir / f"{report.config_hash}.metrics.json"
@@ -215,17 +250,26 @@ async def _run(args: argparse.Namespace) -> None:
         cache_file,
         namespace=f"{settings.reranker_model}|max_length={args.max_length}",
     )
+    judge = build_llm_client()
     try:
         rows = [
-            await _run_one(
-                label, chunking, mode, questions=questions, reranker=reranker, args=args
-            )
-            for label, chunking, mode in _MATRIX
+            await _run_one(e, questions=questions, reranker=reranker, judge=judge, args=args)
+            for e in EXPERIMENTS
         ]
     finally:
         reranker.close()
 
-    notes = []
+    notes = [
+        f"Every row changes one knob of the baseline: structural chunking, hybrid "
+        f"retrieval, cross-encoder over {args.candidates} candidates, top-k "
+        f"{args.top_k}, answers from {settings.llm_model}, prompt "
+        f"{settings.answer_prompt_name}. E8 answers with {args.model_b}; every row "
+        f"is judged by {settings.llm_model}.",
+        "E4 keeps the fused order and its scores, so the confidence gate -- set "
+        "for cross-encoder logits -- does not fire there.",
+        "E7 (embedding API) is not run: no hosted 1024-dimension e5 endpoint is "
+        "configured, and another embedding model needs its own index.",
+    ]
     if args.rerank_cache:
         notes.append(
             "Latency columns include rerank-cache hits: a configuration whose "
@@ -249,6 +293,11 @@ def main() -> int:
     parser.add_argument("--questions", default=str(DATASET_DIR / "questions.yaml"))
     parser.add_argument("--reports-dir", default=str(REPORTS_DIR))
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument(
+        "--model-b",
+        default="gemini-flash-latest",
+        help="the answering model of E8 (default: gemini-flash-latest)",
+    )
     parser.add_argument(
         "--candidates",
         type=int,
