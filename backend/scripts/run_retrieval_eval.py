@@ -1,5 +1,5 @@
 """Retrieval-only evaluation: recall@k, MRR and precision@k for the
-Giorno 20 matrix configurations, without a single LLM call.
+retrieval configurations of the evaluation matrix, without a single LLM call.
 
     cd backend
     DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \\
@@ -34,6 +34,7 @@ from app.services.retrieval import retrieve_context
 _MATRIX = [
     ("structural / hybrid", "structural", "hybrid"),
     ("structural / vector", "structural", "vector"),
+    ("structural / fts", "structural", "fts"),
     ("fixed_500 / hybrid", "fixed_500", "hybrid"),
     ("fixed_500 / vector", "fixed_500", "vector"),
 ]
