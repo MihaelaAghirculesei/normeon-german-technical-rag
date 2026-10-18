@@ -38,8 +38,8 @@ reranker in *both* retrieval modes (hybrid keeps that many after fusion),
 so vector vs. hybrid differ only in which chunks fill the budget, not in
 how many. It also bounds the rerank cost, linear in it on CPU.
 
-**Cost-bearing**: up to 8 x 50 answer-generation calls (fewer: the
-confidence gate abstains without one) plus 8 x 50 judge calls against the
+**Cost-bearing**: up to 9 x 50 answer-generation calls (fewer: the
+confidence gate abstains without one) plus 9 x 50 judge calls against the
 configured (non-"fake") LLM. Use `--questions` with the
 smoke set and `--reports-dir` pointing at a scratch directory for a
 dry run first.
@@ -62,7 +62,7 @@ from app.api.deps import build_llm_client, get_embedder
 from app.core.config import settings
 from app.db.seed import DEMO_TENANT_ID
 from app.db.session import async_session_factory
-from app.domain.models import RetrievalMode
+from app.domain.models import FtsMatch, RetrievalMode
 from app.eval.dataset import DATASET_DIR, load_questions
 from app.eval.matrix import MatrixRow, write_matrix_report
 from app.eval.metrics import EvalMetrics, compute_metrics
@@ -88,6 +88,7 @@ class Experiment:
     rerank: bool = True
     top_k: int | None = None  # None: --top-k
     model: Literal["B"] | None = None
+    fts_match: FtsMatch = "all"
 
 
 # The first row is the baseline; every other row is compared against it
@@ -102,6 +103,7 @@ EXPERIMENTS = [
     Experiment("E5 top-k 3", top_k=3),
     Experiment("E6 top-k 10", top_k=10),
     Experiment("E8 model B", model="B"),
+    Experiment("E9 full-text on any term", fts_match="any"),
 ]
 
 
@@ -203,6 +205,8 @@ async def _run_one(
         embedding_provider=settings.embedding_provider,
         llm_provider=settings.llm_provider,
         llm_model=model,
+        # only when changed, so the default's hash matches the other rows'
+        fts_match=experiment.fts_match if experiment.fts_match != "all" else None,
     )
     reports_dir = Path(args.reports_dir)
     label = experiment.label
@@ -267,6 +271,8 @@ async def _run(args: argparse.Namespace) -> None:
         f"is judged by {settings.llm_model}.",
         "E4 keeps the fused order and its scores, so the confidence gate -- set "
         "for cross-encoder logits -- does not fire there.",
+        "E3 uses the production full-text query, which needs every term of the "
+        "question; E9 keeps hybrid retrieval and lets full-text match any term.",
         "E7 (embedding API) is not run: no hosted 1024-dimension e5 endpoint is "
         "configured, and another embedding model needs its own index.",
     ]
