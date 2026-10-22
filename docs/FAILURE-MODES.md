@@ -243,6 +243,19 @@ has already reached the caller would either duplicate output or need
 the complexity for Day 14. A transient mid-stream failure becomes one
 `error` SSE event instead of a retried attempt.
 
+### A stream is bounded by its gaps, not its length
+
+httpx's read timeout restarts on every byte, so a server that sends
+keep-alive comments but no tokens would hold a stream open forever,
+and a total cap would cut off a long answer that is still arriving.
+The adapter bounds neither the bytes nor the length, only progress:
+the first delta must arrive within `llm_stream_first_token_s` (60 s)
+and each later one within `llm_stream_idle_s` (30 s) of the previous.
+Lines without a delta do not count. The gap is measured from when
+the adapter waits for the next delta, so a slow consumer does not
+use up the server's allowance. A model that thinks for longer than a
+minute before its first token needs a larger first-token setting.
+
 ## Cost tracking (Day 15)
 
 ### pricing.yaml is a snapshot, not a live feed
@@ -429,7 +442,10 @@ Conclusions about answer quality from this run are directional only.
 - **No overall deadline on an LLM call.** httpx's `timeout` bounds each
   read, not the request: one answer took 277 s, and when the laptop
   entered modern standby a connection hung for nine hours with the
-  process idle. The adapter needs a total per-call deadline.
+  process idle. **Fixed** (issue #37): every attempt of `complete` runs
+  under an overall deadline (`llm_call_deadline_s`, 120 s) and is
+  retried like any timeout; streams are bounded by time to the first
+  token and by the gap between tokens ("Streaming (Day 14)").
 - **Free-tier quota is per day, not just per minute.** Retries and pacing
   handle the per-minute limit; Gemini's free tier also caps a model at
   500 requests a day, and one full matrix (200 answers + 200 judgements)
@@ -487,4 +503,8 @@ lite model's 500 -- ran out after 13 questions. The model comparison
 needs a paid key or several days, and is recorded as not done. Two
 adapter defects showed up on the way: the timeout bounds each read, not
 the call (Giorno 20 "Operational"), and an `LlmTimeoutError` carries an
-empty message, so the report says a question failed but not why.
+empty message, so the report says a question failed but not why. Both
+are fixed (#37): every call attempt has an overall deadline, a stream
+is bounded by its first token and its idle gaps ("A stream is bounded
+by its gaps, not its length"), and an error without a message is named
+by its type.
