@@ -89,6 +89,14 @@ def _wait(retry_state: RetryCallState) -> float:
     return float(_backoff(retry_state))
 
 
+def _describe(exc: httpx.HTTPError) -> str:
+    """The error's message, or its type when it has none: httpx raises
+    its timeouts without one (`str(httpx.ReadTimeout(""))` is empty), and
+    an empty message leaves an eval report saying a question failed but
+    not why."""
+    return str(exc) or type(exc).__name__
+
+
 class OpenAICompatibleClient:
     name = "openai_compatible"
 
@@ -131,9 +139,9 @@ class OpenAICompatibleClient:
         try:
             response = await self._post_with_retry(body)
         except httpx.TimeoutException as exc:
-            raise LlmTimeoutError(str(exc)) from exc
+            raise LlmTimeoutError(_describe(exc)) from exc
         except httpx.HTTPError as exc:
-            raise LlmUnavailableError(str(exc)) from exc
+            raise LlmUnavailableError(_describe(exc)) from exc
 
         payload: dict[str, Any] = response.json()
         content = payload["choices"][0]["message"]["content"]
@@ -176,9 +184,9 @@ class OpenAICompatibleClient:
                         completion_tokens=usage.get("completion_tokens"),
                     )
         except httpx.TimeoutException as exc:
-            raise LlmTimeoutError(str(exc)) from exc
+            raise LlmTimeoutError(_describe(exc)) from exc
         except httpx.HTTPError as exc:
-            raise LlmUnavailableError(str(exc)) from exc
+            raise LlmUnavailableError(_describe(exc)) from exc
 
     async def _post_with_retry(self, body: dict[str, Any]) -> httpx.Response:
         retrying = AsyncRetrying(

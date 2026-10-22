@@ -177,6 +177,19 @@ async def test_a_timeout_raises_llm_timeout() -> None:
     assert exc_info.value.code == "llm_timeout"
 
 
+async def test_a_timeout_without_a_message_is_named_by_its_type() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=0,
+        transport=_sequenced_transport([httpx.ReadTimeout("")]),
+    )
+
+    with pytest.raises(LlmTimeoutError, match="^ReadTimeout$"):
+        await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+
 def _sse_body(*chunks: dict) -> bytes:
     """Each `chunks` entry is a raw wire chunk -- typically `{"model":
     ..., "choices": [{"delta": {"content": ...}}]}` or a usage-only
