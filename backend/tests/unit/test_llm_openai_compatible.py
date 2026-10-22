@@ -2,7 +2,9 @@
 ``httpx.MockTransport`` so nothing leaves the process.
 """
 
+import asyncio
 import json
+import time
 
 import httpx
 import pytest
@@ -188,6 +190,84 @@ async def test_a_timeout_without_a_message_is_named_by_its_type() -> None:
 
     with pytest.raises(LlmTimeoutError, match="^ReadTimeout$"):
         await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+
+# --- overall deadline ---------------------------------------------------------
+
+#: Guards each deadline test, so a regression fails instead of hanging.
+_GUARD_S = 5.0
+
+
+def _stalling_transport(calls: list[httpx.Request], *, then: list | None = None):  # noqa: ANN202
+    """Never answers the first request(s); answers later ones from `then`
+    in order, if given -- a server that holds the connection open."""
+    remaining = iter(then or [])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        item = next(remaining, None)
+        if item is None:
+            await asyncio.Event().wait()
+        return item
+
+    return httpx.MockTransport(handler)
+
+
+async def test_a_call_that_never_answers_raises_llm_timeout_within_the_deadline() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=0.05,
+        max_retries=0,
+        transport=_stalling_transport([]),
+    )
+
+    started = time.monotonic()
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="0.05 s"):
+            await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert time.monotonic() - started < 1.0
+
+
+async def test_an_attempt_past_the_deadline_is_retried() -> None:
+    calls: list[httpx.Request] = []
+    stall_then_answer = _stalling_transport(
+        calls, then=[None, httpx.Response(200, json=_ok_body())]
+    )
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=0.05,
+        max_retries=1,
+        transport=stall_then_answer,
+    )
+
+    async with asyncio.timeout(_GUARD_S):
+        resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
+    assert len(calls) == 2
+
+
+async def test_a_slow_answer_inside_the_deadline_is_kept() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json=_ok_body())
+
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=1.0,
+        max_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+
+    resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
 
 
 def _sse_body(*chunks: dict) -> bytes:

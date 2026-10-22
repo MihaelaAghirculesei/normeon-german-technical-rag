@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 800
     llm_timeout_s: float = 30.0
+    llm_call_deadline_s: float = 120.0
     llm_max_retries: int = 2
     answer_prompt_name: str = "answer_de.v2"
 
@@ -94,7 +95,8 @@ class Settings(BaseSettings):
     # same "needs eval-driven tuning" status as `rrf_k` and the rerank
     # weights. `llm_max_retries` bounds the OpenAI-compatible adapter's
     # `tenacity` retry budget for transient failures (timeouts, connection
-    # errors, 5xx) -- a 4xx is never retried.
+    # errors, 5xx) -- a 4xx is never retried. `llm_timeout_s` bounds each
+    # network read, `llm_call_deadline_s` a whole attempt.
     min_rerank_score_for_answer: float = 0.0
 
     # Auth (Giorno 25). The default secret only exists so a fresh clone runs;
