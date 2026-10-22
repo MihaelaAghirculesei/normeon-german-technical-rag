@@ -399,6 +399,96 @@ async def test_stream_raises_llm_timeout() -> None:
             pass
 
 
+# --- stream deadlines ---------------------------------------------------------
+
+
+def _paced_sse_transport(pieces: list[bytes | None], *, gap: float) -> httpx.MockTransport:
+    """Sends each piece `gap` seconds after the previous one; a `None`
+    piece stalls the body forever -- a server gone quiet mid-answer."""
+
+    async def body():  # noqa: ANN202
+        for piece in pieces:
+            await asyncio.sleep(gap)
+            if piece is None:
+                await asyncio.Event().wait()
+            else:
+                yield piece
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body(), headers={"content-type": "text/event-stream"})
+
+    return httpx.MockTransport(handler)
+
+
+def _sse_line(chunk: dict) -> bytes:
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+def _deadline_client(transport: httpx.MockTransport) -> OpenAICompatibleClient:
+    return OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        first_token_timeout=0.1,
+        stream_idle_timeout=0.1,
+        transport=transport,
+    )
+
+
+async def _drain(client: OpenAICompatibleClient, into: list[str]) -> None:
+    async for delta in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
+        into.append(delta.text)
+
+
+async def test_stream_that_never_answers_raises_llm_timeout() -> None:
+    client = _deadline_client(_stalling_transport([]))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token within 0.1 s"):
+            await _drain(client, [])
+
+
+async def test_stream_whose_body_never_starts_raises_llm_timeout() -> None:
+    client = _deadline_client(_paced_sse_transport([None], gap=0.0))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token"):
+            await _drain(client, [])
+
+
+async def test_stream_that_stalls_mid_answer_keeps_what_arrived_then_times_out() -> None:
+    received: list[str] = []
+    client = _deadline_client(
+        _paced_sse_transport([_sse_line(_content_chunk("Die ")), None], gap=0.0)
+    )
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no new token within 0.1 s"):
+            await _drain(client, received)
+    assert received == ["Die "]
+
+
+async def test_stream_keep_alives_do_not_count_as_progress() -> None:
+    client = _deadline_client(_paced_sse_transport([b": keep-alive\n\n"] * 1000, gap=0.02))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token"):
+            await _drain(client, [])
+
+
+async def test_stream_slow_but_steady_is_not_cut() -> None:
+    """Twelve deltas 0.05 s apart take longer in total than either
+    timeout (0.1 s); every gap is inside the idle limit, so all arrive."""
+    words = [f"w{i} " for i in range(12)]
+    pieces: list[bytes | None] = [_sse_line(_content_chunk(w)) for w in words]
+    client = _deadline_client(_paced_sse_transport([*pieces, b"data: [DONE]\n\n"], gap=0.05))
+    received: list[str] = []
+
+    async with asyncio.timeout(_GUARD_S):
+        await _drain(client, received)
+    assert received == words
+
+
 # --- rate limiting (429) ------------------------------------------------------
 
 

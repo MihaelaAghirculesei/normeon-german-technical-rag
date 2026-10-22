@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 800
     llm_timeout_s: float = 30.0
     llm_call_deadline_s: float = 120.0
+    llm_stream_first_token_s: float = 60.0
+    llm_stream_idle_s: float = 30.0
     llm_max_retries: int = 2
     answer_prompt_name: str = "answer_de.v2"
 
@@ -96,7 +98,9 @@ class Settings(BaseSettings):
     # weights. `llm_max_retries` bounds the OpenAI-compatible adapter's
     # `tenacity` retry budget for transient failures (timeouts, connection
     # errors, 5xx) -- a 4xx is never retried. `llm_timeout_s` bounds each
-    # network read, `llm_call_deadline_s` a whole attempt.
+    # network read, `llm_call_deadline_s` a whole attempt; a stream has no
+    # total cap, only `llm_stream_first_token_s` to its first delta and
+    # `llm_stream_idle_s` between deltas.
     min_rerank_score_for_answer: float = 0.0
 
     # Auth (Giorno 25). The default secret only exists so a fresh clone runs;
