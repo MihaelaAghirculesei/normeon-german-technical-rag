@@ -7,9 +7,14 @@ specific provider SDKs is deferred to Day 15.
 ``complete``'s transient failures (a timeout, a dropped connection, a
 5xx, a 429 rate limit) are retried with `tenacity`, up to `max_retries`
 extra attempts with a short exponential backoff -- a per-request budget,
-not unbounded retrying. A 429 that sends `Retry-After` waits that long
-instead (capped at `MAX_RETRY_AFTER_S`). Any other 4xx is never retried
-(retrying a bad request or an auth failure just wastes the budget).
+not unbounded retrying. Every attempt also has an overall deadline
+(`call_deadline`): httpx's `timeout` bounds each read, so a server that
+keeps a connection open, or trickles bytes, could otherwise hold one
+call for minutes or -- after the machine slept -- hours. An attempt that
+outruns it counts as a timeout and is retried like one. A 429 that sends
+`Retry-After` waits that long instead (capped at `MAX_RETRY_AFTER_S`).
+Any other 4xx is never retried (retrying a bad request or an auth
+failure just wastes the budget).
 Whatever finally fails is re-raised as one of the typed
 `core.errors.NormeonError`s, never a raw `httpx` exception, so the API's
 generic error handler always returns a coherent JSON body instead of a
@@ -35,6 +40,7 @@ A ``transport`` can be injected for tests.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -57,6 +63,11 @@ from app.core.errors import LlmTimeoutError, LlmUnavailableError
 MAX_RETRY_AFTER_S = 30.0
 
 _backoff = wait_exponential(multiplier=0.5, max=4)
+
+
+class _CallDeadlineExceeded(httpx.TimeoutException):
+    """One attempt outran `call_deadline`. A timeout like httpx's own, so
+    the retry policy and the error mapping treat both the same way."""
 
 
 def _is_transient(exc: BaseException) -> bool:
@@ -107,6 +118,7 @@ class OpenAICompatibleClient:
         api_key: str | None,
         model: str,
         timeout: float = 30.0,
+        call_deadline: float = 120.0,
         max_retries: int = 2,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -115,6 +127,7 @@ class OpenAICompatibleClient:
         self._client = httpx.AsyncClient(
             base_url=base_url, headers=headers, timeout=timeout, transport=transport
         )
+        self._call_deadline = call_deadline
         self._max_retries = max_retries
 
     def _body(
@@ -197,7 +210,16 @@ class OpenAICompatibleClient:
         )
         async for attempt in retrying:
             with attempt:
-                response = await self._client.post("/chat/completions", json=body)
+                response = await self._post_within_deadline(body)
                 response.raise_for_status()
                 return response
         raise AssertionError("unreachable: tenacity always raises or returns above")
+
+    async def _post_within_deadline(self, body: dict[str, Any]) -> httpx.Response:
+        try:
+            async with asyncio.timeout(self._call_deadline):
+                return await self._client.post("/chat/completions", json=body)
+        except TimeoutError as exc:
+            raise _CallDeadlineExceeded(
+                f"no complete response within {self._call_deadline:g} s"
+            ) from exc
