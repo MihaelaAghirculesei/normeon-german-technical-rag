@@ -7,9 +7,14 @@ specific provider SDKs is deferred to Day 15.
 ``complete``'s transient failures (a timeout, a dropped connection, a
 5xx, a 429 rate limit) are retried with `tenacity`, up to `max_retries`
 extra attempts with a short exponential backoff -- a per-request budget,
-not unbounded retrying. A 429 that sends `Retry-After` waits that long
-instead (capped at `MAX_RETRY_AFTER_S`). Any other 4xx is never retried
-(retrying a bad request or an auth failure just wastes the budget).
+not unbounded retrying. Every attempt also has an overall deadline
+(`call_deadline`): httpx's `timeout` bounds each read, so a server that
+keeps a connection open, or trickles bytes, could otherwise hold one
+call for minutes or -- after the machine slept -- hours. An attempt that
+outruns it counts as a timeout and is retried like one. A 429 that sends
+`Retry-After` waits that long instead (capped at `MAX_RETRY_AFTER_S`).
+Any other 4xx is never retried (retrying a bad request or an auth
+failure just wastes the budget).
 Whatever finally fails is re-raised as one of the typed
 `core.errors.NormeonError`s, never a raw `httpx` exception, so the API's
 generic error handler always returns a coherent JSON body instead of a
@@ -30,13 +35,21 @@ worth the complexity here -- a mid-stream failure becomes a typed error
 the caller (`services.generation.generate_answer_stream`) turns into an
 `event: error` SSE frame instead.
 
+A stream has no cap on its total length -- a long answer that keeps
+arriving is healthy. Instead the first delta must arrive within
+`first_token_timeout` of the request, and every later one within
+`stream_idle_timeout` of the one before; lines that carry no delta (SSE
+keep-alives, role-only chunks) do not count as progress. Missing either
+ends the stream with `LlmTimeoutError`.
+
 A ``transport`` can be injected for tests.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable
 from typing import Any
 
 import httpx
@@ -57,6 +70,21 @@ from app.core.errors import LlmTimeoutError, LlmUnavailableError
 MAX_RETRY_AFTER_S = 30.0
 
 _backoff = wait_exponential(multiplier=0.5, max=4)
+
+
+class _CallDeadlineExceeded(httpx.TimeoutException):
+    """One attempt outran `call_deadline`. A timeout like httpx's own, so
+    the retry policy and the error mapping treat both the same way."""
+
+
+async def _within[T](when: float, awaitable: Awaitable[T], message: str) -> T:
+    """`awaitable`'s result, or `_CallDeadlineExceeded(message)` if it is
+    not ready by loop time `when`."""
+    try:
+        async with asyncio.timeout_at(when):
+            return await awaitable
+    except TimeoutError as exc:
+        raise _CallDeadlineExceeded(message) from exc
 
 
 def _is_transient(exc: BaseException) -> bool:
@@ -89,6 +117,14 @@ def _wait(retry_state: RetryCallState) -> float:
     return float(_backoff(retry_state))
 
 
+def _describe(exc: httpx.HTTPError) -> str:
+    """The error's message, or its type when it has none: httpx raises
+    its timeouts without one (`str(httpx.ReadTimeout(""))` is empty), and
+    an empty message leaves an eval report saying a question failed but
+    not why."""
+    return str(exc) or type(exc).__name__
+
+
 class OpenAICompatibleClient:
     name = "openai_compatible"
 
@@ -99,6 +135,9 @@ class OpenAICompatibleClient:
         api_key: str | None,
         model: str,
         timeout: float = 30.0,
+        call_deadline: float = 120.0,
+        first_token_timeout: float = 60.0,
+        stream_idle_timeout: float = 30.0,
         max_retries: int = 2,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -107,6 +146,9 @@ class OpenAICompatibleClient:
         self._client = httpx.AsyncClient(
             base_url=base_url, headers=headers, timeout=timeout, transport=transport
         )
+        self._call_deadline = call_deadline
+        self._first_token_timeout = first_token_timeout
+        self._stream_idle_timeout = stream_idle_timeout
         self._max_retries = max_retries
 
     def _body(
@@ -131,9 +173,9 @@ class OpenAICompatibleClient:
         try:
             response = await self._post_with_retry(body)
         except httpx.TimeoutException as exc:
-            raise LlmTimeoutError(str(exc)) from exc
+            raise LlmTimeoutError(_describe(exc)) from exc
         except httpx.HTTPError as exc:
-            raise LlmUnavailableError(str(exc)) from exc
+            raise LlmUnavailableError(_describe(exc)) from exc
 
         payload: dict[str, Any] = response.json()
         content = payload["choices"][0]["message"]["content"]
@@ -153,10 +195,20 @@ class OpenAICompatibleClient:
         )
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}
+        loop = asyncio.get_running_loop()
+        due = loop.time() + self._first_token_timeout
+        waiting_for = f"no first token within {self._first_token_timeout:g} s"
+        request = self._client.build_request("POST", "/chat/completions", json=body)
         try:
-            async with self._client.stream("POST", "/chat/completions", json=body) as response:
+            response = await _within(due, self._client.send(request, stream=True), waiting_for)
+            try:
                 response.raise_for_status()
-                async for line in response.aiter_lines():
+                lines = response.aiter_lines()
+                while True:
+                    try:
+                        line = await _within(due, anext(lines), waiting_for)
+                    except StopAsyncIteration:
+                        break
                     line = line.strip()
                     if not line.startswith("data:"):
                         continue
@@ -175,10 +227,16 @@ class OpenAICompatibleClient:
                         prompt_tokens=usage.get("prompt_tokens"),
                         completion_tokens=usage.get("completion_tokens"),
                     )
+                    # Measured from when the next delta is awaited, so the
+                    # caller's time between deltas is not the server's.
+                    due = loop.time() + self._stream_idle_timeout
+                    waiting_for = f"no new token within {self._stream_idle_timeout:g} s"
+            finally:
+                await response.aclose()
         except httpx.TimeoutException as exc:
-            raise LlmTimeoutError(str(exc)) from exc
+            raise LlmTimeoutError(_describe(exc)) from exc
         except httpx.HTTPError as exc:
-            raise LlmUnavailableError(str(exc)) from exc
+            raise LlmUnavailableError(_describe(exc)) from exc
 
     async def _post_with_retry(self, body: dict[str, Any]) -> httpx.Response:
         retrying = AsyncRetrying(
@@ -189,7 +247,16 @@ class OpenAICompatibleClient:
         )
         async for attempt in retrying:
             with attempt:
-                response = await self._client.post("/chat/completions", json=body)
+                response = await self._post_within_deadline(body)
                 response.raise_for_status()
                 return response
         raise AssertionError("unreachable: tenacity always raises or returns above")
+
+    async def _post_within_deadline(self, body: dict[str, Any]) -> httpx.Response:
+        try:
+            async with asyncio.timeout(self._call_deadline):
+                return await self._client.post("/chat/completions", json=body)
+        except TimeoutError as exc:
+            raise _CallDeadlineExceeded(
+                f"no complete response within {self._call_deadline:g} s"
+            ) from exc

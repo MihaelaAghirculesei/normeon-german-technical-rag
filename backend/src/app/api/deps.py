@@ -120,6 +120,9 @@ def build_llm_client(model: str | None = None) -> LlmClient:
         api_key=settings.llm_api_key,
         model=model,
         timeout=settings.llm_timeout_s,
+        call_deadline=settings.llm_call_deadline_s,
+        first_token_timeout=settings.llm_stream_first_token_s,
+        stream_idle_timeout=settings.llm_stream_idle_s,
         max_retries=settings.llm_max_retries,
     )
 

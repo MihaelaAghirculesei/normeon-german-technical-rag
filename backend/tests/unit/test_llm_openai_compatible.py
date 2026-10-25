@@ -2,7 +2,9 @@
 ``httpx.MockTransport`` so nothing leaves the process.
 """
 
+import asyncio
 import json
+import time
 
 import httpx
 import pytest
@@ -177,6 +179,97 @@ async def test_a_timeout_raises_llm_timeout() -> None:
     assert exc_info.value.code == "llm_timeout"
 
 
+async def test_a_timeout_without_a_message_is_named_by_its_type() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        max_retries=0,
+        transport=_sequenced_transport([httpx.ReadTimeout("")]),
+    )
+
+    with pytest.raises(LlmTimeoutError, match="^ReadTimeout$"):
+        await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+
+# --- overall deadline ---------------------------------------------------------
+
+#: Guards each deadline test, so a regression fails instead of hanging.
+_GUARD_S = 5.0
+
+
+def _stalling_transport(calls: list[httpx.Request], *, then: list | None = None):  # noqa: ANN202
+    """Never answers the first request(s); answers later ones from `then`
+    in order, if given -- a server that holds the connection open."""
+    remaining = iter(then or [])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        item = next(remaining, None)
+        if item is None:
+            await asyncio.Event().wait()
+        return item
+
+    return httpx.MockTransport(handler)
+
+
+async def test_a_call_that_never_answers_raises_llm_timeout_within_the_deadline() -> None:
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=0.05,
+        max_retries=0,
+        transport=_stalling_transport([]),
+    )
+
+    started = time.monotonic()
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="0.05 s"):
+            await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+    assert time.monotonic() - started < 1.0
+
+
+async def test_an_attempt_past_the_deadline_is_retried() -> None:
+    calls: list[httpx.Request] = []
+    stall_then_answer = _stalling_transport(
+        calls, then=[None, httpx.Response(200, json=_ok_body())]
+    )
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=0.05,
+        max_retries=1,
+        transport=stall_then_answer,
+    )
+
+    async with asyncio.timeout(_GUARD_S):
+        resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
+    assert len(calls) == 2
+
+
+async def test_a_slow_answer_inside_the_deadline_is_kept() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json=_ok_body())
+
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        call_deadline=1.0,
+        max_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+
+    resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.text == "Antwort [S1]."
+
+
 def _sse_body(*chunks: dict) -> bytes:
     """Each `chunks` entry is a raw wire chunk -- typically `{"model":
     ..., "choices": [{"delta": {"content": ...}}]}` or a usage-only
@@ -304,6 +397,96 @@ async def test_stream_raises_llm_timeout() -> None:
     with pytest.raises(LlmTimeoutError):
         async for _ in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
             pass
+
+
+# --- stream deadlines ---------------------------------------------------------
+
+
+def _paced_sse_transport(pieces: list[bytes | None], *, gap: float) -> httpx.MockTransport:
+    """Sends each piece `gap` seconds after the previous one; a `None`
+    piece stalls the body forever -- a server gone quiet mid-answer."""
+
+    async def body():  # noqa: ANN202
+        for piece in pieces:
+            await asyncio.sleep(gap)
+            if piece is None:
+                await asyncio.Event().wait()
+            else:
+                yield piece
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body(), headers={"content-type": "text/event-stream"})
+
+    return httpx.MockTransport(handler)
+
+
+def _sse_line(chunk: dict) -> bytes:
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+def _deadline_client(transport: httpx.MockTransport) -> OpenAICompatibleClient:
+    return OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        first_token_timeout=0.1,
+        stream_idle_timeout=0.1,
+        transport=transport,
+    )
+
+
+async def _drain(client: OpenAICompatibleClient, into: list[str]) -> None:
+    async for delta in client.stream(system="s", user="u", temperature=0.0, max_tokens=10):
+        into.append(delta.text)
+
+
+async def test_stream_that_never_answers_raises_llm_timeout() -> None:
+    client = _deadline_client(_stalling_transport([]))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token within 0.1 s"):
+            await _drain(client, [])
+
+
+async def test_stream_whose_body_never_starts_raises_llm_timeout() -> None:
+    client = _deadline_client(_paced_sse_transport([None], gap=0.0))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token"):
+            await _drain(client, [])
+
+
+async def test_stream_that_stalls_mid_answer_keeps_what_arrived_then_times_out() -> None:
+    received: list[str] = []
+    client = _deadline_client(
+        _paced_sse_transport([_sse_line(_content_chunk("Die ")), None], gap=0.0)
+    )
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no new token within 0.1 s"):
+            await _drain(client, received)
+    assert received == ["Die "]
+
+
+async def test_stream_keep_alives_do_not_count_as_progress() -> None:
+    client = _deadline_client(_paced_sse_transport([b": keep-alive\n\n"] * 1000, gap=0.02))
+
+    async with asyncio.timeout(_GUARD_S):
+        with pytest.raises(LlmTimeoutError, match="no first token"):
+            await _drain(client, [])
+
+
+async def test_stream_slow_but_steady_is_not_cut() -> None:
+    """Twelve deltas 0.05 s apart take longer in total than either
+    timeout (0.1 s); every gap is inside the idle limit, so all arrive."""
+    words = [f"w{i} " for i in range(12)]
+    pieces: list[bytes | None] = [_sse_line(_content_chunk(w)) for w in words]
+    client = _deadline_client(_paced_sse_transport([*pieces, b"data: [DONE]\n\n"], gap=0.05))
+    received: list[str] = []
+
+    async with asyncio.timeout(_GUARD_S):
+        await _drain(client, received)
+    assert received == words
 
 
 # --- rate limiting (429) ------------------------------------------------------
