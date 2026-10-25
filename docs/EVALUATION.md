@@ -1,8 +1,9 @@
 # Evaluation
 
-Status: work in progress (plan, Giorni 17-20). This document tracks the
-50-question evaluation set, the two-layer correctness metric, and the
-judge-agreement check. Sections below are filled in as each part lands.
+This document tracks the 50-question evaluation set, the two-layer
+correctness metric, the judge-agreement check, the first matrix run
+(Giorno 20) and the ablation matrix (Giorno 28), whose conclusion is the
+last section.
 
 **Progress: 50/50 questions written, all validated in CI** (`tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category`).
 `requirement_lookup`, `cross_reference`, `code_lookup`, `unanswerable` and
@@ -264,8 +265,8 @@ Giorno 20 tunes `min_rerank_score_for_answer`.
 > passes sources as delimited, untrusted data without filenames or
 > pages, as a prompt-injection defence (`FAILURE-MODES.md`, "Robustness
 > (Day 26)"). v1 is kept, so this run stays reproducible
-> (`prompt_name="answer_de.v1"`). The default has to be measured again
-> in the full matrix run (Giorno 28) before these numbers describe it.
+> (`prompt_name="answer_de.v1"`). The default is measured again with v2
+> in the ablation matrix below ("Ablation matrix (Giorno 28)").
 
 `{structural, fixed_500} x {hybrid, vector}`, cross-encoder reranker
 (`bge-reranker-v2-m3`, max_length 512), 10 candidates, `top_k=5`, answers
@@ -409,3 +410,89 @@ the main quality lever.
 - **Unanswerable questions are handled**: 10 of 10 correctly abstained in
   every configuration in run 2 (9-10 in run 1), with no invented
   citations anywhere.
+
+## Ablation matrix (Giorno 28)
+
+One knob at a time against a fixed baseline: structural chunking, hybrid
+retrieval, cross-encoder over 10 candidates, `top_k=5`, prompt
+`answer_de.v2`, answers from `gemini-flash-lite-latest`. Every row is
+judged by the same model, whatever model answered it, so a change in the
+judge cannot pass for a change in the system. The prompt is part of the
+configuration hash: a report measured with v1 is never reused for v2.
+
+```bash
+cd backend
+DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
+    .venv/Scripts/python scripts/run_matrix.py --reports-dir eval/reports/day28
+```
+
+| # | Change | recall@5 | MRR | answer_accuracy | 95% CI | false abstention | citation precision |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline | -- | 0.925 | 0.699 | **0.840** | [0.740, 0.940] | **0.200** | 0.500 |
+| E1 | fixed_500 chunks | 0.575 | 0.517 | 0.820 | [0.720, 0.920] | 0.275 | 0.321 |
+| E2 | vector only | 0.875 | 0.684 | 0.760 | [0.640, 0.880] | 0.300 | 0.583 |
+| E3 | full-text only | 0.150 | 0.074 | 0.360 | [0.240, 0.480] | 0.850 | 0.412 |
+| E4 | no reranker | 0.850 | 0.696 | 0.760 | [0.640, 0.860] | 0.300 | 0.510 |
+| E5 | top-k 3 | 0.875 | 0.688 | 0.780 | [0.660, 0.880] | 0.275 | **0.659** |
+| E6 | top-k 10 | **0.950** | 0.703 | 0.720 | [0.600, 0.840] | 0.350 | 0.571 |
+| E9 | full-text matches any term | 0.925 | **0.719** | 0.800 | [0.680, 0.900] | 0.250 | 0.500 |
+
+Paired against the baseline (`*`: the 95% interval excludes zero):
+
+| # | Δ answer_accuracy | 95% CI | Δ recall@5 | 95% CI |
+| --- | --- | --- | --- | --- |
+| E1 | -0.020 | [-0.160, +0.120] | **-0.350 \*** | [-0.500, -0.175] |
+| E2 | **-0.080 \*** | [-0.160, -0.020] | -0.050 | [-0.125, +0.000] |
+| E3 | **-0.480 \*** | [-0.620, -0.340] | **-0.775 \*** | [-0.900, -0.625] |
+| E4 | -0.080 | [-0.180, +0.000] | -0.075 | [-0.175, +0.000] |
+| E5 | -0.060 | [-0.140, +0.000] | -0.050 | [-0.125, +0.000] |
+| E6 | **-0.120 \*** | [-0.220, -0.040] | +0.025 | [+0.000, +0.075] |
+| E9 | -0.040 | [-0.100, +0.000] | +0.000 | [+0.000, +0.000] |
+
+`hallucinated_citation_rate` is 0.000 in every row, and every
+configuration abstains on 10 of 10 unanswerable questions except E6 and
+E9 (9 of 10). Latency is not compared: the rerank cache makes later rows
+look faster than they are, and cost is zero on the free tier.
+
+**Not in the table.** E7 (hosted embeddings) is not run: no hosted
+1024-dimension e5 endpoint is configured, and another embedding model
+needs its own index. E8 (answers from `gemini-flash-latest`) is
+incomplete: the larger model takes 30-90 s per answer, and its free-tier
+daily quota ran out after 13 of 50 questions. Thirteen answers support
+no conclusion, so the row is left out rather than reported.
+
+### Conclusion
+
+The baseline is the best configuration measured, and every component it
+is built from earns its place. Hybrid retrieval beats vector-only by 8
+points of answer accuracy -- the only single-component difference this
+sample resolves (interval [-0.16, -0.02]) -- while recall moves by 5
+points: the full-text and trigram branches change *which* chunks reach
+the generator more than *how many* gold chunks do. Full-text on its own
+is not a retriever at all (recall 0.150, accuracy 0.360, and that 0.360
+is mostly correct abstentions): the production query requires every term
+of the question, and on these 50 questions it matches nothing; the 0.150
+comes from the trigram code branch alone (`FAILURE-MODES.md`, Giorno 28
+finding 1). Letting full-text match any term (E9) gives that branch
+rows to rank, but not better answers: recall is unchanged, MRR rises 2
+points, and accuracy is 4 points lower (within noise), with one
+unanswerable question now answered. The extra lexical candidates share
+a word with the question and little else, so the default stays `all`.
+The reranker adds 8 points of accuracy and 7.5 of recall,
+both just short of resolvable. Structural chunking keeps its Giorno 20
+lead on recall (+35 points) while accuracy is level, so ADR 0003 stands.
+
+The surprise is `top_k`. Ten chunks give the best recall in the matrix
+(0.950) and the worst accuracy among the hybrid rows (0.720, a resolved
+-12 points); three chunks give the best citation precision (0.659) and
+lose 6 points of accuracy. Every wrong answer in every row is an
+abstention, and with ten chunks 13 of the 14 abstentions had a gold
+source in the context. More context does not make the generator answer;
+it makes it decline more often. Five is the right default, and the next
+quality lever is still the generator's over-abstention
+(`FAILURE-MODES.md`, Giorno 20 finding 2) -- not retrieval, which already
+puts a gold source in the top five for 37 of 40 answerable questions.
+
+Against Giorno 20 the baseline moved from 0.800 (`answer_de.v1`) to 0.840
+(`answer_de.v2`): the prompt-injection hardening costs no accuracy on
+this set (the difference is within noise in either direction).
