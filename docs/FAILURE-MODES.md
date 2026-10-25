@@ -41,6 +41,9 @@ the vector side covers the FTS side's blind spot and vice versa.
 verbatim ("Auto", "TÜV" vs. the statute's "Kraftfahrzeug",
 "Hauptuntersuchung"), and one missing term drops the whole match. FTS
 here is a keyword / code-reference tool, not a question-answering tool.
+Giorno 28 measured how far this goes: on the 50 evaluation questions the
+AND query matches nothing at all (finding 1 under "Evaluation findings
+(Giorno 28)").
 
 **Mitigation.** Same as above — the vector branch, and hybrid fusion on
 Day 8. `normalize_de` canonicalises requirement codes and norm references
@@ -433,3 +436,55 @@ Conclusions about answer quality from this run are directional only.
   uses most of it. The post-fix accuracy re-run waits for the reset
   rather than switching models mid-experiment, which would make the
   before/after numbers incomparable.
+
+## Evaluation findings (Giorno 28)
+
+The ablation matrix -- one knob at a time against structural / hybrid /
+cross-encoder / `top_k=5` -- is in `docs/EVALUATION.md` ("Ablation matrix
+(Giorno 28)").
+
+### 1. The full-text branch matches nothing on real questions
+
+`websearch_to_tsquery` requires every term of the question, and a
+question written in full sentences always carries a term its gold chunk
+does not. On all 50 evaluation questions the AND query returns zero
+rows; the only lexical hits come from the trigram code branch, which
+fires on 9 questions that name a requirement code. Inside hybrid
+retrieval the full-text ranking has therefore been empty since Day 8:
+fusion ran on vector + trigram, and the "+8 points over vector-only" in
+the matrix is the trigram branch plus the different candidate mix, not
+full-text search. Full-text alone (E3) reaches recall@5 0.150.
+
+A `fts_match` setting (`all` | `any`) now builds an OR query instead.
+Measured retrieval-only, without LLM calls: full-text alone goes from
+0.150 to 0.375 recall, hybrid recall stays at 0.925, MRR rises (0.699 ->
+0.719), precision@5 falls (0.384 -> 0.317) -- any-term matching brings in
+more chunks that share a word with the question and nothing else. The
+answer run (E9) settles it: accuracy 0.800 against the baseline's 0.840
+(paired interval [-0.10, +0.00]) and one unanswerable question answered
+instead of declined. The default stays `all`; the real fix is a lexical
+query built from the question's content terms, not from all or any of
+its words.
+
+### 2. More context makes the generator abstain more, not less
+
+With `top_k=10` recall is the best in the matrix (0.950) and accuracy
+the worst of the hybrid rows (0.720 vs 0.840, interval excludes zero).
+All 14 wrong answers are `NICHT_GEFUNDEN`, and 13 of them had a gold
+source in the context. Twice as many sources -- including both
+Lastenheft versions of most sections -- give the strict prompt more
+reasons to decline. This is Giorno 20 finding 2 again, under prompt v2:
+every wrong answer of the baseline (8 of 8) is an abstention with a gold
+source in the context.
+
+### 3. A larger model does not fit the free tier
+
+`gemini-flash-latest` (E8) takes 30-90 s per answer against ~1 s for
+the lite model. With the adapter's 30 s per-read timeout two of the
+first four questions timed out on every retry; with 120 s they
+passed, and then the model's daily free-tier quota -- far below the
+lite model's 500 -- ran out after 13 questions. The model comparison
+needs a paid key or several days, and is recorded as not done. Two
+adapter defects showed up on the way: the timeout bounds each read, not
+the call (Giorno 20 "Operational"), and an `LlmTimeoutError` carries an
+empty message, so the report says a question failed but not why.

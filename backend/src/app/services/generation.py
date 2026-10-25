@@ -44,7 +44,7 @@ import contextlib
 import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
@@ -68,7 +68,7 @@ from app.domain.citations import ABSTENTION_TEXT, Citation, extract_and_validate
 from app.domain.config_hash import compute_config_hash
 from app.domain.conflicts import find_version_conflicts
 from app.domain.context import Source, build_context
-from app.domain.models import PipelineTiming, RetrievalResult
+from app.domain.models import FtsMatch, PipelineTiming, RetrievalMode, RetrievalResult
 from app.services.pricing import calculate_cost
 from app.services.prompts import Prompt, load_prompt
 from app.services.query_log import record_query_log
@@ -140,9 +140,10 @@ class _Prepared:
     # The retrieval knobs actually applied to this request (overrides
     # resolved against settings), so `_config_hash` records what ran
     # rather than the configured defaults.
-    retrieval_mode: Literal["vector", "hybrid"]
+    retrieval_mode: RetrievalMode
     rerank_top_k: int
     candidate_k: int | None
+    fts_match: FtsMatch
 
 
 async def _prepare(
@@ -153,15 +154,17 @@ async def _prepare(
     tenant_id: UUID,
     question: str,
     strategy: str | None,
-    retrieval_mode: Literal["vector", "hybrid"] | None,
+    retrieval_mode: RetrievalMode | None,
     rerank_top_k: int | None,
     candidate_k: int | None,
     prompt_name: str | None,
+    fts_match: FtsMatch | None = None,
     on_rerank_start: Callable[[], None] | None = None,
 ) -> _Prepared:
     prompt = load_prompt(prompt_name or settings.answer_prompt_name)
-    applied_mode: Literal["vector", "hybrid"] = retrieval_mode or "hybrid"
+    applied_mode: RetrievalMode = retrieval_mode or "hybrid"
     applied_top_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
+    applied_match: FtsMatch = fts_match or settings.fts_match
 
     retrieval = await retrieve_context(
         session,
@@ -173,6 +176,7 @@ async def _prepare(
         retrieval_mode=retrieval_mode,
         rerank_top_k=rerank_top_k,
         candidate_k=candidate_k,
+        fts_match=applied_match,
         on_rerank_start=on_rerank_start,
     )
 
@@ -195,6 +199,7 @@ async def _prepare(
             retrieval_mode=applied_mode,
             rerank_top_k=applied_top_k,
             candidate_k=candidate_k,
+            fts_match=applied_match,
         )
 
     context_block, sources = build_context(retrieval.context, untrusted=prompt.untrusted_context)
@@ -216,6 +221,7 @@ async def _prepare(
         retrieval_mode=applied_mode,
         rerank_top_k=applied_top_k,
         candidate_k=candidate_k,
+        fts_match=applied_match,
     )
 
 
@@ -229,6 +235,7 @@ def _config_hash(prep: _Prepared, strategy: str | None) -> str:
         rrf_weight_vector=settings.rrf_weight_vector,
         rrf_weight_fts=settings.rrf_weight_fts,
         rrf_weight_trgm=settings.rrf_weight_trgm,
+        fts_match=prep.fts_match,
         reranker_provider=settings.reranker_provider,
         reranker_model=settings.reranker_model,
         reranker_max_length=settings.reranker_max_length,
@@ -295,10 +302,11 @@ async def generate_answer(
     tenant_id: UUID,
     question: str,
     strategy: str | None = None,
-    retrieval_mode: Literal["vector", "hybrid"] | None = None,
+    retrieval_mode: RetrievalMode | None = None,
     rerank_top_k: int | None = None,
     candidate_k: int | None = None,
     prompt_name: str | None = None,
+    fts_match: FtsMatch | None = None,
     request_id: str | None = None,
 ) -> AnswerResult:
     request_id = request_id or current_request_id() or str(uuid4())
@@ -313,6 +321,7 @@ async def generate_answer(
         rerank_top_k=rerank_top_k,
         candidate_k=candidate_k,
         prompt_name=prompt_name,
+        fts_match=fts_match,
     )
 
     if prep.abstain_pre_generation:

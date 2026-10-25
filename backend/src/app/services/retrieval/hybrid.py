@@ -9,7 +9,7 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.core.config import settings
 from app.core.observability import phase
 from app.domain.fusion import rrf
-from app.domain.models import RetrievedChunk
+from app.domain.models import FtsMatch, RetrievedChunk
 from app.services.retrieval.lexical import _fts_branch, _trgm_branch
 from app.services.retrieval.vector import vector_search
 
@@ -26,6 +26,7 @@ async def hybrid_search(
     ef_search: int | None = None,
     rrf_k: int | None = None,
     weights: tuple[float, float, float] | None = None,
+    fts_match: FtsMatch | None = None,
 ) -> list[RetrievedChunk]:
     """Vector, full-text and trigram retrieval fused with Reciprocal Rank
     Fusion.
@@ -36,9 +37,9 @@ async def hybrid_search(
     ranking in the fusion here, not concatenated onto the full-text list;
     RRF is what makes the three branches' scores comparable.
 
-    `rrf_k` and the per-branch `weights` (vector, full-text, trigram)
-    default to the configured values and are experiment-matrix variables
-    in Week 4. The branches run sequentially: they share one AsyncSession,
+    `rrf_k`, the per-branch `weights` (vector, full-text, trigram) and
+    `fts_match` default to the configured values and are experiment-matrix
+    variables in Week 4. The branches run sequentially: they share one AsyncSession,
     which is not safe for concurrent statements, and each branch's
     `SET LOCAL` knobs stay scoped to their own statement anyway.
     """
@@ -63,7 +64,12 @@ async def hybrid_search(
         ef_search=ef_search,
     )
     fts_hits = await _fts_branch(
-        session, tenant_id=tenant_id, question=question, strategy=strategy, k=candidate_k
+        session,
+        tenant_id=tenant_id,
+        question=question,
+        strategy=strategy,
+        k=candidate_k,
+        match=fts_match,
     )
     trgm_hits = await _trgm_branch(
         session, tenant_id=tenant_id, question=question, strategy=strategy, k=candidate_k

@@ -104,6 +104,7 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
         rerank_top_k: int | None = None,
         candidate_k: int | None = None,
         prompt_name: str | None = None,
+        fts_match: str | None = None,
         request_id: str | None = None,
     ) -> AnswerResult:
         calls.append(
@@ -114,6 +115,8 @@ def _stub_generate(monkeypatch: Any, by_id: dict[str, Any]) -> list[dict[str, An
                 "retrieval_mode": retrieval_mode,
                 "rerank_top_k": rerank_top_k,
                 "candidate_k": candidate_k,
+                "prompt_name": prompt_name,
+                "fts_match": fts_match,
             }
         )
         outcome = by_id[question]
@@ -345,12 +348,31 @@ async def test_rerank_candidates_is_forwarded_as_candidate_k(monkeypatch: Any) -
 
 
 def test_unset_new_knobs_leave_the_config_hash_unchanged() -> None:
-    """Reports written before rerank_candidates/reranker_max_length
-    existed keep the hash they were filed under."""
-    new_knobs = {"rerank_candidates", "reranker_max_length"}
+    """Reports written before rerank_candidates/reranker_max_length/
+    prompt_name/fts_match existed keep the hash they were filed under."""
+    new_knobs = {"rerank_candidates", "reranker_max_length", "prompt_name", "fts_match"}
     legacy = compute_config_hash(**CONFIG.model_dump(exclude=new_knobs))
     assert runner.config_hash(CONFIG) == legacy
     assert runner.config_hash(CONFIG.model_copy(update={"rerank_candidates": 10})) != legacy
+
+
+async def test_the_prompt_is_applied_and_changes_the_config_hash(monkeypatch: Any) -> None:
+    calls = _stub_generate(monkeypatch, {"x": _answer()})
+    v1 = CONFIG.model_copy(update={"prompt_name": "answer_de.v1"})
+    v2 = CONFIG.model_copy(update={"prompt_name": "answer_de.v2"})
+
+    await runner.run_evaluation(
+        [_q("Q001", question="x")],
+        v2,
+        session_factory=_session_factory,  # type: ignore[arg-type]
+        embedder=object(),
+        reranker=object(),
+        llm=object(),
+        tenant_id=TENANT,
+    )
+
+    assert calls[0]["prompt_name"] == "answer_de.v2"
+    assert runner.config_hash(v1) != runner.config_hash(v2)
 
 
 def test_checkpoint_path_separates_question_sets_that_share_ids(tmp_path: Path) -> None:

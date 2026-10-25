@@ -5,6 +5,7 @@ every other test that uses EmbedderDep/RerankerDep/LlmClientDep.
 
 import pytest
 
+from app.adapters.llm.openai_compatible import OpenAICompatibleClient
 from app.api import deps
 from app.core.errors import EmbeddingMisconfiguredError, LlmMisconfiguredError
 
@@ -39,3 +40,18 @@ def test_get_embedder_raises_a_typed_error_when_unconfigured(
         assert exc_info.value.code == "embedding_misconfigured"
     finally:
         deps.get_embedder.cache_clear()
+
+
+def test_build_llm_client_overrides_only_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(deps.settings, "llm_provider", "openai_compatible")
+    monkeypatch.setattr(deps.settings, "llm_api_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(deps.settings, "llm_model", "model-a")
+
+    default = deps.build_llm_client()
+    other = deps.build_llm_client("model-b")
+
+    assert isinstance(default, OpenAICompatibleClient)
+    assert isinstance(other, OpenAICompatibleClient)
+    assert default._model == "model-a"
+    assert other._model == "model-b"
+    assert other._client.base_url == default._client.base_url
