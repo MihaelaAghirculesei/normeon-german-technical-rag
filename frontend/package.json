@@ -36,6 +36,9 @@
   "overrides": {
     "openapi-typescript": {
       "typescript": "$typescript"
+    },
+    "@angular/build": {
+      "vite": "8.3.5"
     }
   }
 }
