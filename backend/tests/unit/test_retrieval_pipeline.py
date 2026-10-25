@@ -290,3 +290,40 @@ async def test_retrieve_context_vector_mode_forwards_candidate_k_as_k(
     assert kwargs["strategy"] == "structural"
     assert kwargs["k"] == 30
     assert kwargs["tenant_id"] == TENANT
+
+
+@pytest.fixture
+def stub_fts(monkeypatch: pytest.MonkeyPatch) -> list[RetrievedChunk]:
+    hits = [_chunk("zeta", section="s1"), _chunk("eta", section="s2")]
+
+    async def fake_fts_search(session: Any, **kwargs: Any) -> list[RetrievedChunk]:
+        fake_fts_search.kwargs = kwargs  # type: ignore[attr-defined]
+        return hits
+
+    monkeypatch.setattr(pipeline, "fts_search", fake_fts_search)
+    return hits
+
+
+async def test_retrieve_context_fts_mode_uses_full_text_alone(
+    stub_fts: list[RetrievedChunk],
+) -> None:
+    result = await retrieve_context(
+        object(),
+        object(),
+        _RecordingReranker(),
+        tenant_id=TENANT,
+        question="Q",
+        strategy="structural",
+        retrieval_mode="fts",
+        candidate_k=30,
+    )
+
+    assert [c.content for c in result.reranked] == ["eta", "zeta"]
+    kwargs = pipeline.fts_search.kwargs  # type: ignore[attr-defined]
+    assert kwargs == {
+        "tenant_id": TENANT,
+        "question": "Q",
+        "strategy": "structural",
+        "k": 30,
+        "fts_match": None,
+    }

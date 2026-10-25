@@ -135,6 +135,25 @@ async def _run(database_url: str, tmp_path: Path) -> None:
     assert prose
     assert "Bremsanlage" in prose[0].content
 
+    # --- a word the text never uses ("Winter") drops every chunk when all
+    #     terms must match, and only ranks lower when any may (Giorno 28) ---
+    asked = "Welche Verzoegerung muss die Bremsanlage im Winter sicherstellen?"
+    async with session_factory() as session:
+        every = await fts_search(
+            session, tenant_id=tenant_a_id, question=asked, strategy="structural", k=5
+        )
+        some = await fts_search(
+            session,
+            tenant_id=tenant_a_id,
+            question=asked,
+            strategy="structural",
+            k=5,
+            fts_match="any",
+        )
+    assert every == []
+    assert some
+    assert "Bremsanlage" in some[0].content
+
     # --- tenant isolation ---
     async with session_factory() as session:
         cross = await fts_search(

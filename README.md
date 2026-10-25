@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 27 of 30. Retrieval is feature-complete: structured German
+Status: Day 28 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -45,7 +45,13 @@ and a first experiment matrix (structural vs. fixed-window chunking ×
 hybrid vs. vector retrieval) reported with bootstrap confidence intervals
 and paired comparisons: it found and fixed a context-selection bug worth
 12.5 points of recall (0.80 → 0.925), and backs the default chunking
-choice with numbers (ADR 0003, `docs/EVALUATION.md`).
+choice with numbers (ADR 0003, `docs/EVALUATION.md`). An ablation
+matrix then changes one knob at a time against that baseline, with a
+fixed judge model: chunking, vector-only, full-text-only, no reranker,
+`top_k` 3 and 10, and any-term full-text. The baseline wins (answer
+accuracy 0.840); hybrid retrieval and `top_k=5` are the two choices the
+sample resolves, and it showed that the all-terms full-text query
+matches none of the 50 questions on its own.
 Frontend: an Angular 22 app (zoneless, signals) whose API types are
 generated from the backend's OpenAPI document, with CI failing on any
 contract drift between the two; the document list reads live data. The

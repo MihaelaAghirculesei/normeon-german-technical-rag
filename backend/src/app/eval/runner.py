@@ -121,6 +121,8 @@ async def _run_one(
                     retrieval_mode=config.retrieval_mode,
                     rerank_top_k=config.top_k,
                     candidate_k=config.rerank_candidates,
+                    prompt_name=config.prompt_name,
+                    fts_match=config.fts_match,
                     request_id=f"eval-{run_hash[:12]}-{question.id}",
                 )
         except Exception as exc:  # one bad question must not sink the whole run
