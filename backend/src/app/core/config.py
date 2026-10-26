@@ -1,7 +1,29 @@
 from pathlib import Path
 from typing import Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def asyncpg_url(url: str) -> str:
+    """The URL in the form SQLAlchemy's asyncpg dialect accepts. Hosted
+    Postgres hands out libpq URLs: a `postgres://` or `postgresql://`
+    scheme, `sslmode=require` (asyncpg's keyword is `ssl`) and
+    `channel_binding`, which asyncpg rejects as an unknown argument."""
+    parts = urlsplit(url)
+    scheme = parts.scheme
+    if scheme in {"postgres", "postgresql"}:
+        scheme = "postgresql+asyncpg"
+    if scheme != "postgresql+asyncpg":
+        return url
+    query: list[tuple[str, str]] = []
+    for key, value in parse_qsl(parts.query, keep_blank_values=True):
+        if key == "sslmode":
+            query.append(("ssl", value))
+        elif key != "channel_binding":
+            query.append((key, value))
+    return urlunsplit(parts._replace(scheme=scheme, query=urlencode(query)))
 
 
 class Settings(BaseSettings):
@@ -9,11 +31,18 @@ class Settings(BaseSettings):
 
     app_name: str = "normeon"
     environment: str = "development"
+    # A provider's URL can be pasted as given (e.g. Neon's
+    # `postgresql://...?sslmode=require`): see `asyncpg_url`.
     database_url: str = "postgresql+asyncpg://normeon:normeon@localhost:5432/normeon"
     log_level: str = "INFO"
     # The built frontend (`dist/frontend/browser`). When set, the API also
     # serves the app, so a deployment is one origin (core/spa.py).
     static_dir: Path | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def _asyncpg_database_url(cls, value: str) -> str:
+        return asyncpg_url(value)
 
     # `gemini` embeds at Google (set `embedding_model=gemini-embedding-2`
     # and `embedding_api_key`), so the process needs no torch (ADR 0005).
