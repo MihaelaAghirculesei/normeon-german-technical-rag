@@ -142,3 +142,15 @@ def test_the_start_script_migrates_and_seeds_before_serving() -> None:
     assert b"\r" not in raw  # sh in the image would choke on CRLF
     assert commands[commands.index("alembic") :] == ["alembic", "python", "exec"]
     assert '--port "${PORT:-8000}"' in script
+
+
+def test_the_deployed_image_turns_the_rate_limits_on() -> None:
+    dockerfile = _text("deploy")
+    limits = dict(re.findall(r"(RATE_LIMIT_\w+)=(\d+)", dockerfile))
+
+    assert set(limits) == {
+        "RATE_LIMIT_LOGIN_PER_MINUTE",
+        "RATE_LIMIT_QUESTIONS_PER_MINUTE",
+        "RATE_LIMIT_UPLOADS_PER_HOUR",
+    }
+    assert all(int(value) > 0 for value in limits.values())

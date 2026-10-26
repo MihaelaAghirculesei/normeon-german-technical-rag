@@ -155,6 +155,13 @@ class Settings(BaseSettings):
     # background gives up after `parse_timeout_s`.
     max_upload_mb: int = 50
     max_request_kb: int = 256  # every other endpoint takes small JSON
+
+    # Per-IP rate limits (Giorno 29, core/rate_limit.py); 0 turns a rule
+    # off, the default for development and tests. The deployed image sets
+    # them: a shared demo link must not spend the free-tier quota at once.
+    rate_limit_login_per_minute: int = 0
+    rate_limit_questions_per_minute: int = 0
+    rate_limit_uploads_per_hour: int = 0
     max_document_pages: int = 2000
     max_docx_uncompressed_mb: int = 200
     max_docx_compression_ratio: int = 100
