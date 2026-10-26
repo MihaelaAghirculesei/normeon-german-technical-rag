@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.embedding.e5_api import ApiE5Embedder
 from app.adapters.embedding.e5_local import LocalE5Embedder
+from app.adapters.embedding.gemini import GeminiEmbedder
 from app.adapters.llm.base import LlmClient
 from app.adapters.llm.fake import FakeLlmClient
 from app.adapters.llm.openai_compatible import OpenAICompatibleClient
@@ -68,6 +69,16 @@ def get_embedder() -> EmbeddingAdapter:
     per process rather than once per request."""
     if settings.embedding_provider == "e5_local":
         return LocalE5Embedder(settings.embedding_model, settings.embedding_dim)
+    if settings.embedding_provider == "gemini":
+        if not settings.embedding_api_key:
+            raise EmbeddingMisconfiguredError(
+                "embedding_api_key must be set when embedding_provider=gemini"
+            )
+        return GeminiEmbedder(
+            api_key=settings.embedding_api_key,
+            model=settings.embedding_model,
+            dim=settings.embedding_dim,
+        )
     if settings.embedding_api_base_url is None:
         raise EmbeddingMisconfiguredError(
             "embedding_api_base_url must be set when embedding_provider=e5_api"

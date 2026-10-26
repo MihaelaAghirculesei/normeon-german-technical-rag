@@ -5,6 +5,7 @@ every other test that uses EmbedderDep/RerankerDep/LlmClientDep.
 
 import pytest
 
+from app.adapters.embedding.gemini import GeminiEmbedder
 from app.adapters.llm.openai_compatible import OpenAICompatibleClient
 from app.api import deps
 from app.core.errors import EmbeddingMisconfiguredError, LlmMisconfiguredError
@@ -38,6 +39,35 @@ def test_get_embedder_raises_a_typed_error_when_unconfigured(
         with pytest.raises(EmbeddingMisconfiguredError) as exc_info:
             deps.get_embedder()
         assert exc_info.value.code == "embedding_misconfigured"
+    finally:
+        deps.get_embedder.cache_clear()
+
+
+def test_get_embedder_needs_a_key_for_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(deps.settings, "embedding_provider", "gemini")
+    monkeypatch.setattr(deps.settings, "embedding_api_key", None)
+    deps.get_embedder.cache_clear()
+
+    try:
+        with pytest.raises(EmbeddingMisconfiguredError):
+            deps.get_embedder()
+    finally:
+        deps.get_embedder.cache_clear()
+
+
+def test_get_embedder_builds_gemini_on_the_configured_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(deps.settings, "embedding_provider", "gemini")
+    monkeypatch.setattr(deps.settings, "embedding_api_key", "key")
+    monkeypatch.setattr(deps.settings, "embedding_model", "gemini-embedding-2")
+    deps.get_embedder.cache_clear()
+
+    try:
+        embedder = deps.get_embedder()
+        assert isinstance(embedder, GeminiEmbedder)
+        assert embedder.name == "gemini:gemini-embedding-2"
+        assert embedder.dim == deps.settings.embedding_dim
     finally:
         deps.get_embedder.cache_clear()
 
