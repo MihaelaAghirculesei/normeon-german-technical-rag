@@ -18,8 +18,10 @@ import asyncio
 import sys
 from pathlib import Path
 
+from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.caching import CachingReranker
 from app.adapters.reranker.cross_encoder import CrossEncoderReranker
+from app.adapters.reranker.noop import NoopReranker
 from app.api.deps import get_embedder
 from app.core.config import settings
 from app.db.seed import DEMO_TENANT_ID
@@ -44,7 +46,7 @@ async def _retrieved(
     question: EvalQuestion,
     strategy: str,
     mode: str,
-    reranker: CachingReranker,
+    reranker: Reranker,
     args: argparse.Namespace,
 ) -> QuestionRun:
     async with async_session_factory() as session:
@@ -94,15 +96,23 @@ def _format_ci(ci: tuple[float, float] | None) -> str:
 async def _run(args: argparse.Namespace) -> None:
     questions = load_questions(Path(args.questions))
     gold_bearing = [q for q in questions if q.gold_sources]
-    reranker = CachingReranker(
-        CrossEncoderReranker(settings.reranker_model, args.max_length),
-        Path(args.reports_dir) / "rerank_cache.sqlite3",
-        namespace=f"{settings.reranker_model}|max_length={args.max_length}",
-    )
+    cache: CachingReranker | None = None
+    reranker: Reranker
+    if args.reranker == "noop":
+        reranker = NoopReranker()
+    else:
+        reranker = cache = CachingReranker(
+            CrossEncoderReranker(settings.reranker_model, args.max_length),
+            Path(args.reports_dir) / "rerank_cache.sqlite3",
+            namespace=f"{settings.reranker_model}|max_length={args.max_length}",
+        )
+    print(f"embedder {get_embedder().name}, reranker {args.reranker}")
     print("| Config | recall_at_k | 95% CI | mrr | precision_at_k |")
     print("| --- | --- | --- | --- | --- |")
     try:
         for label, strategy, mode in _MATRIX:
+            if args.strategy is not None and strategy != args.strategy:
+                continue
             runs = [await _retrieved(q, strategy, mode, reranker, args) for q in gold_bearing]
             recall = recall_at_k(gold_bearing, runs)
             pairs = zip(gold_bearing, runs, strict=True)
@@ -115,7 +125,8 @@ async def _run(args: argparse.Namespace) -> None:
                 flush=True,
             )
     finally:
-        reranker.close()
+        if cache is not None:
+            cache.close()
 
 
 def main() -> int:
@@ -128,6 +139,10 @@ def main() -> int:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--candidates", type=int, default=10)
     parser.add_argument("--max-length", type=int, default=settings.reranker_max_length)
+    # Another embedder (e.g. EMBEDDING_PROVIDER=gemini) may have vectors for
+    # one strategy only; `noop` measures a deployment without a reranker.
+    parser.add_argument("--strategy", choices=["structural", "fixed_500"], default=None)
+    parser.add_argument("--reranker", choices=["cross_encoder", "noop"], default="cross_encoder")
     asyncio.run(_run(parser.parse_args()))
     return 0
 
