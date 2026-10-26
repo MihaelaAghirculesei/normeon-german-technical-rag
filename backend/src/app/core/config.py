@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,6 +11,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "postgresql+asyncpg://normeon:normeon@localhost:5432/normeon"
     log_level: str = "INFO"
+    # The built frontend (`dist/frontend/browser`). When set, the API also
+    # serves the app, so a deployment is one origin (core/spa.py).
+    static_dir: Path | None = None
 
     # `gemini` embeds at Google (set `embedding_model=gemini-embedding-2`
     # and `embedding_api_key`), so the process needs no torch (ADR 0005).

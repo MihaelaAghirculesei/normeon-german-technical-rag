@@ -9,6 +9,7 @@ from app.core.limits import BodySizeLimit
 from app.core.logging import configure_logging
 from app.core.observability import configure_tracing
 from app.core.request_context import RequestIdMiddleware
+from app.core.spa import mount_spa
 
 configure_logging()
 
@@ -49,3 +50,6 @@ app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(chunks.router)
 app.include_router(admin.router)
+# Last: its catch-all route must not shadow any API route.
+if settings.static_dir is not None:
+    mount_spa(app, settings.static_dir)
