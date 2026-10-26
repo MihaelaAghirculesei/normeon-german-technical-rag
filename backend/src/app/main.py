@@ -63,7 +63,9 @@ configure_tracing(app)
 
 @app.exception_handler(NormeonError)
 async def normeon_error_handler(request: Request, exc: NormeonError) -> JSONResponse:
-    headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
+    headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else {}
+    if exc.retry_after_s is not None:
+        headers["Retry-After"] = str(exc.retry_after_s)
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "detail": str(exc)},

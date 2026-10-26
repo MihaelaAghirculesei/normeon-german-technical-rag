@@ -162,6 +162,9 @@ class Settings(BaseSettings):
     rate_limit_login_per_minute: int = 0
     rate_limit_questions_per_minute: int = 0
     rate_limit_uploads_per_hour: int = 0
+    # Questions answered per day across all tenants before the app stops
+    # answering until midnight UTC (services/budget.py); None = no cap.
+    daily_question_limit: int | None = None
     max_document_pages: int = 2000
     max_docx_uncompressed_mb: int = 200
     max_docx_compression_ratio: int = 100
