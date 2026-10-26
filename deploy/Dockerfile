@@ -44,7 +44,10 @@ ENV ENVIRONMENT=production \
     EMBEDDING_PROVIDER=gemini \
     EMBEDDING_MODEL=gemini-embedding-2 \
     RERANKER_PROVIDER=noop \
-    OTEL_EXPORTER=none
+    OTEL_EXPORTER=none \
+    RATE_LIMIT_LOGIN_PER_MINUTE=10 \
+    RATE_LIMIT_QUESTIONS_PER_MINUTE=6 \
+    RATE_LIMIT_UPLOADS_PER_HOUR=10
 
 # Not root: the app needs no privileges, and a compromise should not get them.
 RUN useradd --create-home --uid 1000 normeon

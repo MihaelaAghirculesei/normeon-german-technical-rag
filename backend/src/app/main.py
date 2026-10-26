@@ -8,6 +8,7 @@ from app.core.errors import NormeonError
 from app.core.limits import BodySizeLimit
 from app.core.logging import configure_logging
 from app.core.observability import configure_tracing
+from app.core.rate_limit import RateLimit, Rule
 from app.core.request_context import RequestIdMiddleware
 from app.core.spa import mount_spa
 
@@ -26,6 +27,34 @@ app.add_middleware(
     BodySizeLimit,
     max_upload_bytes=settings.max_upload_mb * 2**20 + 64 * 2**10,
     max_request_bytes=settings.max_request_kb * 2**10,
+)
+# Before the body limit, so a client over its quota is refused without its
+# body being looked at.
+app.add_middleware(
+    RateLimit,
+    rules=[
+        Rule(
+            "login",
+            "POST",
+            frozenset({"/api/v1/auth/login"}),
+            settings.rate_limit_login_per_minute,
+            60,
+        ),
+        Rule(
+            "questions",
+            "POST",
+            frozenset({"/api/v1/chat", "/api/v1/chat/stream", "/api/v1/search"}),
+            settings.rate_limit_questions_per_minute,
+            60,
+        ),
+        Rule(
+            "uploads",
+            "POST",
+            frozenset({"/api/v1/documents"}),
+            settings.rate_limit_uploads_per_hour,
+            3600,
+        ),
+    ],
 )
 # Added last, so outermost: even a refused upload gets a request id.
 app.add_middleware(RequestIdMiddleware)
