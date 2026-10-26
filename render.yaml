@@ -1,0 +1,36 @@
+# The deployed demo on Render's free plan (Giorno 29, ADR 0005): one Docker
+# web service serving the API and the built frontend. The database is
+# Postgres on Neon's free plan; embeddings and answers come from the
+# Gemini API's free tier. Secrets are never in this file: `sync: false`
+# values are entered once in the Render dashboard, `generateValue` ones
+# are created by Render.
+services:
+  - type: web
+    name: normeon
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Deploy only commits that passed CI.
+    autoDeployTrigger: checksPass
+    envVars:
+      # Neon's direct (unpooled) connection string, pasted as Neon gives it.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      # One Gemini API key serves both embeddings and answers.
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: openai_compatible
+      - key: LLM_API_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: LLM_MODEL
+        value: gemini-flash-lite-latest

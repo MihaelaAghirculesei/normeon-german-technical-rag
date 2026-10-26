@@ -160,3 +160,18 @@ def test_the_deployed_image_caps_the_questions_a_day() -> None:
     match = re.search(r"DAILY_QUESTION_LIMIT=(\d+)", _text("deploy"))
 
     assert match and int(match.group(1)) > 0
+
+
+def test_the_render_blueprint_builds_the_deploy_image_and_holds_no_secret() -> None:
+    blueprint = yaml.safe_load((ROOT / "render.yaml").read_text(encoding="utf-8"))
+    (service,) = blueprint["services"]
+    env = {item["key"]: item for item in service["envVars"]}
+
+    assert service["plan"] == "free"
+    assert (ROOT / service["dockerfilePath"]).resolve() == DOCKERFILES["deploy"].resolve()
+    assert service["healthCheckPath"] == "/health"
+    secrets = ("DATABASE_URL", "JWT_SECRET", "METRICS_TOKEN", "EMBEDDING_API_KEY", "LLM_API_KEY")
+    for secret in secrets:
+        assert "value" not in env[secret], f"{secret} must not be written in render.yaml"
+    for generated in ("JWT_SECRET", "METRICS_TOKEN"):
+        assert env[generated].get("generateValue") is True
