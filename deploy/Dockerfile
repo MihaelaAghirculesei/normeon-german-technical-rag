@@ -47,7 +47,8 @@ ENV ENVIRONMENT=production \
     OTEL_EXPORTER=none \
     RATE_LIMIT_LOGIN_PER_MINUTE=10 \
     RATE_LIMIT_QUESTIONS_PER_MINUTE=6 \
-    RATE_LIMIT_UPLOADS_PER_HOUR=10
+    RATE_LIMIT_UPLOADS_PER_HOUR=10 \
+    DAILY_QUESTION_LIMIT=200
 
 # Not root: the app needs no privileges, and a compromise should not get them.
 RUN useradd --create-home --uid 1000 normeon

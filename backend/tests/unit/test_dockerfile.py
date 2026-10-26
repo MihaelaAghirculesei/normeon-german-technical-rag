@@ -154,3 +154,9 @@ def test_the_deployed_image_turns_the_rate_limits_on() -> None:
         "RATE_LIMIT_UPLOADS_PER_HOUR",
     }
     assert all(int(value) > 0 for value in limits.values())
+
+
+def test_the_deployed_image_caps_the_questions_a_day() -> None:
+    match = re.search(r"DAILY_QUESTION_LIMIT=(\d+)", _text("deploy"))
+
+    assert match and int(match.group(1)) > 0

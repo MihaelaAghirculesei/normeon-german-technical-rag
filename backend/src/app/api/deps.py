@@ -23,6 +23,7 @@ from app.core.errors import (
 )
 from app.core.security import AuthContext, decode_access_token
 from app.db.session import get_session, tenant_session
+from app.services.budget import ensure_daily_budget
 
 # Unscoped: login and health only. Anything touching tenant data uses
 # TenantSession, which also requires a valid token.
@@ -59,6 +60,15 @@ def require_admin(auth: AuthDep) -> AuthContext:
 
 
 AdminDep = Annotated[AuthContext, Depends(require_admin)]
+
+
+async def enforce_daily_question_limit(session: DbSession) -> None:
+    """Refuse a question once today's cap is spent. The unscoped session
+    on purpose: the cap counts every tenant's questions."""
+    await ensure_daily_budget(session, settings.daily_question_limit)
+
+
+DailyQuestionLimit = Depends(enforce_daily_question_limit)
 
 
 @lru_cache
