@@ -31,7 +31,7 @@ done
 
 if [ ! -f "$venv_python" ]; then
     echo "Backend venv not found at backend/.venv -- cannot verify checks before push."
-    echo "Create it first: cd backend && python -m venv .venv && .venv/Scripts/pip install -e \".[dev]\""
+    echo "Create it first: cd backend && python -m venv .venv && .venv/Scripts/pip install -e \".[dev,local]\""
     exit 1
 fi
 

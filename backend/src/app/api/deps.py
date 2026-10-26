@@ -8,13 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.embedding.e5_api import ApiE5Embedder
-from app.adapters.embedding.e5_local import LocalE5Embedder
 from app.adapters.embedding.gemini import GeminiEmbedder
 from app.adapters.llm.base import LlmClient
 from app.adapters.llm.fake import FakeLlmClient
 from app.adapters.llm.openai_compatible import OpenAICompatibleClient
 from app.adapters.reranker.base import Reranker
-from app.adapters.reranker.cross_encoder import CrossEncoderReranker
 from app.adapters.reranker.noop import NoopReranker
 from app.core.config import settings
 from app.core.errors import (
@@ -66,8 +64,12 @@ AdminDep = Annotated[AuthContext, Depends(require_admin)]
 @lru_cache
 def get_embedder() -> EmbeddingAdapter:
     """Cached so the (heavy, lazily-loaded) local model is constructed once
-    per process rather than once per request."""
+    per process rather than once per request. The local adapters are
+    imported only when selected: they need the `local` extra (torch), which
+    the deployed image leaves out (ADR 0005)."""
     if settings.embedding_provider == "e5_local":
+        from app.adapters.embedding.e5_local import LocalE5Embedder
+
         return LocalE5Embedder(settings.embedding_model, settings.embedding_dim)
     if settings.embedding_provider == "gemini":
         if not settings.embedding_api_key:
@@ -101,6 +103,8 @@ def get_reranker() -> Reranker:
     itself still loads lazily inside the adapter on first use."""
     if settings.reranker_provider == "noop":
         return NoopReranker()
+    from app.adapters.reranker.cross_encoder import CrossEncoderReranker
+
     return CrossEncoderReranker(settings.reranker_model, settings.reranker_max_length)
 
 
