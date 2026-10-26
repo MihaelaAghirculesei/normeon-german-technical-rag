@@ -11,7 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://normeon:normeon@localhost:5432/normeon"
     log_level: str = "INFO"
 
-    embedding_provider: Literal["e5_local", "e5_api"] = "e5_local"
+    # `gemini` embeds at Google (set `embedding_model=gemini-embedding-2`
+    # and `embedding_api_key`), so the process needs no torch (ADR 0005).
+    embedding_provider: Literal["e5_local", "e5_api", "gemini"] = "e5_local"
     embedding_model: str = "intfloat/multilingual-e5-large"
     embedding_dim: int = 1024
     embedding_api_base_url: str | None = None
