@@ -508,3 +508,64 @@ are fixed (#37): every call attempt has an overall deadline, a stream
 is bounded by its first token and its idle gaps ("A stream is bounded
 by its gaps, not its length"), and an error without a message is named
 by its type.
+
+## Deployment (Giorno 29)
+
+The free-tier deployment (ADR 0005) trades the local models for hosted
+ones and adds limits of its own.
+
+### The embedding quota is shared by questions and uploads
+
+Gemini's free tier allows 1000 embedding requests a day per project, and
+a batch call counts every text in it. Each question costs one; each
+chunk of an uploaded document costs one. Measured on the way: embedding
+the 737 structural chunks of the demo corpus plus two retrieval-only
+evaluations (80 queries) and 23 answer-run questions hit the limit, and
+every later embedding call returned 429 until the reset. In the demo a
+single large upload can therefore stop questions for the rest of the
+day, while the app's own daily budget (200 questions) still shows
+headroom. The upload rate limit bounds how many uploads, not how many
+chunks; a per-day chunk budget would close the gap.
+
+### The cross-encoder hurts once the first stage is good
+
+With e5 the cross-encoder adds 7.5 points of recall; with Gemini
+embeddings it removes 2.5 (0.975 -> 0.950) and lowers MRR from 0.790 to
+0.726 (E7, retrieval-only). The likely reading: a general multilingual
+reranker, not tuned on this domain, re-orders a first-stage ranking that
+is already better than its own. Dropping it in
+the deployment is a measured decision, not only a memory one.
+
+With the cross-encoder, vector-only and hybrid retrieval return
+identical recall, MRR and precision on this set, and the contexts are
+the same question by question. On 33 of the 40 answerable questions the
+full-text and trigram branches find nothing (the AND full-text of
+Giorno 28), so RRF hands back the vector ranking unchanged. On the other
+7 they swap one or two chunks into the ten candidates -- six times the
+same section -- and the cross-encoder scores every one of them
+near 0, far below the fifth place it keeps. Without a reranker hybrid
+wins for a different reason: agreement between the branches moves a
+gold chunk up from places 6-10 into the top five. The cross-encoder
+replaces that ordering with its own, so hybrid's lift disappears behind
+it. The lexical branches only pay off where nothing re-ranks after them
+-- which is the deployed configuration.
+
+### The confidence gate cannot be calibrated without the cross-encoder
+
+`min_rerank_score_for_answer` is 0.0: it stops only an empty retrieval,
+in every configuration evaluated so far, and abstention rests on the
+prompt (#17). With the cross-encoder a real threshold could be tuned on
+its scores; the deployed system ranks by fused RRF scores, which say
+where a chunk ranked, not how relevant it is, so there is nothing to
+calibrate. The evaluation shows the prompt abstains correctly on all 10
+unanswerable questions, and too often on answerable ones (9 of the
+deployed row's 10 wrong answers, as in Giorno 20, #38) -- but there is
+no second line.
+
+### Cold starts
+
+Render's free instance sleeps after 15 minutes without traffic and
+Neon's compute suspends when idle. The first request after a pause waits
+for both (30-60 s); the start script's migrations and seed are no-ops at
+that point but still run. A keep-warm ping is not affordable on the
+private repository's Actions minutes.
