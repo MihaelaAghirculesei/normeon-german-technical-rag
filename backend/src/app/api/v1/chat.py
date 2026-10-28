@@ -38,7 +38,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, RootModel
 
-from app.api.deps import AuthDep, EmbedderDep, LlmClientDep, RerankerDep, TenantSession
+from app.api.deps import (
+    AuthDep,
+    DailyQuestionLimit,
+    EmbedderDep,
+    LlmClientDep,
+    RerankerDep,
+    TenantSession,
+)
 from app.core.streaming import with_heartbeat
 from app.domain.citations import Citation
 from app.domain.context import Source
@@ -130,7 +137,7 @@ def _citations_out(citations: list[Citation]) -> list[CitationOut]:
     ]
 
 
-@router.post("", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse, dependencies=[DailyQuestionLimit])
 async def chat(
     payload: ChatRequest,
     auth: AuthDep,
@@ -266,6 +273,7 @@ def _event_payload(event: StreamEvent) -> BaseModel:
 @router.post(
     "/stream",
     response_class=_EventStream,
+    dependencies=[DailyQuestionLimit],
     responses={
         200: {
             "model": ChatStreamEvent,

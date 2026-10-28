@@ -15,12 +15,35 @@ export type Latency = components['schemas']['StreamLatencyOut'];
 const CHAT_STREAM_URL = '/api/v1/chat/stream';
 
 /** The request was refused before any event was streamed (validation, a
- * proxy error, the backend down). Once streaming has started, failures
- * arrive as an `error` event instead. */
+ * rate limit, a proxy error, the backend down). Once streaming has started,
+ * failures arrive as an `error` event instead. `code` is the backend's
+ * error code when the body carried one; `retryAfterS` its `Retry-After`. */
 export class ChatHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly code: string | null = null,
+    readonly retryAfterS: number | null = null,
+  ) {
     super(`chat stream request failed with HTTP ${status}`);
   }
+}
+
+async function refusal(response: Response): Promise<ChatHttpError> {
+  let code: string | null = null;
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === 'object' && 'code' in body && typeof body.code === 'string') {
+      code = body.code;
+    }
+  } catch {
+    // Not JSON (a proxy's error page): the status alone has to do.
+  }
+  const retryAfter = Number(response.headers.get('Retry-After'));
+  return new ChatHttpError(
+    response.status,
+    code,
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
+  );
 }
 
 /** POST a question and yield the typed SSE events as they arrive. Aborting
@@ -44,7 +67,7 @@ export async function* streamChat(
     signal,
   });
   if (!response.ok || response.body === null) {
-    throw new ChatHttpError(response.status);
+    throw await refusal(response);
   }
   for await (const frame of readSse(response.body)) {
     yield { event: frame.event, data: JSON.parse(frame.data) } as ChatStreamEvent;

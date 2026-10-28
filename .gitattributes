@@ -6,3 +6,5 @@ scripts/hooks/* text eol=lf
 # LF at checkout so the sha256 (and the raw-bytes test) is the same on
 # every machine.
 backend/prompts/*.txt text eol=lf
+# Run by sh inside the Linux image: a CRLF checkout would break it.
+deploy/*.sh text eol=lf
