@@ -29,7 +29,18 @@ def test_every_experiment_changes_exactly_one_knob_of_the_baseline() -> None:
         assert len(changed) == 1, (experiment.label, changed)
 
 
+def test_reference_rows_change_more_than_one_knob() -> None:
+    matrix = _load()
+    baseline = matrix.EXPERIMENTS[0]
+    knobs = [f.name for f in dataclasses.fields(baseline) if f.name != "label"]
+
+    for reference in matrix.REFERENCES:
+        changed = [k for k in knobs if getattr(reference, k) != getattr(baseline, k)]
+        assert len(changed) > 1, (reference.label, changed)
+
+
 def test_experiment_labels_are_unique() -> None:
-    labels = [e.label for e in _load().EXPERIMENTS]
+    matrix = _load()
+    labels = [e.label for e in [*matrix.EXPERIMENTS, *matrix.REFERENCES]]
 
     assert len(labels) == len(set(labels))
