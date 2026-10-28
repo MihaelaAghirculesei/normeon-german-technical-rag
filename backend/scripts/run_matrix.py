@@ -6,9 +6,12 @@ changes exactly one of those knobs (`EXPERIMENTS`), so every difference
 against the baseline has one cause. The judge is the configured model in
 every row, including the one that changes the answering model.
 
-Not run: E7 (an embedding API in place of local e5). The schema stores
-1024-dimension vectors and no hosted e5 endpoint is configured; another
-embedding model would mean a second index, not a knob.
+E7 embeds with Gemini (`gemini-embedding-2` at 1024 dimensions) in place of
+local e5; its vectors sit next to e5's in the same table, keyed by model, so
+the corpus must be embedded with it first (`scripts/embed_missing.py`).
+`deployed` is the configuration the demo runs (ADR 0005): Gemini
+embeddings and no reranker -- two knobs, so it is a reference row, not an
+ablation. Both need `EMBEDDING_API_KEY`.
 
     cd backend
     DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \\
@@ -38,8 +41,8 @@ reranker in *both* retrieval modes (hybrid keeps that many after fusion),
 so vector vs. hybrid differ only in which chunks fill the budget, not in
 how many. It also bounds the rerank cost, linear in it on CPU.
 
-**Cost-bearing**: up to 9 x 50 answer-generation calls (fewer: the
-confidence gate abstains without one) plus 9 x 50 judge calls against the
+**Cost-bearing**: up to 11 x 50 answer-generation calls (fewer: the
+confidence gate abstains without one) plus 11 x 50 judge calls against the
 configured (non-"fake") LLM. Use `--questions` with the
 smoke set and `--reports-dir` pointing at a scratch directory for a
 dry run first.
@@ -53,6 +56,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from app.adapters.embedding.base import EmbeddingAdapter
+from app.adapters.embedding.gemini import GeminiEmbedder
 from app.adapters.llm.base import LlmClient
 from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.caching import CachingReranker
@@ -89,8 +94,10 @@ class Experiment:
     top_k: int | None = None  # None: --top-k
     model: Literal["B"] | None = None
     fts_match: FtsMatch = "all"
+    embedding: Literal["gemini"] | None = None  # None: the configured embedder
 
 
+GEMINI_EMBEDDING_MODEL = "gemini-embedding-2"
 # The first row is the baseline; every other row is compared against it
 # question by question.
 BASELINE = "baseline"
@@ -102,9 +109,25 @@ EXPERIMENTS = [
     Experiment("E4 no reranker", rerank=False),
     Experiment("E5 top-k 3", top_k=3),
     Experiment("E6 top-k 10", top_k=10),
+    Experiment("E7 Gemini embeddings", embedding="gemini"),
     Experiment("E8 model B", model="B"),
     Experiment("E9 full-text on any term", fts_match="any"),
 ]
+# Rows that change more than one knob: shown for reference, not as an
+# ablation (a difference from the baseline has several causes).
+REFERENCES = [
+    Experiment("deployed: Gemini embeddings, no reranker", rerank=False, embedding="gemini"),
+]
+
+
+def _gemini_embedder() -> EmbeddingAdapter:
+    if not settings.embedding_api_key:
+        raise SystemExit("EMBEDDING_API_KEY must be set for the Gemini embedding rows")
+    return GeminiEmbedder(
+        api_key=settings.embedding_api_key,
+        model=GEMINI_EMBEDDING_MODEL,
+        dim=settings.embedding_dim,
+    )
 
 
 def _covers(report: EvalReport, questions: list[EvalQuestion]) -> bool:
@@ -116,6 +139,7 @@ async def _report_for(
     questions: list[EvalQuestion],
     reranker: Reranker,
     llm: LlmClient,
+    embedder: EmbeddingAdapter,
     *,
     reports_dir: Path,
     concurrency: int,
@@ -134,7 +158,7 @@ async def _report_for(
         questions,
         config,
         session_factory=async_session_factory,
-        embedder=get_embedder(),
+        embedder=embedder,
         reranker=reranker,
         llm=llm,
         tenant_id=DEMO_TENANT_ID,
@@ -202,7 +226,7 @@ async def _run_one(
         # the cross-encoder's input cap; meaningless without it
         reranker_max_length=args.max_length if experiment.rerank else None,
         prompt_name=settings.answer_prompt_name,
-        embedding_provider=settings.embedding_provider,
+        embedding_provider=experiment.embedding or settings.embedding_provider,
         llm_provider=settings.llm_provider,
         llm_model=model,
         # only when changed, so the default's hash matches the other rows'
@@ -218,6 +242,7 @@ async def _run_one(
         questions,
         reranker if experiment.rerank else NoopReranker(),
         judge if model == settings.llm_model else build_llm_client(model),
+        _gemini_embedder() if experiment.embedding == "gemini" else get_embedder(),
         reports_dir=reports_dir,
         concurrency=args.concurrency,
         question_interval=args.question_interval,
@@ -258,7 +283,7 @@ async def _run(args: argparse.Namespace) -> None:
     try:
         rows = [
             await _run_one(e, questions=questions, reranker=reranker, judge=judge, args=args)
-            for e in EXPERIMENTS
+            for e in [*EXPERIMENTS, *REFERENCES]
         ]
     finally:
         reranker.close()
@@ -273,8 +298,9 @@ async def _run(args: argparse.Namespace) -> None:
         "for cross-encoder logits -- does not fire there.",
         "E3 uses the production full-text query, which needs every term of the "
         "question; E9 keeps hybrid retrieval and lets full-text match any term.",
-        "E7 (embedding API) is not run: no hosted 1024-dimension e5 endpoint is "
-        "configured, and another embedding model needs its own index.",
+        f"E7 embeds with {GEMINI_EMBEDDING_MODEL} in place of "
+        f"{settings.embedding_model}. `deployed` is the demo's configuration "
+        "(Gemini embeddings, no reranker): two knobs changed, a reference row.",
     ]
     if args.rerank_cache:
         notes.append(

@@ -178,6 +178,25 @@ describe('ChatSession', () => {
     expect(logout).toHaveBeenCalled();
   });
 
+  it('says how long to wait after a rate limit', async () => {
+    const asked = chat.ask('x');
+    fake.fail(new ChatHttpError(429, 'rate_limited', 42));
+    await asked;
+
+    expect(chat.error()).toBe(
+      'Zu viele Fragen in kurzer Zeit. Bitte in 42 Sekunden erneut versuchen.',
+    );
+  });
+
+  it('says when the daily budget is spent', async () => {
+    const asked = chat.ask('x');
+    fake.fail(new ChatHttpError(429, 'daily_limit_reached', 3600));
+    await asked;
+
+    expect(chat.error()).toContain('Tageskontingent');
+    expect(chat.status()).toBe('error');
+  });
+
   it('reports a refused request and a dropped connection', async () => {
     let asked = chat.ask('x');
     fake.fail(new ChatHttpError(502));

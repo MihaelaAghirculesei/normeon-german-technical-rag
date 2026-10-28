@@ -3,6 +3,8 @@ class NormeonError(Exception):
 
     code: str = "internal_error"
     status_code: int = 500
+    #: Sent as `Retry-After` when set: when the client may try again.
+    retry_after_s: int | None = None
 
 
 class DocumentNotFoundError(NormeonError):
@@ -110,3 +112,14 @@ class EmbeddingMisconfiguredError(NormeonError):
 
     code = "embedding_misconfigured"
     status_code = 500
+
+
+class DailyLimitReachedError(NormeonError):
+    """The demo's daily question cap is spent (services/budget.py)."""
+
+    code = "daily_limit_reached"
+    status_code = 429
+
+    def __init__(self, message: str, *, retry_after_s: int) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s

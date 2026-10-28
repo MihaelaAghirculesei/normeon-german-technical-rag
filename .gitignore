@@ -19,3 +19,6 @@ node_modules/
 
 backend/eval/reports/*
 !backend/eval/reports/.gitkeep
+
+# Local connection strings (the demo database URL), never committed.
+*.local.env

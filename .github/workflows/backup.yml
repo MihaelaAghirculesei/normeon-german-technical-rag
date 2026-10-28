@@ -1,0 +1,37 @@
+name: backup
+
+# A daily pg_dump of the demo database (Giorno 29). The free web service has
+# no persistent disk, so the dump is kept as a workflow artifact for seven
+# days instead of on a volume (ADR 0005). Needs the repository secret
+# DEMO_DATABASE_URL: the database's direct (unpooled) connection string.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump the database
+        env:
+          DATABASE_URL: ${{ secrets.DEMO_DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "DEMO_DATABASE_URL is not set"; exit 1; }
+          # The client must match the server's major version (Postgres 18).
+          docker run --rm -e DATABASE_URL -v "$PWD:/out" postgres:18 \
+            sh -c 'pg_dump --format=custom --no-owner --file=/out/normeon.dump "$DATABASE_URL"'
+          # A dump that cannot be listed would not restore either.
+          docker run --rm -v "$PWD:/out" postgres:18 pg_restore --list /out/normeon.dump > /dev/null
+          ls -l normeon.dump
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: normeon-${{ github.run_id }}
+          path: normeon.dump
+          retention-days: 7
+          if-no-files-found: error

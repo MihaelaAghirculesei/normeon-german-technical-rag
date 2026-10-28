@@ -116,11 +116,7 @@ export class ChatSession {
         return;
       }
       this.fail(
-        error instanceof ChatHttpError
-          ? error.status === 422
-            ? 'Die Frage wurde vom Server abgelehnt.'
-            : `Der Server hat die Anfrage abgelehnt (HTTP ${error.status}).`
-          : 'Keine Verbindung zum Server.',
+        error instanceof ChatHttpError ? refusalMessage(error) : 'Keine Verbindung zum Server.',
       );
     } finally {
       if (this.controller === controller) this.controller = null;
@@ -144,4 +140,18 @@ export class ChatSession {
     this.error.set(message);
     this.status.set('error');
   }
+}
+
+function refusalMessage(error: ChatHttpError): string {
+  if (error.code === 'daily_limit_reached') {
+    return 'Das Tageskontingent dieser Demo ist aufgebraucht. Morgen sind wieder Fragen möglich.';
+  }
+  if (error.status === 429) {
+    const wait = error.retryAfterS
+      ? ` Bitte in ${error.retryAfterS} Sekunden erneut versuchen.`
+      : '';
+    return `Zu viele Fragen in kurzer Zeit.${wait}`;
+  }
+  if (error.status === 422) return 'Die Frage wurde vom Server abgelehnt.';
+  return `Der Server hat die Anfrage abgelehnt (HTTP ${error.status}).`;
 }

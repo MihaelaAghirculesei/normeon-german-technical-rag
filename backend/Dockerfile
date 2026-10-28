@@ -21,7 +21,7 @@ COPY src ./src
 # Editable: the code stays in /app/src, where it finds prompts/ and
 # pricing.yaml next to it. A regular install copies it into site-packages,
 # where those paths do not exist for anything but uvicorn's --app-dir.
-RUN pip install -e .
+RUN pip install -e ".[local]"
 
 # Read at runtime relative to /app (services/prompts.py, services/pricing.py),
 # and the migrations, so the schema can be upgraded from this image.
