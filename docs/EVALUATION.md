@@ -454,9 +454,8 @@ configuration abstains on 10 of 10 unanswerable questions except E6 and
 E9 (9 of 10). Latency is not compared: the rerank cache makes later rows
 look faster than they are, and cost is zero on the free tier.
 
-**Not in the table.** E7 (hosted embeddings) is not run: no hosted
-1024-dimension e5 endpoint is configured, and another embedding model
-needs its own index. E8 (answers from `gemini-flash-latest`) is
+**Not in the table.** E7 (hosted embeddings) came with the deployment
+and has its own section below. E8 (answers from `gemini-flash-latest`) is
 incomplete: the larger model takes 30-90 s per answer, and its free-tier
 daily quota ran out after 13 of 50 questions. Thirteen answers support
 no conclusion, so the row is left out rather than reported.
@@ -496,3 +495,68 @@ puts a gold source in the top five for 37 of 40 answerable questions.
 Against Giorno 20 the baseline moved from 0.800 (`answer_de.v1`) to 0.840
 (`answer_de.v2`): the prompt-injection hardening costs no accuracy on
 this set (the difference is within noise in either direction).
+
+## Hosted embeddings (E7, Giorno 29)
+
+The deployment cannot run e5-large or the cross-encoder (ADR 0005), so
+the demo embeds with `gemini-embedding-2` at 1024 dimensions. Its
+vectors sit next to e5's in `embeddings`, keyed by model; the demo
+corpus was embedded once with `scripts/embed_missing.py`.
+
+Retrieval only, no LLM calls: structural chunks, 40 answerable
+questions, 10 candidates, top 5.
+
+```bash
+cd backend
+EMBEDDING_PROVIDER=gemini EMBEDDING_MODEL=gemini-embedding-2 EMBEDDING_API_KEY=...     .venv/Scripts/python scripts/run_retrieval_eval.py --reports-dir eval/reports/day28     --strategy structural --reranker noop   # and --reranker cross_encoder
+```
+
+| Embeddings | Reranker | Mode | recall@5 | 95% CI | MRR | precision@5 |
+| --- | --- | --- | --- | --- | --- | --- |
+| e5-large | cross-encoder | hybrid (baseline) | 0.925 | [0.825, 1.000] | 0.699 | 0.384 |
+| gemini-embedding-2 | cross-encoder | hybrid | 0.950 | [0.875, 1.000] | 0.726 | **0.420** |
+| gemini-embedding-2 | cross-encoder | vector | 0.950 | [0.875, 1.000] | 0.726 | **0.420** |
+| gemini-embedding-2 | cross-encoder | full-text | 0.150 | [0.050, 0.250] | 0.074 | 0.229 |
+| gemini-embedding-2 | none | hybrid (deployed) | **0.975** | [0.925, 1.000] | **0.790** | 0.418 |
+| gemini-embedding-2 | none | vector | 0.900 | [0.800, 0.975] | 0.761 | 0.403 |
+| gemini-embedding-2 | none | full-text | 0.150 | [0.050, 0.250] | 0.104 | 0.257 |
+
+Gemini embeddings retrieve at least as well as e5 (+2.5 points of
+recall with the same reranker, within noise), and without the reranker
+they do best: the cross-encoder lowers recall and MRR on top of them
+(`FAILURE-MODES.md`, Giorno 29). The deployed configuration -- Gemini
+embeddings, hybrid, no reranker -- has the best retrieval measured on
+this set. Full-text alone is unchanged, as it should be: it uses no
+embeddings.
+
+The answer run adds two rows to the ablation matrix: `E7 Gemini
+embeddings` (the baseline with Gemini embeddings, one knob) and
+`deployed` (Gemini embeddings and no reranker, two knobs: a reference,
+not an ablation).
+
+| # | Change | recall@5 | MRR | answer_accuracy | 95% CI | false abstention | citation precision |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| E7 | Gemini embeddings | 0.950 | 0.726 | 0.840 | [0.740, 0.940] | 0.200 | 0.557 |
+| deployed | Gemini embeddings, no reranker | **0.975** | **0.790** | 0.800 | [0.680, 0.900] | 0.225 | **0.640** |
+
+Paired against the baseline (0.840), question by question:
+
+| # | Δ answer_accuracy | 95% CI | Δ recall@5 | 95% CI |
+| --- | --- | --- | --- | --- |
+| E7 | +0.000 | [-0.080, +0.080] | +0.025 | [+0.000, +0.075] |
+| deployed | -0.040 | [-0.160, +0.080] | +0.050 | [+0.000, +0.125] |
+
+Neither answer-accuracy difference is one the sample supports. Swapping
+e5 for Gemini embeddings changes nothing measurable in the answers; the
+deployed configuration retrieves the gold source more often and cites
+more precisely, and answers about as well. Its wrong answers are the
+over-abstention of Giorno 20 (#38): 9 of its 10 are `NICHT_GEFUNDEN`,
+8 of them with the gold source in the context. The confidence gate
+plays no part (its threshold is 0.0, so it only stops an empty
+retrieval, #17): every abstention is the model's own. Better retrieval does not lift accuracy past what the
+prompt lets the model answer.
+
+The first attempt used up the free tier's 1000 embedding requests for
+the day after 23 of the 50 E7 questions; the run resumed after the reset
+and reran only those.
+
