@@ -19,6 +19,8 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http",
     "prometheus-client~=0.26",
     "tenacity",
+    # Not 2.x: it glues words in table text, parses about 9x slower and always
+    # loads onnxruntime. tests/unit/test_parsing_corpus.py guards the first.
     "pymupdf>=1.25,<2.0",
     "python-multipart~=0.0.12",
     "pyyaml~=6.0",
