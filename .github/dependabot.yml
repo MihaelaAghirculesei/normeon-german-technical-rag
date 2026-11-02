@@ -7,9 +7,11 @@ updates:
     open-pull-requests-limit: 10
     ignore:
       # 2.x breaks table text (see backend/pyproject.toml); retest by hand.
+      # By version: update-types cannot match, since a range requirement
+      # gives Dependabot no current version to compare with.
       - dependency-name: pymupdf
-        update-types:
-          - "version-update:semver-major"
+        versions:
+          - ">=2.0"
     groups:
       python-minor-patch:
         update-types:
