@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, Boolean, ForeignKey, Numeric, String, UniqueConstraint, text
@@ -88,6 +89,9 @@ class Chunk(Base):
     content_norm: Mapped[str]
     # Text recognised by OCR from a scanned page (migration 0006).
     ocr: Mapped[bool] = mapped_column(server_default=text("false"))
+    # Page and box of each block the chunk was cut from (migration 0007). Null
+    # for DOCX, which has no pages, and for chunks not backfilled yet.
+    regions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     token_count: Mapped[int]
 
 

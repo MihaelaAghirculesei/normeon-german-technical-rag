@@ -138,6 +138,7 @@ describe('ChatPage', () => {
       section_path: SOURCE_S1.section_path,
       heading: null,
       ocr: false,
+      regions: [],
     });
     const chips = () => [...el.querySelectorAll<HTMLButtonElement>('button.cite')];
 

@@ -14,6 +14,8 @@ from app.adapters.llm.fake import FakeLlmClient
 from app.adapters.llm.openai_compatible import OpenAICompatibleClient
 from app.adapters.reranker.base import Reranker
 from app.adapters.reranker.noop import NoopReranker
+from app.adapters.storage.base import DocumentStorage
+from app.adapters.storage.local import default_storage
 from app.core.config import settings
 from app.core.errors import (
     EmbeddingMisconfiguredError,
@@ -104,6 +106,8 @@ def get_embedder() -> EmbeddingAdapter:
 
 
 EmbedderDep = Annotated[EmbeddingAdapter, Depends(get_embedder)]
+
+DocumentStorageDep = Annotated[DocumentStorage, Depends(default_storage)]
 
 
 @lru_cache

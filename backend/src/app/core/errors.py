@@ -72,6 +72,13 @@ class SuspiciousArchiveError(NormeonError):
     status_code = 422
 
 
+class DocumentFileNotFoundError(NormeonError):
+    """The document exists, but its original is not stored or is not a PDF."""
+
+    code = "document_file_not_found"
+    status_code = 404
+
+
 class ChunkNotFoundError(NormeonError):
     """No chunk with that id for this tenant -- a chunk of another tenant
     is reported the same way, so the endpoint never confirms it exists."""

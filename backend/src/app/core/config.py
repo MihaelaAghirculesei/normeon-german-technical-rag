@@ -154,6 +154,9 @@ class Settings(BaseSettings):
     # count, zip-bomb shape) before anything is stored; parsing in the
     # background gives up after `parse_timeout_s`.
     max_upload_mb: int = 50
+    # Where uploaded files are kept for the PDF viewer. Without a persistent
+    # disk they are lost at restart; answers and the text view do not need them.
+    document_storage_dir: Path = Path("data/documents")
     max_request_kb: int = 256  # every other endpoint takes small JSON
 
     # Per-IP rate limits (Giorno 29, core/rate_limit.py); 0 turns a rule
