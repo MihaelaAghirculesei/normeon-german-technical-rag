@@ -29,15 +29,30 @@
 @if (context.error()) {
   <app-notice kind="error">Der Quelltext konnte nicht geladen werden.</app-notice>
 } @else if (context.value(); as ctx) {
-  <div class="excerpt">
-    @for (chunk of ctx.before; track chunk.chunk_id) {
-      <p class="around">{{ chunk.content }}</p>
-    }
-    <mark class="cited" aria-label="Zitierte Stelle">{{ ctx.chunk.content }}</mark>
-    @for (chunk of ctx.after; track chunk.chunk_id) {
-      <p class="around">{{ chunk.content }}</p>
-    }
-  </div>
+  @if (pdfUnavailable()) {
+    <app-notice>Das Original-PDF ist nicht verfügbar. Der Text steht unten.</app-notice>
+  } @else if (ctx.chunk.regions.length > 0) {
+    <button type="button" class="toggle" (click)="showPdf.set(!showPdf())">
+      {{ showPdf() ? 'Text anzeigen' : 'Im PDF anzeigen' }}
+    </button>
+  }
+  @if (showPdf()) {
+    <app-pdf-viewer
+      [documentId]="ctx.document.document_id"
+      [regions]="ctx.chunk.regions"
+      (unavailable)="onUnavailable()"
+    />
+  } @else {
+    <div class="excerpt">
+      @for (chunk of ctx.before; track chunk.chunk_id) {
+        <p class="around">{{ chunk.content }}</p>
+      }
+      <mark class="cited" aria-label="Zitierte Stelle">{{ ctx.chunk.content }}</mark>
+      @for (chunk of ctx.after; track chunk.chunk_id) {
+        <p class="around">{{ chunk.content }}</p>
+      }
+    </div>
+  }
 } @else {
   <app-notice>Quelltext wird geladen…</app-notice>
 }

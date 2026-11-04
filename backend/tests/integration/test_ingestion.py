@@ -145,6 +145,13 @@ async def _ingest_once_and_check_strategies(database_url: str, tmp_path: Path) -
         strategies = await session.scalars(select(Chunk.strategy).distinct())
         assert set(strategies) == {"fixed_500", "structural"}
 
+        # Positions reach the database, in the shape the PDF viewer reads.
+        regions = (await session.scalars(select(Chunk.regions))).all()
+        assert regions
+        for chunk_regions in regions:
+            assert chunk_regions
+            assert all(r["page"] >= 1 and len(r["bbox"]) == 4 for r in chunk_regions)
+
     await engine.dispose()
 
 

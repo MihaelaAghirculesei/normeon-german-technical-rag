@@ -1,0 +1,58 @@
+:host {
+  display: block;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: 0.85rem;
+}
+
+nav button {
+  font: inherit;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+nav button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.loading {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.sheet {
+  position: relative;
+  border: 1px solid var(--border);
+}
+
+.sheet.hidden {
+  height: 0;
+  overflow: hidden;
+  border: 0;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+}
+
+mark {
+  position: absolute;
+  background: var(--accent);
+  opacity: 0.25;
+  pointer-events: none;
+}

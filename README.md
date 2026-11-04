@@ -63,7 +63,9 @@ first word of the answer, and can cancel a running request, which also
 stops the model call on the server. Every `[S1]` in an answer is a
 clickable chip that opens the cited passage, highlighted between the
 text before and after it, with its document, version, section and page
-(`GET /api/v1/chunks/{id}/context`). Documents are uploaded by drag and
+(`GET /api/v1/chunks/{id}/context`). For a PDF, one more click opens the
+original at that page with the passage marked (`GET /api/v1/documents/{id}/file`,
+pdf.js); if the file is not stored, the panel stays on the text. Documents are uploaded by drag and
 drop with byte progress, then followed through ingestion (parsing,
 indexing, ready) by polling. An identical file is recognised by its hash
 and reported as such, and is never processed twice, even when it arrives

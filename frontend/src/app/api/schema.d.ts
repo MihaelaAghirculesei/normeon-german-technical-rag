@@ -73,6 +73,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document File
+         * @description The original PDF, for the viewer in the citation panel. DOCX sources
+         *     have no pages to show, so they keep the text view.
+         */
+        get: operations["get_document_file_api_v1_documents__document_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/documents/{document_id}": {
         parameters: {
             query?: never;
@@ -275,6 +296,8 @@ export interface components {
             content: string;
             /** Ocr */
             ocr: boolean;
+            /** Regions */
+            regions: components["schemas"]["RegionOut"][];
         };
         /** CitationOut */
         CitationOut: {
@@ -504,6 +527,18 @@ export interface components {
             total_ms: number;
             /** Cost Usd */
             cost_usd: number | null;
+        };
+        /** RegionOut */
+        RegionOut: {
+            /** Page */
+            page: number;
+            /** Bbox */
+            bbox: [
+                number,
+                number,
+                number,
+                number
+            ];
         };
         /** RetrievalTimingOut */
         RetrievalTimingOut: {
@@ -815,6 +850,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_file_api_v1_documents__document_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
                 };
             };
             /** @description Validation Error */

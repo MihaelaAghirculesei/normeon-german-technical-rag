@@ -31,6 +31,7 @@ COPY migrations ./migrations
 
 # Not root: the app needs no privileges, and a compromise should not get them.
 RUN useradd --create-home --uid 1000 normeon
+RUN mkdir -p /app/data/documents && chown -R normeon /app/data
 USER normeon
 # Created as the user so a fresh named volume mounted here (compose's model
 # cache) inherits its owner; otherwise Docker makes it root's and the model

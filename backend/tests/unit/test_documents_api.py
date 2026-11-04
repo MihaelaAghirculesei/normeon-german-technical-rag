@@ -13,6 +13,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
+from app.adapters.storage.local import default_storage
 from app.api.deps import get_auth, get_embedder
 from app.api.v1 import documents
 from app.core.errors import EncryptedDocumentError
@@ -46,6 +47,17 @@ def _document(status: str) -> Document:
     )
 
 
+class _MemoryStorage:
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+
+    def save(self, key: str, content: bytes) -> None:
+        self.files[key] = content
+
+    def read(self, key: str) -> bytes | None:
+        return self.files.get(key)
+
+
 class _FakeSession:
     """Answers the few queries these endpoints make; ingestion itself is
     stubbed out, so nothing else on AsyncSession is reached."""
@@ -72,7 +84,12 @@ class _FakeSession:
 
 
 @pytest.fixture
-def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
+def storage() -> _MemoryStorage:
+    return _MemoryStorage()
+
+
+@pytest.fixture
+def client_factory(monkeypatch: pytest.MonkeyPatch, storage: _MemoryStorage) -> Any:
     def make(
         document: Document | None,
         created: bool = False,
@@ -108,6 +125,7 @@ def client_factory(monkeypatch: pytest.MonkeyPatch) -> Any:
 
         authenticate(app, session)
         app.dependency_overrides[get_embedder] = _FakeEmbedder
+        app.dependency_overrides[default_storage] = lambda: storage
         return TestClient(app), processed, session, create_calls
 
     yield make
@@ -327,6 +345,60 @@ def test_getting_an_unknown_document_returns_a_typed_404(client_factory: Any) ->
     client, _, _, _ = client_factory(None)
 
     response = client.get(f"/api/v1/documents/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "document_not_found"
+
+
+def _key(filename: str = "FZV.pdf") -> str:
+    return f"{TENANT_ID}/{'0' * 64}{filename[filename.rindex('.'):]}"
+
+
+def test_uploading_keeps_the_original_file(client_factory: Any, storage: _MemoryStorage) -> None:
+    client, *_ = client_factory(_document("pending"), created=True)
+
+    assert _upload(client).status_code == 201
+
+    assert storage.files[_key()] == b"%PDF-1.4 fake"
+
+
+def test_the_original_pdf_can_be_read_back(client_factory: Any, storage: _MemoryStorage) -> None:
+    client, *_ = client_factory(_document("ready"))
+    storage.files[_key()] = b"%PDF-1.4 stored"
+
+    response = client.get(f"/api/v1/documents/{DOCUMENT_ID}/file")
+
+    assert response.status_code == 200
+    assert response.content == b"%PDF-1.4 stored"
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")
+
+
+def test_a_pdf_that_is_not_stored_is_a_typed_404(client_factory: Any) -> None:
+    client, *_ = client_factory(_document("ready"))
+
+    response = client.get(f"/api/v1/documents/{DOCUMENT_ID}/file")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "document_file_not_found"
+
+
+def test_a_docx_is_not_served(client_factory: Any, storage: _MemoryStorage) -> None:
+    document = _document("ready")
+    document.filename = "Lastenheft.docx"
+    client, *_ = client_factory(document)
+    storage.files[_key("Lastenheft.docx")] = b"PK"
+
+    response = client.get(f"/api/v1/documents/{DOCUMENT_ID}/file")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "document_file_not_found"
+
+
+def test_the_file_of_another_tenants_document_looks_missing(client_factory: Any) -> None:
+    client, *_ = client_factory(None)
+
+    response = client.get(f"/api/v1/documents/{DOCUMENT_ID}/file")
 
     assert response.status_code == 404
     assert response.json()["code"] == "document_not_found"
