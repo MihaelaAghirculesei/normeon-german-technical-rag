@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -17,6 +18,14 @@ def _estimate_tokens(text: str) -> int:
 
 
 @dataclass(frozen=True)
+class Region:
+    """Where a block sits: its page and box, in PDF points from the top left."""
+
+    page: int
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
 class Chunk:
     content: str
     page_from: int
@@ -26,6 +35,9 @@ class Chunk:
     ordinal: int
     token_count: int
     parent_ordinal: int | None = None
+    # The blocks the chunk was cut from, in reading order. A chunk that starts
+    # mid-block still lists the whole block, since word positions are not kept.
+    regions: tuple[Region, ...] = ()
 
 
 class ChunkingStrategy(Protocol):
@@ -39,11 +51,16 @@ class _Word:
     text: str
     page: int
     section_path: str | None = None
+    region: Region | None = None
+
+
+def _regions(regions: Iterable[Region | None]) -> tuple[Region, ...]:
+    return tuple(dict.fromkeys(r for r in regions if r is not None))
 
 
 def _flatten_words(blocks: list[Block]) -> list[_Word]:
     return [
-        _Word(token, block.page, block.section_path)
+        _Word(token, block.page, block.section_path, Region(block.page, block.bbox))
         for block in blocks
         for token in block.text.split()
     ]
@@ -84,6 +101,7 @@ class FixedWindowChunker:
                     heading=None,
                     ordinal=ordinal,
                     token_count=len(window),
+                    regions=_regions(w.region for w in window),
                 )
             )
             ordinal += 1
@@ -167,7 +185,9 @@ class StructuralChunker:
         chunks: list[Chunk] = []
         ordinal = 0
         for group in groups:
-            words = [(token, b.page) for b in group.blocks for token in b.text.split()]
+            words = [
+                (token, Region(b.page, b.bbox)) for b in group.blocks for token in b.text.split()
+            ]
             if not words:
                 continue
 
@@ -185,13 +205,14 @@ class StructuralChunker:
                 chunks.append(
                     Chunk(
                         content=content,
-                        page_from=min(p for _, p in piece),
-                        page_to=max(p for _, p in piece),
+                        page_from=min(region.page for _, region in piece),
+                        page_to=max(region.page for _, region in piece),
                         section_path=group.section_path,
                         heading=breadcrumb,
                         ordinal=this_ordinal,
                         token_count=_estimate_tokens(content),
                         parent_ordinal=parent_ordinal,
+                        regions=_regions(region for _, region in piece),
                     )
                 )
                 if i == 0:

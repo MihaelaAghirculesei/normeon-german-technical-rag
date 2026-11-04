@@ -113,3 +113,30 @@ def test_context_of_an_unknown_chunk_is_a_typed_404(client: Any) -> None:
 
     assert response.status_code == 404
     assert response.json()["code"] == "chunk_not_found"
+
+
+def test_context_returns_the_positions_of_a_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chunk = _chunk(2)
+    chunk.regions = [{"page": 42, "bbox": [10.0, 20.0, 300.0, 40.0]}]
+    document = Document(
+        id=DOCUMENT_ID,
+        tenant_id=TENANT_ID,
+        content_hash="0" * 64,
+        filename="StVZO.pdf",
+        doc_type="norm",
+        version_label=None,
+    )
+
+    async def fake_get_chunk_context(session: Any, **kwargs: Any) -> ChunkContext:
+        return ChunkContext(document=document, chunk=chunk, before=[], after=[])
+
+    monkeypatch.setattr(chunks, "get_chunk_context", fake_get_chunk_context)
+    authenticate(app, object())
+    try:
+        response = TestClient(app).get(f"/api/v1/chunks/{chunk.id}/context")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.json()["chunk"]["regions"] == [{"page": 42, "bbox": [10.0, 20.0, 300.0, 40.0]}]

@@ -2,6 +2,7 @@ import asyncio
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Response, UploadFile
@@ -10,16 +11,23 @@ from sqlalchemy import func, select
 
 from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.parsing.inspect import UploadLimits, inspect_upload
-from app.api.deps import AdminDep, AuthDep, EmbedderDep, TenantSession
+from app.api.deps import AdminDep, AuthDep, DocumentStorageDep, EmbedderDep, TenantSession
 from app.core.config import settings
 from app.core.errors import (
+    DocumentFileNotFoundError,
     DocumentNotFoundError,
     MalformedDocumentError,
     UnsupportedFileTypeError,
 )
 from app.db.models import Chunk, Document
 from app.db.session import tenant_session
-from app.services.ingestion import SUPPORTED_SUFFIXES, get_or_create_document, process_document
+from app.services.ingestion import (
+    SUPPORTED_SUFFIXES,
+    document_file_key,
+    get_or_create_document,
+    process_document,
+    store_document_file,
+)
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -55,6 +63,7 @@ async def upload_document(
     auth: AdminDep,
     session: TenantSession,
     embedder: EmbedderDep,
+    storage: DocumentStorageDep,
     response: Response,
     doc_type: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
@@ -94,6 +103,8 @@ async def upload_document(
         valid_from=valid_from,
         valid_until=valid_until,
     )
+
+    await store_document_file(storage, document, content)
 
     outcome: UploadOutcome
     if created:
@@ -193,6 +204,37 @@ async def list_documents(auth: AuthDep, session: TenantSession) -> list[Document
         )
         for d in documents
     ]
+
+
+@router.get(
+    "/{document_id}/file",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def get_document_file(
+    document_id: UUID, auth: AuthDep, session: TenantSession, storage: DocumentStorageDep
+) -> Response:
+    """The original PDF, for the viewer in the citation panel. DOCX sources
+    have no pages to show, so they keep the text view."""
+    # Another tenant's document is reported exactly like a missing one.
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id, Document.tenant_id == auth.tenant_id)
+    )
+    if document is None:
+        raise DocumentNotFoundError(f"document {document_id} not found")
+    content = None
+    if document.filename.lower().endswith(".pdf"):
+        content = await asyncio.to_thread(storage.read, document_file_key(document))
+    if content is None:
+        raise DocumentFileNotFoundError(f"no stored PDF for document {document_id}")
+    return Response(
+        content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(document.filename)}",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentStatusResponse)
