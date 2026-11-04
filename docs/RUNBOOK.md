@@ -59,6 +59,17 @@ Without a usable dump, a fresh database is rebuilt by starting the app
 against it (migrations + seed create the schema, role and demo users) and
 loading the demo corpus again: see "Load the demo corpus" below.
 
+## Original files for the PDF viewer
+
+Uploads are kept under `DOCUMENT_STORAGE_DIR` (default `data/documents`, a
+named volume in Compose). A host without a persistent disk, like Render's free
+plan, loses them at restart: answers and the text view keep working, and the
+citation panel says the original is not available.
+
+For documents ingested before positions were kept, fill them in and store the
+corpus PDFs with `scripts/backfill_chunk_regions.py`. It matches chunks by
+content hash, so chunk ids and embeddings do not change, and is safe to re-run.
+
 ## Load the demo corpus
 
 The demo tenant's documents are not ingested on the server: parsing and

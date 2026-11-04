@@ -22,3 +22,6 @@ backend/eval/reports/*
 
 # Local connection strings (the demo database URL), never committed.
 *.local.env
+
+# Uploaded originals kept for the PDF viewer.
+backend/data/

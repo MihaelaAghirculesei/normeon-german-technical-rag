@@ -14,6 +14,11 @@ from app.services.chunks import get_chunk_context
 router = APIRouter(prefix="/api/v1/chunks", tags=["chunks"])
 
 
+class RegionOut(BaseModel):
+    page: int
+    bbox: tuple[float, float, float, float]  # PDF points from the top left
+
+
 class ChunkOut(BaseModel):
     chunk_id: UUID
     ordinal: int
@@ -23,6 +28,7 @@ class ChunkOut(BaseModel):
     heading: str | None
     content: str
     ocr: bool  # recognised by OCR from a scanned page
+    regions: list[RegionOut]  # where to highlight it; empty without positions
 
 
 class ContextDocumentOut(BaseModel):
@@ -49,6 +55,7 @@ def _chunk_out(chunk: Chunk) -> ChunkOut:
         heading=chunk.heading,
         content=chunk.content,
         ocr=chunk.ocr,
+        regions=[RegionOut(page=r["page"], bbox=tuple(r["bbox"])) for r in chunk.regions or []],
     )
 
 

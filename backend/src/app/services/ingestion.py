@@ -18,6 +18,8 @@ from app.adapters.embedding.base import EmbeddingAdapter
 from app.adapters.ocr.tesseract import default_ocr
 from app.adapters.parsing.docx import parse_docx
 from app.adapters.parsing.pdf import parse_pdf
+from app.adapters.storage.base import DocumentStorage
+from app.adapters.storage.local import default_storage
 from app.core.config import settings
 from app.core.observability import phase
 from app.db.models import Chunk, Document, Embedding
@@ -42,6 +44,26 @@ _PARSERS: dict[str, Callable[[Path], ParsedDocument]] = {
 SUPPORTED_SUFFIXES = frozenset(_PARSERS)
 
 _log = structlog.get_logger(__name__)
+
+
+def document_file_key(document: Document) -> str:
+    """Where the original of a document is stored. Built from values the
+    server computed, never from the uploaded name, apart from a known suffix."""
+    suffix = Path(document.filename).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise ValueError(f"unsupported file type: {suffix!r}")
+    return f"{document.tenant_id}/{document.content_hash}{suffix}"
+
+
+async def store_document_file(
+    storage: DocumentStorage, document: Document, content: bytes
+) -> None:
+    """Keeps the original for the PDF viewer. A failure is logged and goes no
+    further: answers and the text view work without the file."""
+    try:
+        await asyncio.to_thread(storage.save, document_file_key(document), content)
+    except OSError:
+        _log.exception("ingestion.file_not_stored", document_id=str(document.id))
 
 
 async def get_or_create_document(
@@ -221,10 +243,17 @@ async def ingest_document(
         valid_from=valid_from,
         valid_until=valid_until,
     )
+    # Before the check below, so re-running the corpus script also stores the
+    # originals of documents ingested before files were kept.
+    await store_document_file(default_storage(), document, content)
     if document.status == "ready":
         return document, True
     await process_document(session, embedder, document, content)
     return document, False
+
+
+def region_rows(dc: DomainChunk) -> list[dict[str, Any]]:
+    return [{"page": r.page, "bbox": list(r.bbox)} for r in dc.regions]
 
 
 def _chunk_row(
@@ -240,9 +269,8 @@ def _chunk_row(
         "page_to": dc.page_to,
         "section_path": dc.section_path,
         "heading": dc.heading,
-        # Placeholder span (the chunk's own content, start to end) -- a real
-        # offset into the source document isn't tracked yet; revisit if a
-        # future day needs to highlight the original PDF text.
+        # Placeholder span (the chunk's own content, start to end). The PDF
+        # viewer draws `regions` instead, so no offset is needed.
         "char_start": 0,
         "char_end": len(dc.content),
         "content": dc.content,
@@ -252,6 +280,8 @@ def _chunk_row(
         "token_count": dc.token_count,
         # Any of its pages read by OCR: the text may hold recognition errors.
         "ocr": any(page in ocr_pages for page in range(dc.page_from, dc.page_to + 1)),
+        # DOCX has no pages to draw on, so only a PDF keeps positions.
+        "regions": region_rows(dc) if document.filename.lower().endswith(".pdf") else None,
     }
 
 
