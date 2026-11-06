@@ -86,6 +86,17 @@ def test_the_image_does_not_run_as_root(image: str) -> None:
     assert users and users[-1] not in {"root", "0"}
 
 
+@images
+def test_the_user_can_write_the_document_storage(image: str) -> None:
+    # /app is root's: without this, every upload logs ingestion.file_not_stored
+    # and the PDF viewer never has a file to show.
+    dockerfile = _text(image)
+    before_user = dockerfile[: dockerfile.rindex("\nUSER ")]
+
+    assert "mkdir -p /app/data/documents" in before_user
+    assert "chown -R normeon /app/data" in before_user
+
+
 def test_volumes_in_the_users_home_are_created_by_the_user() -> None:
     # A fresh named volume takes the owner of the image directory it is
     # mounted on, and root's if that directory does not exist.
