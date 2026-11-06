@@ -7,7 +7,7 @@ of prose that merely sounds confident.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 28 of 30. Retrieval is feature-complete: structured German
+Status: Day 29 of 30. Retrieval is feature-complete: structured German
 PDF parsing, two chunking strategies (fixed-window and structural), an
 idempotent ingestion pipeline with a pluggable e5 embedding adapter,
 tenant-scoped vector k-NN over an HNSW index, German full-text search
@@ -112,6 +112,22 @@ Observability:
 - **Statistics page.** Admins get a live page with these numbers for
   their own tenant.
 
+Deployment: a public demo on free tiers only, no payment card anywhere
+(ADR 0005): one Docker service on Render serving the API and the built
+frontend, Postgres with pgvector on Neon, answers and embeddings from
+the Gemini API. The image has no torch: embeddings come from
+`gemini-embedding-2`, and there is no reranker — measured, not assumed:
+with Gemini embeddings the cross-encoder lowers recall (0.975 → 0.950),
+and the deployed configuration retrieves better than the development
+baseline (`docs/EVALUATION.md`, E7). Per-IP rate limits and a daily
+question budget protect the free quota, and `docs/RUNBOOK.md` covers
+loading the demo corpus and restoring the database from a dump.
+Live demo: <https://normeon.onrender.com> — `anna@demo.normeon.dev` (admin of the demo
+tenant, which holds the corpus) or `ben@zulieferer.normeon.dev` (a
+second, empty tenant), password `normeon-demo`. The first request after
+an idle period waits for a cold start (30-60 s). The free service has no
+persistent disk, so the citation panel shows the text, not the original PDF.
+
 This README will be rewritten on delivery day with a demo GIF, results,
 and links to the failure-mode catalogue.
 
@@ -186,9 +202,10 @@ hook with `--no-verify`.
 
 - `docs/adr/` — Architecture Decision Records
 - `docs/ARCHITECTURE.md` — system overview (coming Week 1)
-- `docs/EVALUATION.md` — evaluation methodology and results (coming Week 4)
+- `docs/EVALUATION.md` — evaluation methodology and results
 - `docs/THREAT-MODEL.md` — attacker model and mitigations (coming Week 6)
-- `docs/FAILURE-MODES.md` — where this system is not reliable, with numbers (coming Week 6)
+- `docs/FAILURE-MODES.md` — where this system is not reliable, with numbers
+- `docs/RUNBOOK.md` — restoring the demo database and loading its corpus
 
 ## License
 
