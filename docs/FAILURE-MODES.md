@@ -567,5 +567,54 @@ no second line.
 Render's free instance sleeps after 15 minutes without traffic and
 Neon's compute suspends when idle. The first request after a pause waits
 for both (30-60 s); the start script's migrations and seed are no-ops at
-that point but still run. A keep-warm ping is not affordable on the
-private repository's Actions minutes.
+that point but still run. A keep-warm ping was ruled out while the
+repository was private (Actions minutes); now that it is public, the
+minutes are free, and an always-on instance (about 744 hours a month)
+would fit Render's 750 free hours. Not set up yet.
+
+## Known limits (Giorno 30)
+
+### A table that continues on the next page becomes two tables
+
+Tables are read page by page (`find_tables()`), and the first row of
+each becomes the markdown header. A table that runs over a page break is
+cut in two, and its second half gets an ordinary row as header. In the
+corpus, FZV §79 lists registration authorities on pages 79 to 82: the
+part on page 80 starts with the header `|  | (Zentrale
+Militärkraftfahrtstelle – ZMK, ...) |`, a continuation row with an
+empty first cell. Structural chunking keeps the pieces in one section,
+so retrieval still finds them, but a cell can lose the column title that
+explains it. Joining tables across pages needs the parser to compare the
+column boxes of the last table on a page with the first on the next;
+not done.
+
+### Answers can come from a narrower rule than the question
+
+Seen on the live demo: asked how high a motor vehicle may be, the
+answer gave 2.50 m with a correct citation to StVZO §32 -- the limit for
+the vehicles of §30a(3), which the answer named -- while the general
+4 m rule was not cited. The citation check cannot catch this:
+the claim is supported by its source, only incomplete. The evaluation
+counts it only where a gold point is missing.
+
+### The index is tuned for this corpus, not for a large one
+
+HNSW runs with `m = 16`, `ef_construction = 64` and `ef_search = 40`
+over about 1,200 chunks per embedding model. Nothing here compares it
+with exact search, at this size or larger. With tens of thousands of chunks,
+`ef_search` (recall against latency) and index build time and memory
+would have to be measured again, and the per-tenant filter makes it
+harder: pgvector's iterative scan (`relaxed_order`) keeps a filtered
+query from returning too few rows, at a cost that grows with the share
+of rows the filter removes.
+
+### The judge's agreement is bounded, not exact
+
+The LLM judge agreed with hand scores on 15 of 15 sampled questions
+(Cohen's kappa 1.0). Fifteen is small: the 95% Wilson interval on that
+agreement is [0.80, 1.00]. The answer-accuracy intervals in
+`docs/EVALUATION.md` come from resampling questions and assume the
+scores themselves are right, so they understate the uncertainty by
+whatever the judge gets wrong. The judge only decides answers that fail
+the deterministic point match, which limits how far that can move a
+number, but the error is not measured.
