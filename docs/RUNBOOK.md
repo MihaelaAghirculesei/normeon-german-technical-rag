@@ -46,7 +46,15 @@ GitHub as well (a password manager): a secret cannot be read back.
 
    `--no-owner` makes the restoring role own every object, which is what
    the app expects; ownership in Neon cannot be assigned to another role
-   anyway.
+   anyway.
+
+   Outside Neon (a local container, another provider) the last two
+   entries of the dump fail: they set default privileges for
+   `cloud_admin` and `neon_superuser`, roles only Neon has. Everything
+   else is restored by then -- data, indexes, the app role's grants and
+   the row-level-security policies (checked on the first encrypted
+   backup, 2026-11-06) -- so drop `--exit-on-error` there and expect
+   exactly those two errors.
 
 5. **Check it.** `alembic current` (with `DATABASE_URL=$TARGET_URL`) must
    print the head revision, and the row counts must match the source:
