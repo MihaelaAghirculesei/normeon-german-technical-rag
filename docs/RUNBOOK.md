@@ -110,7 +110,9 @@ retrieves, and the only ones with Gemini vectors.
    and writes to the target over TLS; ids are kept, so the chunks still
    point at their documents and parents, and the vectors at their
    chunks. `tsv` is a generated column: it is left out and the target
-   computes it.
+   computes it. `regions` (migration 0007) holds the page boxes the PDF
+   viewer marks; fill it on the source first with
+   `scripts/backfill_chunk_regions.py`.
 
    ```bash
    docker compose exec -T -e TARGET_URL db bash -s <<'EOF'
@@ -119,7 +121,7 @@ retrieves, and the only ones with Gemini vectors.
    dst() { psql "$TARGET_URL" -v ON_ERROR_STOP=1 -q "$@"; }
    demo=00000000-0000-0000-0000-000000000001
    model=gemini:gemini-embedding-2
-   cols="id, document_id, tenant_id, strategy, chunk_hash, parent_id, ordinal, page_from, page_to, section_path, heading, char_start, char_end, content, content_norm, token_count, ocr"
+   cols="id, document_id, tenant_id, strategy, chunk_hash, parent_id, ordinal, page_from, page_to, section_path, heading, char_start, char_end, content, content_norm, token_count, ocr, regions"
    src -c "\copy (SELECT * FROM documents WHERE tenant_id = '$demo' AND status = 'ready') TO STDOUT" \
      | dst -c "\copy documents FROM STDIN"
    src -c "\copy (SELECT $cols FROM chunks WHERE tenant_id = '$demo' AND strategy = 'structural') TO STDOUT" \
