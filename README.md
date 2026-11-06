@@ -1,211 +1,158 @@
 # Normeon
 
-A cited RAG assistant for German technical documentation — Lastenhefte,
-UNECE regulations, manuals — that answers with verifiable citations instead
-of prose that merely sounds confident.
+A RAG assistant for German technical documentation — regulations,
+Lastenhefte, manuals — that answers with citations the backend has
+checked, and says `NICHT_GEFUNDEN` instead of guessing.
 
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Status: Day 29 of 30. Retrieval is feature-complete: structured German
-PDF parsing, two chunking strategies (fixed-window and structural), an
-idempotent ingestion pipeline with a pluggable e5 embedding adapter,
-tenant-scoped vector k-NN over an HNSW index, German full-text search
-with requirement-code normalisation and a trigram fallback, hybrid
-retrieval fusing the three branches with Reciprocal Rank Fusion
-(ADR 0002), and a single instrumented pipeline (hybrid → cross-encoder
-rerank → token-budget context selection) exposed at `POST /api/v1/search`
-with per-phase timings. Generation: a versioned German answer prompt, a
-context builder that assigns stable `[S1]` markers and keeps the
-marker → page/section mapping backend-side, `POST /api/v1/chat` over a
-thin LLM seam (OpenAI-compatible client, or a deterministic fake for
-offline runs), citation validation that drops any marker the model
-invents and treats an unsupported claim as an abstention rather than
-surfacing it as if it were grounded, a pre-generation confidence gate
-that skips the LLM call entirely below a configurable rerank score,
-version-conflict detection that asks the model to flag a requirement
-code with disagreeing sources, retried typed-error LLM calls so a
-provider outage is a coherent HTTP response rather than a bare 500, and
-`POST /api/v1/chat/stream` (SSE) that sends sources before the answer
-starts streaming, with a non-cancelling heartbeat and a clean shutdown
-of the model call on client disconnect, and cost tracking (a versioned
-`pricing.yaml`, priced against both the streaming and non-streaming
-paths) with every answer writing a `query_logs` row for tokens, cost,
-per-phase latency, config fingerprint and retrieved chunks.
-Evaluation: a hand-written 50-question German eval set (10 per category
-— requirement lookup, cross-reference, code lookup, unanswerable,
-conflict) run for real against the ingested corpus, scored with a
-two-layer correctness metric (deterministic point match + an LLM
-judge), with the judge itself checked against a 15-question
-human-scored sample (percent agreement 1.0, Cohen's kappa 1.0), and a
-metrics module (recall/MRR/precision, citation precision, hallucinated-
-citation rate, answer accuracy, correct/false abstention rate, latency
-percentiles, cost per query) run for real over the full 50-question set,
-and a first experiment matrix (structural vs. fixed-window chunking ×
-hybrid vs. vector retrieval) reported with bootstrap confidence intervals
-and paired comparisons: it found and fixed a context-selection bug worth
-12.5 points of recall (0.80 → 0.925), and backs the default chunking
-choice with numbers (ADR 0003, `docs/EVALUATION.md`). An ablation
-matrix then changes one knob at a time against that baseline, with a
-fixed judge model: chunking, vector-only, full-text-only, no reranker,
-`top_k` 3 and 10, and any-term full-text. The baseline wins (answer
-accuracy 0.840); hybrid retrieval and `top_k=5` are the two choices the
-sample resolves, and it showed that the all-terms full-text query
-matches none of the 50 questions on its own.
-Frontend: an Angular 22 app (zoneless, signals) whose API types are
-generated from the backend's OpenAPI document, with CI failing on any
-contract drift between the two; the document list reads live data. The
-chat page streams answers over `fetch` + `ReadableStream` (POST, so not
-`EventSource`), with the SSE frames themselves typed in the OpenAPI
-contract. It names the pipeline phase the request is actually in
-(searching, weighing sources, writing), shows the sources before the
-first word of the answer, and can cancel a running request, which also
-stops the model call on the server. Every `[S1]` in an answer is a
-clickable chip that opens the cited passage, highlighted between the
-text before and after it, with its document, version, section and page
-(`GET /api/v1/chunks/{id}/context`). For a PDF, one more click opens the
-original at that page with the passage marked (`GET /api/v1/documents/{id}/file`,
-pdf.js); if the file is not stored, the panel stays on the text. Documents are uploaded by drag and
-drop with byte progress, then followed through ingestion (parsing,
-indexing, ready) by polling. An identical file is recognised by its hash
-and reported as such, and is never processed twice, even when it arrives
-again while the first copy is still being processed. The document table
-shows chunk counts per chunking strategy.
-Security: login issues a short-lived JWT carrying the user's tenant and
-role, and the tenant comes from that token only, never from the request.
-Tenant isolation has two layers. The application filters every query on
-the tenant, and Postgres row-level security enforces the same boundary
-underneath: row-level security is the seatbelt, the application's filters
-are the braces. The app switches to a dedicated non-superuser role for
-every tenant-scoped transaction, because a superuser connection would
-silently bypass every policy (ADR 0004). `tests/security` proves it:
-- a user asking a question that only another tenant's documents can
-  answer gets `NICHT_GEFUNDEN`, not a 403;
-- unfiltered SQL sees one tenant only;
-- cross-tenant writes are rejected;
-- mutation runs show each layer holding on its own.
+<!-- Demo GIF: question → sources → streamed answer → citation → PDF page. -->
 
-Robustness:
-- **Prompt injection.** Retrieved text reaches the model as delimited,
-  untrusted data, without filenames or pages. A document cannot close
-  the delimiter, forge a citation or rewrite the prompt template. An
-  answer without a real citation is discarded, on the streaming path
-  too. `tests/security/test_injection.py` runs this against a model that
-  obeys the injected instruction, and nothing leaks.
-- **Uploads.** Oversized uploads are refused from their headers, before
-  being read. Encrypted, broken or zip-bomb files are refused with a
-  clear message before anything is stored. Parsing has a deadline, and
-  a failed document says why.
-- **Scanned pages.** They are read by OCR (tesseract, German), and
-  passages recognised that way are labelled in the UI.
+## Live demo
 
-Observability:
-- **Request id.** Every request carries one (`X-Request-ID`). It is on
-  every JSON log line, on the trace, and on the `query_logs` row.
-- **Traces.** OpenTelemetry spans for parse, embed, vector and full-text
-  retrieval, fusion, rerank and generation. In development each request
-  logs one readable trace with the time of every phase; in production
-  the spans go to an OTLP collector.
-- **Metrics.** `/metrics` exposes Prometheus metrics: latency per phase,
-  cumulative cost, answers by outcome (abstention rate), invented
-  citations and LLM errors per provider.
-- **Statistics page.** Admins get a live page with these numbers for
-  their own tenant.
+<https://normeon.onrender.com> — sign in as `anna@demo.normeon.dev`
+(admin of the demo tenant, which holds the corpus) or
+`ben@zulieferer.normeon.dev` (a second tenant that sees none of it), both
+with the password `normeon-demo`.
 
-Deployment: a public demo on free tiers only, no payment card anywhere
-(ADR 0005): one Docker service on Render serving the API and the built
-frontend, Postgres with pgvector on Neon, answers and embeddings from
-the Gemini API. The image has no torch: embeddings come from
-`gemini-embedding-2`, and there is no reranker — measured, not assumed:
-with Gemini embeddings the cross-encoder lowers recall (0.975 → 0.950),
-and the deployed configuration retrieves better than the development
-baseline (`docs/EVALUATION.md`, E7). Per-IP rate limits and a daily
-question budget protect the free quota, and `docs/RUNBOOK.md` covers
-loading the demo corpus and restoring the database from a dump.
-Live demo: <https://normeon.onrender.com> — `anna@demo.normeon.dev` (admin of the demo
-tenant, which holds the corpus) or `ben@zulieferer.normeon.dev` (a
-second, empty tenant), password `normeon-demo`. The first request after
-an idle period waits for a cold start (30-60 s). The free service has no
-persistent disk, so the citation panel shows the text, not the original PDF.
+It runs on free tiers: the first request after an idle period waits for a
+cold start (30-60 s), and without a persistent disk the citation panel
+shows the cited text rather than the original PDF. The corpus is two
+public German traffic regulations (StVZO, FZV) and two synthetic
+Lastenheft versions that contradict each other on purpose. Try
+*„Welche Lenkkraft fordert das Lastenheft?“* or
+*„Wie breit darf ein Pkw nach StVZO sein?“*.
 
-This README will be rewritten on delivery day with a demo GIF, results,
-and links to the failure-mode catalogue.
+## Results
 
-## Stack
+Measured on a hand-written set of 50 German questions, 10 per category
+(requirement lookup, cross-reference, code lookup, unanswerable, version
+conflict), with one knob changed per configuration:
 
-Angular 22 · FastAPI · PostgreSQL 18 + pgvector · hybrid search (vector +
-full-text) · cross-encoder reranking · a 50-question evaluation suite.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/recall-by-category-dark.svg">
+  <img alt="Recall@5 by question category for ten configurations. The deployed configuration finds a gold source in the top five for 39 of 40 answerable questions; full-text search alone finds 6 of 40." src="docs/img/recall-by-category-light.svg">
+</picture>
 
-## Scope
+| | Development baseline | Deployed demo |
+| --- | --- | --- |
+| Configuration | e5-large, hybrid, cross-encoder | Gemini embeddings, hybrid, no reranker |
+| Recall@5 (40 answerable) | 0.925 | **0.975** |
+| Answer accuracy (50) | **0.840** [0.74, 0.94] | 0.800 [0.68, 0.90] |
+| Unanswerable questions declined | 10 / 10 | 10 / 10 |
+| Answers citing an invented source | 0 | 0 |
 
-| In scope | Out of scope |
-|---|---|
-| PDF/DOCX upload, idempotent ingestion | Editing documents |
-| Structural + fixed-window chunking, compared experimentally | Fine-tuning models |
-| Hybrid retrieval + reranking | Multi-hop / agentic retrieval |
-| Backend-validated citations | Generating new documents |
-| SSE streaming | Voice, images, multimodal input |
-| Multi-tenant with Row-Level Security | Enterprise SSO, SCIM |
-| 50-question eval suite + experiment matrix | Mobile app |
-| Single-node deploy | Autoscaling, HA |
+What the numbers say:
+- **Retrieval is not the bottleneck.** Nine of the deployed demo's ten
+  wrong answers are abstentions, eight of them with the gold source in
+  the context. The model declines more than it should (#38).
+- **Hybrid earns its place.** Vector-only retrieval costs 8 points of
+  answer accuracy, the one single-component difference the sample
+  resolves; full-text alone finds a gold source for 6 of 40 questions.
+- **More context is not better.** Ten chunks give the best recall and the
+  worst accuracy of the hybrid configurations (0.720): the model abstains
+  more often, not less.
+- **The judge was checked by hand:** it agreed with my scores on 15 of
+  15 questions, which bounds its agreement at 0.80 or better (95%).
 
-## Local development
+Method, confidence intervals and paired comparisons:
+[`docs/EVALUATION.md`](docs/EVALUATION.md). Reproduce the chart with
+`backend/scripts/plot_recall_by_category.py`.
 
-```
-docker compose up
-curl localhost:8010/health
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["Angular 22 app"] -- "JWT, SSE" --> API["FastAPI"]
+    API --> ING["Ingestion: PDF/DOCX, OCR, structural chunks"]
+    ING --> DB[("Postgres 18 + pgvector, full-text, row-level security")]
+    API --> RET["Hybrid retrieval: vector + full-text + trigram, RRF"]
+    RET --> DB
+    RET --> CTX["Numbered sources S1..Sn"]
+    CTX --> LLM["LLM"]
+    LLM --> VAL["Citation check: no valid citation, no answer"]
+    VAL --> API
 ```
 
-(Ports are offset from the defaults — 8010/5433/8081 — to avoid clashing
-with other local projects. See `docker-compose.yml`.)
+Every source reaches the model as delimited, untrusted text; a marker
+the model invents is dropped, and an answer left without a real citation
+becomes `NICHT_GEFUNDEN`. Tenants are separated twice: by the
+application's queries and by Postgres row-level security under a
+non-superuser role, and the security tests check each layer on its own.
+Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Database schema and demo users (two tenants: `anna@demo.normeon.dev`,
-admin of the demo tenant that holds the corpus, and
-`ben@zulieferer.normeon.dev`, reader in an empty second tenant; both with
-the password from `DEMO_USER_PASSWORD`, default `normeon-demo`):
+## Stack, and why
 
-```
-cd backend
-alembic upgrade head
-python -m app.db.seed
-```
+| Part | Choice | Why |
+| --- | --- | --- |
+| Storage and search | PostgreSQL 18 + pgvector | Vectors, German full-text, trigrams and row-level security in one transactional store (ADR 0001) |
+| Fusion | Reciprocal Rank Fusion | Branch scores are not comparable; ranks are (ADR 0002) |
+| Chunking | One chunk per document section | +35 points of recall over fixed windows (ADR 0003) |
+| Embeddings | `multilingual-e5-large` locally, `gemini-embedding-2` in the demo | Measured against each other (E7) |
+| Reranker | `bge-reranker-v2-m3`, off in the demo | Adds recall to e5 (within noise), lowers it with Gemini embeddings (E4, E7) |
+| Backend | Python 3.13, FastAPI, SQLAlchemy async | Typed end to end: mypy strict, Pydantic |
+| Frontend | Angular 22, zoneless, signals | API types generated from the OpenAPI document, checked in CI |
+| Deployment | Render + Neon + Gemini, free tiers | A public demo at zero cost (ADR 0005) |
 
-Outside development, set `ENVIRONMENT` and a random `JWT_SECRET` (32+
-characters): the backend refuses to start with the default one.
+## Run it locally
 
-Frontend (Node 22.22.3+), with the backend running:
+Docker only — API, database and the two demo users, with an offline fake
+model (no API key):
 
-```
-cd frontend
-npm ci
-npm start          # http://localhost:4210, /api proxied to :8010
-```
-
-The API types in `frontend/src/app/api/schema.d.ts` are generated, never
-edited by hand. After changing an endpoint: regenerate
-`backend/openapi.json` (`backend/scripts/export_openapi.py`), then
-`npm run gen:api` in `frontend/`. CI checks both steps.
-
-One-time setup after cloning:
-
-```
-git config core.hooksPath scripts/hooks
+```bash
+git clone https://github.com/MihaelaAghirculesei/normeon-german-technical-rag.git && cd normeon-german-technical-rag
+docker compose up -d --build
+docker compose exec backend sh -c "alembic upgrade head && python -m app.db.seed"
 ```
 
-This enables a pre-push hook that blocks direct pushes to `main` and
-runs the same ruff/mypy/pytest checks as CI before every push, so
-nothing that would fail CI ever gets pushed. Workflow: branch → push
-branch → open a PR → merge only once CI is green. Don't bypass the
-hook with `--no-verify`.
+`curl localhost:8010/health` answers once it is up; the first build
+produces a 2.4 GB image (CPU torch, tesseract). Ports are offset from
+the defaults (8010, 5433, 8081 for Adminer).
+
+The full stack, with real answers and the corpus, runs from source
+(Python 3.13, Node 22.22.3+; Windows paths, `.venv/bin/` elsewhere):
+
+```bash
+docker compose up -d db
+cd backend && python -m venv .venv && .venv/Scripts/pip install -e ".[dev,local]"
+cp ../.env.example .env   # then add LLM_PROVIDER, LLM_API_BASE_URL, LLM_API_KEY, LLM_MODEL
+.venv/Scripts/alembic upgrade head && .venv/Scripts/python -m app.db.seed
+.venv/Scripts/python scripts/ingest_corpus.py   # embeds the corpus with e5 on CPU: slow
+.venv/Scripts/uvicorn app.main:app --app-dir src --port 8010
+cd ../frontend && npm ci && npm start           # http://localhost:4210
+```
+
+Any OpenAI-compatible endpoint works for answers; the evaluation used
+Gemini's free tier. Before contributing: `git config core.hooksPath
+scripts/hooks` enables a pre-push hook that blocks pushes to `main` and
+runs the CI checks first. After changing an endpoint, regenerate
+`backend/openapi.json` (`scripts/export_openapi.py`) and the frontend
+types (`npm run gen:api`); CI checks both.
+
+## Known limits
+
+Measured where it could be, in [`docs/FAILURE-MODES.md`](docs/FAILURE-MODES.md):
+- The model over-abstains: most wrong answers decline although the
+  answer is in the context (#38).
+- German compound nouns are not split by the full-text stemmer
+  (*Fahrzeugzulassung* does not match *Zulassung*); the vector branch
+  covers part of it.
+- An all-terms full-text query matches none of the 50 evaluation
+  questions on its own; recall comes from the vector and trigram branches.
+- A table that continues on the next page becomes two tables, the second
+  without its header.
+- Scanned pages are only as good as their OCR, and are labelled as OCR.
+- The index parameters are tuned for a corpus of about 1,200 chunks;
+  tens of thousands would need them measured again.
 
 ## Documentation
 
-- `docs/adr/` — Architecture Decision Records
-- `docs/ARCHITECTURE.md` — system overview (coming Week 1)
-- `docs/EVALUATION.md` — evaluation methodology and results
-- `docs/THREAT-MODEL.md` — attacker model and mitigations (coming Week 6)
-- `docs/FAILURE-MODES.md` — where this system is not reliable, with numbers
-- `docs/RUNBOOK.md` — restoring the demo database and loading its corpus
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how a question becomes a cited answer
+- [`docs/EVALUATION.md`](docs/EVALUATION.md) — question set, metrics, every run
+- [`docs/FAILURE-MODES.md`](docs/FAILURE-MODES.md) — where it is not reliable, with numbers
+- [`docs/adr/`](docs/adr/) — architecture decisions
+- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — the demo database: backup, restore, corpus
 
 ## License
 
