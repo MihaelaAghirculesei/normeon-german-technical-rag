@@ -48,6 +48,10 @@ selection") -- at 0.1 CPU it would take minutes per question.
 7. **Backups are a GitHub Actions artifact.** A nightly `pg_dump` (custom
    format, checked with `pg_restore --list`) is kept for seven days.
    Restoring is in `docs/RUNBOOK.md`.
+   *Update 2026-11-06:* the repository is now public, so any signed-in
+   GitHub user can download the artifact, which holds password hashes,
+   query logs and visitors' uploads. The dump is encrypted (AES-256,
+   `BACKUP_PASSPHRASE`) before it is uploaded.
 8. **No keep-warm ping.** A cron every 14 minutes would cost ~3000
    Actions minutes a month; the private repository has 2000. The first
    request after an idle period waits for the cold start (~30-60 s).

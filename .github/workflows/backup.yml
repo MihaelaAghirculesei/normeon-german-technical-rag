@@ -2,8 +2,11 @@ name: backup
 
 # A daily pg_dump of the demo database (Giorno 29). The free web service has
 # no persistent disk, so the dump is kept as a workflow artifact for seven
-# days instead of on a volume (ADR 0005). Needs the repository secret
-# DEMO_DATABASE_URL: the database's direct (unpooled) connection string.
+# days instead of on a volume (ADR 0005). The repository is public and any
+# signed-in GitHub user can download its artifacts, so the dump is encrypted
+# first. Needs two repository secrets: DEMO_DATABASE_URL, the database's
+# direct (unpooled) connection string, and BACKUP_PASSPHRASE, which
+# docs/RUNBOOK.md uses to decrypt it.
 
 on:
   schedule:
@@ -17,21 +20,29 @@ jobs:
   dump:
     runs-on: ubuntu-latest
     steps:
-      - name: Dump the database
+      - name: Dump and encrypt the database
         env:
           DATABASE_URL: ${{ secrets.DEMO_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           test -n "$DATABASE_URL" || { echo "DEMO_DATABASE_URL is not set"; exit 1; }
+          test -n "$BACKUP_PASSPHRASE" || { echo "BACKUP_PASSPHRASE is not set"; exit 1; }
           # The client must match the server's major version (Postgres 18).
           docker run --rm -e DATABASE_URL -v "$PWD:/out" postgres:18 \
             sh -c 'pg_dump --format=custom --no-owner --file=/out/normeon.dump "$DATABASE_URL"'
           # A dump that cannot be listed would not restore either.
           docker run --rm -v "$PWD:/out" postgres:18 pg_restore --list /out/normeon.dump > /dev/null
-          ls -l normeon.dump
+          # Symmetric AES-256; the passphrase goes in on stdin, never as an argument.
+          gpg_pass() { printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 "$@"; }
+          gpg_pass --symmetric --cipher-algo AES256 --output normeon.dump.gpg normeon.dump
+          # Only upload what the passphrase opens again, byte for byte.
+          test "$(gpg_pass --decrypt normeon.dump.gpg | sha256sum)" = "$(sha256sum < normeon.dump)"
+          rm -f normeon.dump
+          ls -l normeon.dump.gpg
 
       - uses: actions/upload-artifact@v7
         with:
           name: normeon-${{ github.run_id }}
-          path: normeon.dump
+          path: normeon.dump.gpg
           retention-days: 7
           if-no-files-found: error

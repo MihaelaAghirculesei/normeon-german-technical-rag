@@ -6,7 +6,10 @@ something has to be put back.
 ## Restore the database from a nightly backup
 
 The `backup` workflow keeps a `pg_dump` (custom format) of the demo
-database as an artifact for seven days.
+database as an artifact for seven days, encrypted with the repository
+secret `BACKUP_PASSPHRASE`: the repository is public, and any signed-in
+GitHub user can download its artifacts. Keep the passphrase outside
+GitHub as well (a password manager): a secret cannot be read back.
 
 1. **Get the dump.** Pick a successful `backup` run and download its
    artifact:
@@ -14,7 +17,10 @@ database as an artifact for seven days.
    ```bash
    gh run list --workflow backup --limit 5
    gh run download <run-id> --dir restore
+   gpg --output restore/normeon.dump --decrypt restore/normeon.dump.gpg
    ```
+
+   `gpg` asks for the passphrase (Git for Windows ships it).
 
 2. **Prepare an empty target database** (a new Neon database or branch,
    or a local `pgvector/pgvector:pg18` container). Use its direct
