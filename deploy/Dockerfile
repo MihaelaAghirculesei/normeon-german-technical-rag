@@ -52,6 +52,9 @@ ENV ENVIRONMENT=production \
 
 # Not root: the app needs no privileges, and a compromise should not get them.
 RUN useradd --create-home --uid 1000 normeon
+# Uploaded originals for the PDF viewer (DOCUMENT_STORAGE_DIR, relative to
+# /app). Lost at restart without a persistent disk, but writable until then.
+RUN mkdir -p /app/data/documents && chown -R normeon /app/data
 USER normeon
 
 EXPOSE 8000
