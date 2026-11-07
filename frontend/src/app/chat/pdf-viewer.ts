@@ -157,14 +157,19 @@ export class PdfViewer {
       this.rendered.set(false);
       void this.draw(pdf, page, canvas, (task) => (cancel = task))
         .then(() => {
-          if (stale) return;
-          this.rendered.set(true);
-          this.host.nativeElement.querySelector('mark')?.scrollIntoView?.({ block: 'center' });
+          if (!stale) this.rendered.set(true);
         })
         .catch(() => {
           // Moving to another page cancels the drawing of the previous one.
           if (!stale) this.unavailable.emit();
         });
+    });
+
+    // A separate render step: the sheet is still hidden in the one that sets
+    // `rendered`, and a hidden highlight cannot be scrolled to.
+    afterRenderEffect(() => {
+      if (!this.rendered()) return;
+      this.host.nativeElement.querySelector('mark')?.scrollIntoView?.({ block: 'center' });
     });
   }
 
