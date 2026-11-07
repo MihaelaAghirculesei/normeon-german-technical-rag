@@ -1,4 +1,4 @@
-"""POST /api/v1/chat (Giorno 11) and POST /api/v1/chat/stream (Giorno 14).
+"""POST /api/v1/chat and POST /api/v1/chat/stream.
 
 The question is retrieved, the surviving chunks become numbered sources,
 the versioned German prompt is rendered around them, and the model is
@@ -7,11 +7,11 @@ sees or produces page numbers: the response carries the `marker ->
 page/section/document` mapping the backend held back, which is what makes
 the citations verifiable.
 
-`sources` lists everything the model was offered (Giorno 11); `citations`
-(Giorno 12) is the validated subset it actually cited -- an invented
+`sources` lists everything the model was offered; `citations`
+is the validated subset it actually cited -- an invented
 marker never reaches this list, and `domain.citations.extract_and_validate`
 has already turned a claim with zero valid citations into an abstention.
-The pre-generation confidence gate is Day 13.
+The pre-generation confidence gate runs before any of this.
 
 `/stream` is the same pipeline as SSE: `stage` events for retrieving /
 reranking / generating, `sources` BEFORE any `token` (so a client can
@@ -20,7 +20,7 @@ then `done` (or `error` in its place). See `services.generation.
 generate_answer_stream`'s docstring for what "done" means when the
 validated citations disagree with what was already streamed.
 
-`cost_usd` (Giorno 15) is the priced token cost of this answer, or
+`cost_usd` is the priced token cost of this answer, or
 `null` when the resolved model isn't in `backend/pricing.yaml` (the
 `fake` provider, or a self-hosted model with no listed price) -- see
 `services.pricing`. Every answer also writes one `query_logs` row.

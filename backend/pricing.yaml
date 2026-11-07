@@ -1,4 +1,4 @@
-# Per-model cost table for domain.pricing.calculate_cost (plan, Giorno 15).
+# Per-model cost table for domain.pricing.calculate_cost.
 #
 # Keyed by the exact model id string that ends up on LlmResponse.model /
 # adapters.llm.base.Delta.model -- for OpenAICompatibleClient that's

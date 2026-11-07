@@ -1,4 +1,4 @@
-"""OCR for PDF pages without a text layer (Giorno 26).
+"""OCR for PDF pages without a text layer.
 
 A scanned page gives PyMuPDF no text, so the PDF parser hands it to a
 `PageOcr`. The result has the same shape as `page.get_text("dict")`, which

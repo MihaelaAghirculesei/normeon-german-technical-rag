@@ -1,4 +1,4 @@
-"""Ad-hoc check for Day 9: measure the cross-encoder reranker on the dev
+"""Ad-hoc check: measure the cross-encoder reranker on the dev
 corpus and show how it reorders a candidate set.
 
 Candidates come from the full-text branch (`fts_search`), on purpose: it
@@ -7,7 +7,7 @@ and bge-reranker-v2-m3 together do not fit in RAM on the dev box.
 
 For each question it pulls ~40 FTS candidates, times a single `rerank()`
 call over all of them, and prints the top hits before and after. The
-headline number is the per-call rerank latency on CPU (the plan expects
+headline number is the per-call rerank latency on CPU (a GPU does
 ~1.5 s for 40 pairs) -- printed per question and as a mean.
 
 Run with:

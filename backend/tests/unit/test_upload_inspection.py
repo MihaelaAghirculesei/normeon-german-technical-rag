@@ -1,4 +1,4 @@
-"""Upload inspection and the request-size limit (Giorno 26), on real files:
+"""Upload inspection and the request-size limit, on real files:
 PDFs and Word documents are generated here, including an encrypted PDF and
 a zip bomb, and the size limit is exercised over HTTP."""
 

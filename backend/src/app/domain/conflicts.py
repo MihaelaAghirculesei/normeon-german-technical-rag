@@ -1,5 +1,5 @@
 """Detect when the retrieved sources disagree by version on the same
-requirement code (plan, Giorno 13).
+requirement code.
 
 `Source.version_label` is a per-*document* value (one `Document` row has
 exactly one `version_label`), so grouping conflicts by `document_id`

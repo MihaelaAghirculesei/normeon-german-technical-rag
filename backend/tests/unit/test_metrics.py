@@ -1,4 +1,4 @@
-"""Observability (Giorno 27): the Prometheus metrics, the phase timer that
+"""Observability: the Prometheus metrics, the phase timer that
 feeds them and the traces, the readable trace summary, and the request id
 that ties logs, traces and query_logs together."""
 

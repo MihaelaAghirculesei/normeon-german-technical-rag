@@ -39,7 +39,7 @@ async def hybrid_search(
 
     `rrf_k`, the per-branch `weights` (vector, full-text, trigram) and
     `fts_match` default to the configured values and are experiment-matrix
-    variables in Week 4. The branches run sequentially: they share one AsyncSession,
+    variables. The branches run sequentially: they share one AsyncSession,
     which is not safe for concurrent statements, and each branch's
     `SET LOCAL` knobs stay scoped to their own statement anyway.
     """

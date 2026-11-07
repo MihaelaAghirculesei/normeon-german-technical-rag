@@ -1,6 +1,5 @@
-"""Typed shapes for the evaluation harness: the question format (plan,
-Giorno 16), the run configuration the matrix varies (Giorno 20), and the
-report one run writes out.
+"""Typed shapes for the evaluation harness: the question format, the run
+configuration the matrix varies, and the report one run writes out.
 
 `EvalQuestion` is a Pydantic model so `backend/eval/dataset/schema.json`
 can be *generated* from it (`EvalQuestion.model_json_schema()`) rather
@@ -54,7 +53,7 @@ class EvalQuestion(BaseModel):
 
 
 class EvalConfig(BaseModel):
-    """The knobs the Week 4 matrix (Giorno 20) varies. `chunking_strategy`,
+    """The knobs the evaluation matrix varies. `chunking_strategy`,
     `retrieval_mode` and `top_k` are all applied by the runner (passed
     straight to `generate_answer` -> `retrieve_context`, which picks
     vector-only or hybrid retrieval and reranks down to `top_k`); the

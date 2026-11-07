@@ -1,4 +1,4 @@
-"""Two-layer correctness metric (plan, Giorno 18).
+"""Two-layer correctness metric.
 
 Layer 1 -- deterministic: every `expected_answer_points` string must
 appear in the answer after a normalization that only smooths numeric

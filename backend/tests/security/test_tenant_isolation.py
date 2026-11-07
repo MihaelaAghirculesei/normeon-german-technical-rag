@@ -1,4 +1,4 @@
-"""Tenant isolation through the HTTP API (Giorno 25).
+"""Tenant isolation through the HTTP API.
 
 The headline case: a user of tenant A asks a question whose answer exists
 only in tenant B's documents and gets NICHT_GEFUNDEN -- not a 403, because

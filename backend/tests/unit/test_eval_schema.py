@@ -30,7 +30,7 @@ def test_smoke_question_set_validates() -> None:
 
 
 def test_full_question_set_has_fifty_entries_ten_per_category() -> None:
-    """Plan, Giorni 17-18 'Fatto quando': questions.yaml has 50 entries
+    """questions.yaml has 50 entries
     validated against the schema in CI."""
     questions = load_questions(QUESTIONS_PATH)
 

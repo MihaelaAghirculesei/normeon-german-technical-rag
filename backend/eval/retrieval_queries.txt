@@ -1,6 +1,6 @@
 # 15 hand-written retrieval probe queries over the dev corpus
 # (StVZO.pdf + FZV.pdf). One question per line; blank lines and lines
-# starting with '#' are ignored. This is the ancestor of the Week 4
+# starting with '#' are ignored. This is the ancestor of the
 # evaluation suite -- for now it only feeds scripts/run_eval_queries.py,
 # which runs each question through the full pipeline and prints a table.
 # Later this file grows an expected-section column per question.

@@ -11,9 +11,9 @@ _FIXED_WINDOW_OVERLAP = 0.15
 
 
 def _estimate_tokens(text: str) -> int:
-    """Whitespace-word count, used as a token proxy until Day 5 wires in the
-    real embedding model's tokenizer. Stable and cheap to test; the ~500/800/
-    100 thresholds in the plan are approximate anyway."""
+    """Whitespace-word count, used as a token proxy instead of the
+    embedding model's tokenizer. Stable and cheap to test; the ~500/800/
+    100 thresholds are approximate anyway."""
     return len(text.split())
 
 

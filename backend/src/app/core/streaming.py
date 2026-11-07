@@ -1,4 +1,4 @@
-"""A generic async-iterator heartbeat wrapper (plan, Giorno 14).
+"""A generic async-iterator heartbeat wrapper.
 
 A long gap between two events -- a slow retrieval, a model "thinking"
 before its first token -- can trip an idle-connection timeout on an

@@ -1,4 +1,4 @@
-"""Cost tracking (plan, Giorno 15): a versioned per-model pricing table
+"""Cost tracking: a versioned per-model pricing table
 (``backend/pricing.yaml``) plus the pure calculation that turns
 ``(model, prompt_tokens, completion_tokens)`` into a USD cost.
 

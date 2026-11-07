@@ -1,5 +1,4 @@
-"""Tracing, and the phase timer that feeds both traces and metrics
-(Giorno 27).
+"""Tracing, and the phase timer that feeds both traces and metrics.
 
 `phase("rerank")` opens an OpenTelemetry span *and* records the duration in
 `normeon_phase_seconds{phase="rerank"}`, so traces and the latency metrics
@@ -10,8 +9,8 @@ cannot disagree about where the time went. The phases are `parse`, `embed`,
 Where traces go (`settings.otel_exporter`):
   - `console` (development): one readable `trace.completed` log line per
     request, with every phase indented under its parent and its duration
-    -- the plan's "a request produces a readable trace with the time of
-    each phase";
+    -- a request produces a readable trace with the time of
+    each phase;
   - `otlp` (production): batched to a collector at `settings.otel_endpoint`;
   - `none`: tracing off.
 """

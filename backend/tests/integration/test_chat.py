@@ -1,4 +1,4 @@
-"""The Day 11 acceptance check against a real pgvector database:
+"""The answer acceptance check against a real pgvector database:
 a question produces a German answer carrying `[S1]` markers, and every
 marker in that answer resolves to a real source with real page metadata.
 
@@ -172,7 +172,7 @@ async def _run(database_url: str, tmp_path: Path) -> None:
         assert citation.document_id == doc_a_id
         assert citation.snippet
 
-    # --- Giorno 15: a real query_logs row exists for this answer --------
+    # --- cost tracking: a real query_logs row exists for this answer --------
     async with session_factory() as session:
         logged = (
             await session.scalars(

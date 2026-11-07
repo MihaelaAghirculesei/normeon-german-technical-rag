@@ -74,7 +74,7 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
 
 
 async def _noop_record_query_log(session: Any, **kwargs: Any) -> None:
-    """Default query_log stub (Giorno 15): most tests don't care that a
+    """Default query_log stub: most tests don't care that a
     row would be written, just that generate_answer/_stream don't need a
     real session to do it -- `object()` is still a valid `session` arg."""
 
@@ -387,7 +387,7 @@ async def test_a_single_version_label_adds_no_conflict_instruction(
     assert "unterschiedlichen Versionen" not in captured["system"]
 
 
-# --- generate_answer_stream (Giorno 14) -------------------------------------
+# --- generate_answer_stream -------------------------------------
 
 
 class _RefusingStreamLlm:
@@ -434,7 +434,7 @@ class _FailingStreamLlm:
 class _FinallyTrackingLlm:
     """Its `stream` sets `closed = True` in a `finally`, so closing the
     generator early (a client disconnect) can be proven to cascade all
-    the way down to it -- "annulla il task LLM" from the plan."""
+    the way down to it."""
 
     name = "spy"
 
@@ -707,7 +707,7 @@ async def test_closing_the_stream_early_cascades_to_the_llm_client(monkeypatch: 
     assert llm.closed is True
 
 
-# --- cost tracking + query_logs (Giorno 15) ---------------------------------
+# --- cost tracking + query_logs ---------------------------------
 
 
 async def test_generate_answer_writes_a_query_log_row(monkeypatch: Any) -> None:

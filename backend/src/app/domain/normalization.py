@@ -86,6 +86,6 @@ def extract_all_codes(text: str) -> set[str]:
     canonicalised the same way `normalize_de` collapses one: `LH 3.2.1` /
     `LH-3.2.1` -> `lh3.2.1`. Used to line up two chunks -- possibly from
     different documents -- that reference the same requirement code
-    (`domain/conflicts.find_version_conflicts`, Day 13).
+    (`domain/conflicts.find_version_conflicts`).
     """
     return {f"{m.group(1)}{m.group(2)}".lower() for m in _REQUIREMENT_CODE.finditer(text)}

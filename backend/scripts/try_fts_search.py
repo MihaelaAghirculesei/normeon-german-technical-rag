@@ -1,8 +1,8 @@
-"""Ad-hoc check for Day 7: run a few German questions through both the
+"""Ad-hoc check: run a few German questions through both the
 full-text and the vector retriever against the dev database and print the
 top hits side by side. The point is the code-shaped queries -- where FTS
 lands the exact section and the pure-vector branch drifts -- which is the
-argument for the hybrid retriever coming on Day 8.
+argument for the hybrid retriever.
 
 Run with:
     cd backend
@@ -27,7 +27,7 @@ from app.services.retrieval import fts_search, vector_search
 # win: exact terms and code references that appear verbatim in the text.
 # The second is where the German stemmer's lack of compound splitting and
 # tsquery's AND semantics hurt it -- and the vector branch carries it.
-# That contrast is the case for the hybrid retriever on Day 8.
+# That contrast is the case for the hybrid retriever.
 KEYWORD_QUERIES = [
     "ECE-R 83",
     "Abblendlicht Scheinwerfer Fahrbahn",

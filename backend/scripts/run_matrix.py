@@ -1,4 +1,4 @@
-"""Run the Giorno 28 ablation matrix and write a comparison report.
+"""Run the ablation matrix and write a comparison report.
 
 One baseline -- structural chunking, hybrid retrieval, cross-encoder
 reranker, top_k=5, the configured model -- and one row per experiment that

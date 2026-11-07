@@ -1,4 +1,4 @@
-"""Regenerate backend/openapi.json from the FastAPI app (plan, Giorno 21).
+"""Regenerate backend/openapi.json from the FastAPI app.
 The app is the single source of truth; this file is the checked-in
 contract the frontend generates its typed client from, and
 tests/unit/test_openapi.py fails if the two drift.

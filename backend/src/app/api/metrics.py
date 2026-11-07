@@ -1,4 +1,4 @@
-"""`GET /metrics`: the Prometheus exposition of `core.metrics` (Giorno 27).
+"""`GET /metrics`: the Prometheus exposition of `core.metrics`.
 
 Outside `/api/v1` and the OpenAPI document: it is for a scraper, not for
 the frontend. Open by default, as a scraper on the internal network

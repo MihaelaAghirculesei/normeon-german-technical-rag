@@ -1,5 +1,5 @@
 """Compute human-vs-judge agreement from a filled-in human_review.csv
-(plan, Giorno 18's "step almost nobody does"): score the 15 rows'
+("step almost nobody does"): score the 15 rows'
 `human_score` column by hand yourself, then run this to get percent
 agreement and Cohen's kappa against the judge's own `judge_score`
 column -- and paste the result into docs/EVALUATION.md yourself.

@@ -4,7 +4,7 @@ stable ``marker -> Source`` map the backend keeps to itself.
 The model only ever cites ``[S1]``, ``[S2]``, ...; it is never shown or
 asked for page numbers or filenames. This module owns the mapping from
 those markers back to the real citation metadata -- that split is what
-makes the citations verifiable (plan, Giorno 11, "NON fare").
+makes the citations verifiable.
 
 Pure: no I/O, no settings, no logging.
 """
@@ -73,7 +73,7 @@ def _attribute(value: str) -> str:
 def _untrusted_block(source: Source) -> str:
     """One source as delimited, untrusted data. Deliberately without the
     filename and pages: the model cites markers only, and what it never
-    sees it cannot be talked into revealing (Giorno 26)."""
+    sees it cannot be talked into revealing."""
     attrs = [f'marker="[{source.marker}]"']
     if source.version_label:
         attrs.append(f'version="{_attribute(source.version_label)}"')
@@ -104,8 +104,8 @@ def build_context(
         </quellen>
 
     Returns ``(block, {marker: Source})``. An empty input gives an empty
-    string and an empty map; the caller decides what that means (Day 13
-    turns it into a pre-generation abstention).
+    string and an empty map; the caller decides what that means (the generation
+    service turns it into a pre-generation abstention).
     """
     sources: dict[str, Source] = {}
     blocks: list[str] = []

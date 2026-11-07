@@ -1,4 +1,4 @@
-"""Refuse an oversized request body before reading it (Giorno 26).
+"""Refuse an oversized request body before reading it.
 
 By the time an endpoint runs, Starlette has already received the whole
 multipart body: a check there would only fire after a 200 MB upload had
