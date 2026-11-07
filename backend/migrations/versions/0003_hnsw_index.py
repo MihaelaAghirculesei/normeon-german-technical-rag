@@ -6,7 +6,7 @@ Create Date: 2026-08-26
 
 Deliberately separate from 0001: an HNSW index built on an empty table is
 wasted work and distorts the first bulk-load timings. This runs after the
-corpus has been ingested for the first time (Day 5).
+corpus has been ingested for the first time.
 
 Cosine distance (`vector_cosine_ops`) matches the e5 convention of
 L2-normalised embeddings compared by cosine similarity. m / ef_construction

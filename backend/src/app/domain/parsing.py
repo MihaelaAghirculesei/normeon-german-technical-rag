@@ -21,5 +21,5 @@ class ParsedDocument:
     blocks: list[Block]
     # Pages whose text came from OCR because they carried (almost) no text
     # layer -- scans. Their text may contain recognition errors, so chunks
-    # from them are flagged all the way to the UI (Giorno 26).
+    # from them are flagged all the way to the UI.
     ocr_pages: frozenset[int] = frozenset()

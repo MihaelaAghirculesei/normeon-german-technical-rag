@@ -1,4 +1,4 @@
-"""Human-vs-judge agreement (plan, Giorno 18): "the step almost nobody
+"""Human-vs-judge agreement: "the step almost nobody
 does" -- score a subset of answers by hand yourself, then measure how
 much your judgments and the LLM-judge's agree, so Layer 2's numbers can
 be trusted with eyes open rather than taken on faith.

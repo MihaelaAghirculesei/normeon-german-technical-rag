@@ -260,7 +260,7 @@ def test_chat_rejects_an_unknown_strategy(client_with_generator: Any) -> None:
 def test_an_llm_failure_never_surfaces_as_a_bare_500(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Giorno 13: a typed NormeonError from the generation path is mapped
+    """A typed NormeonError from the generation path is mapped
     to a coherent JSON error body by main.py's generic handler, not left
     to fall through as an unstructured crash."""
 
@@ -283,7 +283,7 @@ def test_an_llm_failure_never_surfaces_as_a_bare_500(
     assert response.json() == {"code": "llm_unavailable", "detail": "the model host is down"}
 
 
-# --- POST /api/v1/chat/stream (Giorno 14) -----------------------------------
+# --- POST /api/v1/chat/stream -----------------------------------
 
 
 def _parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:

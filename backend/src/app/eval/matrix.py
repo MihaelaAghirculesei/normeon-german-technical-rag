@@ -1,4 +1,4 @@
-"""The Giorno 20 comparison report: one row per configuration in the
+"""The comparison report: one row per configuration in the
 experiment matrix, rendered as markdown and as HTML from the same table
 model, so a reader (or the ADR that follows) can say concretely which
 configuration wins, on which category, and whether the margin is larger

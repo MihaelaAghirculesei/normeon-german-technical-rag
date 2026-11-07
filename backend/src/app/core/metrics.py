@@ -1,4 +1,4 @@
-"""Prometheus metrics (Giorno 27), served at `/metrics`.
+"""Prometheus metrics, served at `/metrics`.
 
 What an operator needs to see at a glance:
   - latency per pipeline phase (`normeon_phase_seconds`, recorded by
@@ -10,7 +10,7 @@ What an operator needs to see at a glance:
 
 Process-local, like any Prometheus client: with several workers, the
 scraper sums them. `hallucinated_citation_total` keeps the name and the
-`.inc()` call sites it had as a plain counter since Giorno 12.
+`.inc()` call sites it had as a plain counter before.
 """
 
 from __future__ import annotations

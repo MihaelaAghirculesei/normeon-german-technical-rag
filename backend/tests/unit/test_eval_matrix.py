@@ -1,4 +1,4 @@
-"""Unit tests for app/eval/matrix (plan, Giorno 20): the markdown/HTML
+"""Unit tests for app/eval/matrix: the markdown/HTML
 comparison table across the experiment matrix's configurations."""
 
 from __future__ import annotations

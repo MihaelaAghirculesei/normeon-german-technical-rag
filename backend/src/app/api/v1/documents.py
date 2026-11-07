@@ -84,7 +84,7 @@ async def upload_document(
     content = await file.read()
     # Opened and checked before anything is stored: an encrypted, broken or
     # zip-bomb file is refused here with a clear error instead of becoming
-    # a document stuck in "failed" (Giorno 26).
+    # a document stuck in "failed".
     try:
         await asyncio.wait_for(
             asyncio.to_thread(inspect_upload, suffix, content, _upload_limits()),

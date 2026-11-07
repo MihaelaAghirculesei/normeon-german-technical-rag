@@ -1,4 +1,4 @@
-"""OCR fallback for scanned PDF pages (Giorno 26).
+"""OCR fallback for scanned PDF pages.
 
 The scans are made here: a page of text is rendered to an image and that
 image becomes the only content of a new page, so the page has no text

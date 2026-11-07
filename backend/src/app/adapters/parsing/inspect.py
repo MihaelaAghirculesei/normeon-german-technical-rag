@@ -1,4 +1,4 @@
-"""Check an uploaded file before anything is stored (Giorno 26).
+"""Check an uploaded file before anything is stored.
 
 Opening a file is cheap; parsing, chunking and embedding it is not. So the
 upload endpoint asks here first whether the file can be read at all, and

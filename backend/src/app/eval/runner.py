@@ -1,10 +1,9 @@
 """Run a question set through the real answer path under one
-configuration and write `backend/eval/reports/<config_hash>.json`
-(plan, Giorno 16).
+configuration and write `backend/eval/reports/<config_hash>.json`.
 
 Scoring against `gold_sources` / `expected_answer_points` is NOT here --
 this only captures raw run output (answer, citations, retrieved chunks,
-latency, cost). The metrics that read this report are Giorno 19.
+latency, cost). The metrics that read this report are in eval/metrics.py.
 """
 
 from __future__ import annotations

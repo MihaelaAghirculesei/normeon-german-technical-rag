@@ -1,4 +1,4 @@
-"""Password hashing and access tokens (Giorno 25).
+"""Password hashing and access tokens.
 
 Passwords: scrypt from the standard library -- memory-hard, no extra
 dependency -- stored as a self-describing string so the cost parameters

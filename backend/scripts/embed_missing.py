@@ -1,6 +1,6 @@
 """Embed the chunks that have no vector yet for the configured embedder.
 
-Moving the corpus to another embedding model (Giorno 29: e5 -> Gemini)
+Moving the corpus to another embedding model (e5 -> Gemini for the demo)
 means embedding every chunk again. Vectors are keyed by the embedder's
 name, so the old model's rows stay and both can be compared. A batch at a
 time, committed, with a pause between batches to stay inside a free

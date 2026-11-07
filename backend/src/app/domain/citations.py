@@ -1,5 +1,5 @@
 """Validate the citation markers a model actually wrote against the
-sources it was actually given (plan, Giorno 12).
+sources it was actually given.
 
 A model can invent a marker that was never offered (`[S7]` when only
 five sources exist) or, with a weak model/prompt, write claims with no

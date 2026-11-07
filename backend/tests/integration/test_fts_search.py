@@ -1,6 +1,6 @@
 """German full-text search against a real Postgres.
 
-Covers the Day 7 acceptance criterion (a requirement-code query finds the
+Covers the full-text acceptance criterion (a requirement-code query finds the
 right chunk) plus the two behaviours normalize_de leans on / documents:
 the `german` config folds umlauts itself, and it does *not* split
 compounds (docs/FAILURE-MODES.md).
@@ -112,7 +112,7 @@ async def _run(database_url: str, tmp_path: Path) -> None:
         )
         doc_a_id, doc_b_id = doc_a.id, doc_b.id
 
-    # --- Day 7 acceptance: the code query lands on the right chunk, even
+    # --- acceptance: the code query lands on the right chunk, even
     #     though it's written "LH-3.2.1" in the doc and asked three ways ---
     for asked in ("Welche Anforderungen stellt LH-3.2.1?", "LH 3.2.1", "lh3.2.1"):
         async with session_factory() as session:
@@ -136,7 +136,7 @@ async def _run(database_url: str, tmp_path: Path) -> None:
     assert "Bremsanlage" in prose[0].content
 
     # --- a word the text never uses ("Winter") drops every chunk when all
-    #     terms must match, and only ranks lower when any may (Giorno 28) ---
+    #     terms must match, and only ranks lower when any may ---
     asked = "Welche Verzoegerung muss die Bremsanlage im Winter sicherstellen?"
     async with session_factory() as session:
         every = await fts_search(

@@ -1,4 +1,4 @@
-"""Unit tests for app/eval/metrics (plan, Giorno 19): retrieval,
+"""Unit tests for app/eval/metrics: retrieval,
 citation and outcome metrics computed over a real eval run. Pure --
 every fixture here is a synthetic EvalQuestion/QuestionRun/
 ScoredQuestionRun, no report/DB/LLM involved."""

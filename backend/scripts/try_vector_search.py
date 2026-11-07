@@ -1,4 +1,4 @@
-"""Ad-hoc check for Day 6: run a handful of German questions through the
+"""Ad-hoc check: run a handful of German questions through the
 vector retriever against the dev database and print the top hits, with the
 embedding time and the DB time reported separately.
 
@@ -7,7 +7,7 @@ Run with:
     DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \\
         .venv/Scripts/python scripts/try_vector_search.py
 
-Acceptance bar (plan, Giorno 6): plausible chunks back from the DB in
+Acceptance bar: plausible chunks back from the DB in
 <150 ms. The e5-large query embedding on CPU is measured on its own line
 so it isn't counted against that bar.
 """

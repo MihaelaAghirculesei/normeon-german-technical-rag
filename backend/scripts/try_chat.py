@@ -1,4 +1,4 @@
-"""Ad-hoc check for Day 11: run a handful of German questions through the
+"""Ad-hoc check: run a handful of German questions through the
 full answer path (retrieve -> context -> prompt -> LLM) against the dev
 database and print the answer plus the backend-held source table.
 
@@ -13,20 +13,20 @@ Point it at a real model by setting, in the environment or .env:
     LLM_API_KEY=<key>
     LLM_MODEL=<model-id>
 
-Acceptance bar (plan, Giorno 11): a question yields a German answer with
+Acceptance bar: a question yields a German answer with
 `[S1]` markers, and every marker maps to a real page/section.
 
-Since Day 13, the Katar question may abstain *before* the LLM is even
+With the confidence gate, the Katar question may abstain *before* the LLM is even
 called (`abstained_pre_generation`, `generation_ms == 0`) if the top
 reranked chunk's score is below `min_rerank_score_for_answer` --
 otherwise it still reaches the LLM and, with the fake provider, "cites"
 whatever irrelevant chunks were retrieved rather than truly abstaining
 (see docs/FAILURE-MODES.md, "Abstention and conflict detection").
 
-Since Day 15, every question also writes a `query_logs` row and prints
+Every question also writes a `query_logs` row and prints
 its cost, if the resolved model is priced in `backend/pricing.yaml` --
-the fake provider (and any unlisted model) always shows `n/a`. This is
-the Day 15 "Fatto quando": switch `LLM_PROVIDER`/`LLM_MODEL` in `.env`,
+the fake provider (and any unlisted model) always shows `n/a`. To check
+cost tracking: switch `LLM_PROVIDER`/`LLM_MODEL` in `.env`,
 re-run, and the SAME questions work identically with a different (or
 newly non-null) cost recorded.
 """

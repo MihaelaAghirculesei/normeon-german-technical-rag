@@ -1,4 +1,4 @@
-"""Compute the Giorno 19 retrieval/citation/outcome metrics for an
+"""Compute the retrieval/citation/outcome metrics for an
 already-scored eval report and write `<hash>.metrics.json` next to it.
 
     cd backend

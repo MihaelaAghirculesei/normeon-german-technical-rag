@@ -1,5 +1,5 @@
 """`GET /api/v1/admin/stats`: the numbers behind the frontend's statistics
-page (Giorno 27). Admins only, and the caller's tenant only.
+page. Admins only, and the caller's tenant only.
 
 Answer statistics come from `query_logs`, so they are exact and the same
 for every worker. Invented citations and LLM errors are not stored per
