@@ -1,12 +1,11 @@
 """The generation seam.
 
-Day 11 needs exactly one thing from an LLM: given a system instruction
+Answering needs exactly one thing from an LLM: given a system instruction
 and a user message, return the completion text (and, if the server
-reports them, the token counts). Day 13 widened it with retries and
-typed errors on `complete`, kept inside the adapters, not the Protocol.
-Day 14 added `stream`, for `POST /api/v1/chat/stream`. Day 15 widens
-`stream` from raw text pieces to `Delta` -- the plan's own sketch for
-this day already shows `stream(...) -> AsyncIterator[Delta]` -- so a
+reports them, the token counts). Retries and
+typed errors on `complete` stay inside the adapters, not the Protocol.
+`stream` serves `POST /api/v1/chat/stream` and yields `Delta`s rather
+than raw text pieces, so a
 streamed answer's cost can be tracked the same as a non-streamed one's,
 without which `Delta.prompt_tokens`/`completion_tokens` would have
 nowhere to travel from the wire to `services.generation.

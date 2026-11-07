@@ -1,4 +1,4 @@
-"""Ad-hoc check for Day 8: run German questions through the vector, the
+"""Ad-hoc check: run German questions through the vector, the
 full-text and the hybrid (RRF) retriever against the dev database and
 print the top hits side by side.
 
@@ -8,7 +8,7 @@ Two things to look for in the HYBRID column:
   up by consensus (e.g. a wrong vector #1 is displaced);
 - promotion: a chunk the hybrid puts in its top-5 that sat outside the
   top-5 of *each* branch on its own -- the case for fusing rather than
-  picking one branch. On this corpus FTS recall is thin (Day 7's
+  picking one branch. On this corpus FTS recall is thin (the
   AND-semantics limit), so re-ranking is the more common of the two.
 
 Run with:
@@ -32,7 +32,7 @@ from app.services.retrieval import fts_search, hybrid_search, vector_search
 
 # Two common terms each: `websearch_to_tsquery` ANDs them, so the FTS
 # branch still returns a full ranking (a five-term question matches almost
-# nothing -- the Day 7 AND-semantics limit). With both branches producing
+# nothing -- the AND-semantics limit). With both branches producing
 # a real ranking that only partly agrees, RRF consensus can lift a chunk
 # that sat mid-list in each branch above one that led only a single branch.
 QUERIES = [

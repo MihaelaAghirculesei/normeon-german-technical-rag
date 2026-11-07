@@ -1,6 +1,6 @@
 """Ingests the same PDF twice against a real Postgres and asserts the chunk
-count doesn't change the second time -- the literal Day 5 acceptance
-criterion from the plan, made into a regression test.
+count doesn't change the second time -- the ingestion acceptance
+criterion, made into a regression test.
 """
 
 import asyncio

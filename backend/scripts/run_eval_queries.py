@@ -1,5 +1,5 @@
 """Run every question in eval/retrieval_queries.txt through the full
-retrieval pipeline and print a table. Ancestor of the Week 4 evaluation
+retrieval pipeline and print a table. Ancestor of the evaluation
 suite -- no scoring yet, just "what does the pipeline return, and how
 long did each phase take".
 

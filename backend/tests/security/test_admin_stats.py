@@ -1,4 +1,4 @@
-"""The admin statistics (Giorno 27) against a real Postgres: admins only,
+"""The admin statistics against a real Postgres: admins only,
 and only the caller's own tenant -- the numbers are confidential too."""
 
 from fastapi.testclient import TestClient

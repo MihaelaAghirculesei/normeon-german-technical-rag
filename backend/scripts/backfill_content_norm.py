@@ -1,7 +1,7 @@
 """Recompute chunks.content_norm with the real normalize_de.
 
-Day 5 ingested the corpus with a `content.lower()` placeholder for
-content_norm; Day 7 replaced it with normalize_de. This rewrites the
+The first ingestion filled content_norm with a `content.lower()`
+placeholder; normalize_de replaced it later. This rewrites the
 column for every existing chunk -- the `tsv` generated column and its GIN
 index follow automatically on update. Idempotent (normalize_de is), so
 re-running is a no-op.

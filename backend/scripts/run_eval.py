@@ -1,12 +1,12 @@
 """Run an evaluation question set against the dev corpus and write
-`backend/eval/reports/<config_hash>.json` (plan, Giorno 16).
+`backend/eval/reports/<config_hash>.json`.
 
     cd backend
     DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \\
         .venv/Scripts/python scripts/run_eval.py
 
 Defaults to the throwaway smoke set (`eval/dataset/questions.smoke.yaml`)
-and the offline `fake` LLM. The real 50-question set (Giorni 17-18) is
+and the offline `fake` LLM. The real 50-question set is
 passed with `--questions eval/dataset/questions.yaml`; point at a real
 model with the usual `LLM_PROVIDER`/`LLM_API_BASE_URL`/`LLM_MODEL` env
 vars.

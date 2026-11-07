@@ -1,4 +1,4 @@
-"""POST /api/v1/auth/login and GET /api/v1/auth/me (Giorno 25)."""
+"""POST /api/v1/auth/login and GET /api/v1/auth/me."""
 
 from __future__ import annotations
 

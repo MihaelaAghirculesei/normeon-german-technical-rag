@@ -1,4 +1,4 @@
-"""Indirect prompt injection (Giorno 26): instructions hidden in an
+"""Indirect prompt injection: instructions hidden in an
 uploaded document must not steer the answer.
 
 The defence has three layers, each tested on its own:
@@ -155,7 +155,7 @@ class ObedientLlm:
 
 @pytest.fixture(scope="module")
 def injected_document(security_db: SecurityDb, tmp_path_factory: pytest.TempPathFactory) -> None:
-    """Tenant A gets a document with the plan's injection paragraph."""
+    """Tenant A gets a document with an injection paragraph."""
     pdf = build_pdf(
         tmp_path_factory.mktemp("injection") / "injected.pdf",
         [

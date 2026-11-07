@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
 
     # Retrieval. `retrieval_strategy` picks which chunking to search over
-    # (the two are ingested side by side); the eval matrix in Week 4 flips
+    # (the two are ingested side by side); the eval matrix flips
     # it. `hnsw_ef_search` is pgvector's per-session recall/latency knob --
     # below ~20 recall collapses, above ~100 costs latency for nothing.
     retrieval_strategy: Literal["fixed_500", "structural"] = "structural"
@@ -63,18 +63,18 @@ class Settings(BaseSettings):
     # code ("LH-3.2.1", "UN R79"): pg_trgm.word_similarity_threshold for
     # `:code <% content_norm`. 0.5 tolerates a little spacing/spelling drift.
     trgm_code_threshold: float = 0.5
-    # Full-text match on all of the question's terms or on any of them
-    # (Giorno 28). "all" finds nothing for a question that names one word
+    # Full-text match on all of the question's terms or on any of them.
+    # "all" finds nothing for a question that names one word
     # the text does not use; "any" lets ts_rank_cd sort it out.
     fts_match: Literal["all", "any"] = "all"
 
-    # Hybrid retrieval (Day 8): fuse the vector, full-text and trigram
+    # Hybrid retrieval: fuse the vector, full-text and trigram
     # rankings with Reciprocal Rank Fusion. `hybrid_candidate_k` is how
     # many hits to pull from each branch before fusing; `hybrid_top_k` how
-    # many fused hits to keep (the Day 9 reranker narrows further, so this
+    # many fused hits to keep (the reranker narrows further, so this
     # stays wide). `rrf_k` dampens the weight of top ranks -- 60 is the
     # RRF paper's value. The three weights scale each branch's
-    # contribution; all four are experiment-matrix variables in Week 4.
+    # contribution; all four are experiment-matrix variables.
     hybrid_candidate_k: int = 40
     hybrid_top_k: int = 40
     rrf_k: int = 60
@@ -82,12 +82,12 @@ class Settings(BaseSettings):
     rrf_weight_fts: float = 1.0
     rrf_weight_trgm: float = 1.0
 
-    # Reranking + context selection (Day 9). The reranker re-scores the
+    # Reranking + context selection. The reranker re-scores the
     # hybrid candidates jointly against the query; `reranker_provider =
     # "noop"` is the matrix's "off" cell. `rerank_top_k` is how many
     # survive the rerank. Context selection then fills a token budget
     # (not a fixed chunk count), skipping a `section_path` already
-    # represented. All four are experiment-matrix variables in Week 4.
+    # represented. All four are experiment-matrix variables.
     reranker_provider: Literal["noop", "cross_encoder"] = "cross_encoder"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     # Token cap for one (query, chunk) pair. Without it sentence-
@@ -100,11 +100,11 @@ class Settings(BaseSettings):
     rerank_top_k: int = 8
     context_token_budget: int = 4000
 
-    # Generation (Day 11). The answer prompt is a versioned file in
+    # Generation. The answer prompt is a versioned file in
     # backend/prompts/, loaded by `answer_prompt_name`; its sha256 is
     # logged with every answer. The LLM seam is deliberately thin -- one
-    # OpenAI-compatible wire format reaches most hosted models -- with the
-    # multi-provider Protocol and cost tracking deferred to Day 15.
+    # OpenAI-compatible wire format reaches most hosted models -- no
+    # provider SDK needed.
     # `llm_provider = "fake"` is the offline default: a deterministic
     # canned answer, no network, no key. `openai_compatible` needs
     # `llm_api_base_url` (+ usually `llm_api_key`) and `llm_model`.
@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     answer_prompt_name: str = "answer_de.v2"
 
-    # Abstention + resilience (Day 13). If the top reranked chunk's score
+    # Abstention + resilience. If the top reranked chunk's score
     # is below this, `generate_answer` answers NICHT_GEFUNDEN without
     # calling the LLM at all -- the cost-saving "abstained_pre_generation"
     # path. NOTE: the raw score's scale depends on `reranker_provider` --
@@ -138,7 +138,7 @@ class Settings(BaseSettings):
     # `llm_stream_idle_s` between deltas.
     min_rerank_score_for_answer: float = 0.0
 
-    # Auth (Giorno 25). The default secret only exists so a fresh clone runs;
+    # Auth. The default secret only exists so a fresh clone runs;
     # outside `environment = "development"` / "test" startup refuses it (see
     # `insecure_settings`). Tokens are short-lived on purpose: there is no
     # refresh flow, so a working day is the trade-off between convenience
@@ -149,7 +149,7 @@ class Settings(BaseSettings):
     # Password for the two demo users `python -m app.db.seed` creates.
     demo_user_password: str = "normeon-demo"
 
-    # Upload limits (Giorno 26). A body over `max_upload_mb` is refused
+    # Upload limits. A body over `max_upload_mb` is refused
     # before it is read; a file is opened and checked (encryption, page
     # count, zip-bomb shape) before anything is stored; parsing in the
     # background gives up after `parse_timeout_s`.
@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     document_storage_dir: Path = Path("data/documents")
     max_request_kb: int = 256  # every other endpoint takes small JSON
 
-    # Per-IP rate limits (Giorno 29, core/rate_limit.py); 0 turns a rule
+    # Per-IP rate limits (core/rate_limit.py); 0 turns a rule
     # off, the default for development and tests. The deployed image sets
     # them: a shared demo link must not spend the free-tier quota at once.
     rate_limit_login_per_minute: int = 0
@@ -180,7 +180,7 @@ class Settings(BaseSettings):
     ocr_dpi: int = 300
     ocr_min_chars: int = 50
 
-    # Observability (Giorno 27). Traces: `console` logs one readable line per
+    # Observability. Traces: `console` logs one readable line per
     # request; `otlp` sends them to a collector at `otel_endpoint`.
     # `/metrics` is open when `metrics_token` is unset (a scraper on the
     # internal network); set it to require `Authorization: Bearer <token>`.

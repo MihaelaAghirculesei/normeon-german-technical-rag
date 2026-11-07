@@ -33,7 +33,7 @@ EMBEDDING_BATCH_SIZE = 32
 # Dispatch by file extension -- both parsers produce the same ParsedDocument
 # shape, so everything downstream (chunking, embedding) is format-agnostic.
 def _parse_pdf_with_ocr(path: Path) -> ParsedDocument:
-    # Scanned pages are read by OCR when tesseract is available (Giorno 26).
+    # Scanned pages are read by OCR when tesseract is available.
     return parse_pdf(path, ocr=default_ocr(), ocr_min_chars=settings.ocr_min_chars)
 
 
@@ -86,7 +86,7 @@ async def get_or_create_document(
     parallel.
 
     `version_label`/`valid_from`/`valid_until` are needed for version-
-    conflict detection (`find_version_conflicts`, Giorno 13, groups by
+    conflict detection (`find_version_conflicts` groups by
     `version_label`). An existing document keeps the values it was first
     created with."""
     content_hash = hashlib.sha256(content).hexdigest()
@@ -146,7 +146,7 @@ async def process_document(
     being one transaction, so GET /documents/{id} can observe live progress
     while a large document is still being embedded.
 
-    A failure records why (`error_code`, Giorno 26): `parse_timeout` when
+    A failure records why (`error_code`): `parse_timeout` when
     parsing takes longer than `settings.parse_timeout_s`, `parse_failed`
     or `embedding_failed` otherwise. The parser runs in a worker thread,
     which cannot be killed: on a timeout the document is marked failed at

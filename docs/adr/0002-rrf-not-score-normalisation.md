@@ -20,7 +20,7 @@ other. Some way to combine them is needed.
 Fuse the branches with Reciprocal Rank Fusion (Cormack, Clarke & Buettcher,
 2009): `score(d) = Σ_i w_i / (k + rank_i(d))`, using each hit's **rank**
 within its branch, not its branch score. `k` (default 60) and the
-per-branch weights (default 1.0) are configuration, tuned by the Week 4
+per-branch weights (default 1.0) are configuration, tuned by the
 experiment matrix.
 
 ## Reasoning
@@ -49,7 +49,7 @@ experiment matrix.
 - RRF discards confidence: a branch that is *certain* and a branch that is
   *guessing* count the same at the same rank. This is a real limitation,
   documented in `docs/FAILURE-MODES.md` ("Hybrid retrieval (RRF fusion)").
-- If the Week 4 matrix shows a normalised or learned fusion beating RRF on
+- If the experiment matrix shows a normalised or learned fusion beating RRF on
   the 50-question eval set, this decision should be revisited — the
   branches already return `RetrievedChunk` objects carrying their branch
   score, so a score-aware fusion is a drop-in replacement for `rrf()` in

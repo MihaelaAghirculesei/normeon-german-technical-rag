@@ -7,7 +7,7 @@ failed questions is left out (E8 ran out of quota after 13 answers).
 Run with:
     cd backend
     .venv/Scripts/python scripts/plot_recall_by_category.py \\
-        --reports-dir eval/reports/day28 --out-dir ../docs/img
+        --reports-dir eval/reports/matrix --out-dir ../docs/img
 """
 
 import argparse
@@ -77,7 +77,7 @@ def collect(reports_dir: Path) -> list[ChartRow]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--reports-dir", type=Path, default=Path("eval/reports/day28"))
+    parser.add_argument("--reports-dir", type=Path, default=Path("eval/reports/matrix"))
     parser.add_argument("--out-dir", type=Path, default=Path("../docs/img"))
     args = parser.parse_args()
 

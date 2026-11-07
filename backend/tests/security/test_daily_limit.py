@@ -1,4 +1,4 @@
-"""The daily question cap (Giorno 29) against a real Postgres: it counts
+"""The daily question cap against a real Postgres: it counts
 every tenant's questions, although each tenant's own session sees only its
 rows under row-level security -- one tenant cannot hide spend from it."""
 

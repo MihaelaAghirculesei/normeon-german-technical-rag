@@ -1,4 +1,4 @@
-"""The daily question cap (Giorno 29): an automatic switch that stops
+"""The daily question cap: an automatic switch that stops
 answering once a day's budget is spent, so a shared demo link cannot
 exhaust the free-tier quota for everyone.
 

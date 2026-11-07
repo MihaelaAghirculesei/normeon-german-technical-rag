@@ -6,7 +6,7 @@ whatever ``[S1]``, ``[S2]``, ... markers appear in the *context block* of
 the rendered prompt, or returns exactly ``NICHT_GEFUNDEN`` when none do --
 which is what the real prompt asks the model to do with an empty or
 useless context. Enough to exercise the context builder, the endpoint,
-and citation validation (Day 12) without a network call or a key.
+and citation validation without a network call or a key.
 
 It only reads between the prompt's ``Quellen:`` and ``Frage:`` markers
 (falling back to the whole message if it can't find them, so a bare test

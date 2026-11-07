@@ -1,6 +1,6 @@
 """Idempotent demo-data seed. Run with: python -m app.db.seed
 
-Two tenants with one user each (Giorno 25), so tenant isolation can be
+Two tenants with one user each, so tenant isolation can be
 shown end to end: the demo tenant owns the ingested corpus; the second
 tenant starts empty. Both users share `settings.demo_user_password`.
 """

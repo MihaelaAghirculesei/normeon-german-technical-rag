@@ -13,9 +13,9 @@ to `RetrievedChunk`.
 - `k` dampens how much the top positions dominate. A larger k flattens
   the curve, so agreement across rankings outweighs any single ranking's
   #1. `k = 60` is the value from the original RRF paper (Cormack, Clarke
-  & Buettcher, 2009) and the Day 8 default.
+  & Buettcher, 2009) and the default here.
 - `w_i` weights ranking i; it defaults to 1.0 for every ranking. `k` and
-  the weights are experiment-matrix variables in Week 4, which is why
+  the weights are experiment-matrix variables, which is why
   they are plain arguments here rather than hard-coded.
 """
 

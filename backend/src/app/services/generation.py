@@ -1,11 +1,11 @@
 """``generate_answer`` (non-streaming) and ``generate_answer_stream``
-(Giorno 14, SSE) -- both walk the same path::
+(SSE) -- both walk the same path::
 
-    retrieve_context  ->  [pre-generation abstention gate, Giorno 13]
-      ->  build_context  ->  detect version conflicts (Giorno 13)
+    retrieve_context  ->  [pre-generation abstention gate]
+      ->  build_context  ->  detect version conflicts
       ->  render the versioned prompt  ->  LlmClient.complete / .stream
-      ->  extract_and_validate (Giorno 12)  ->  answer + valid
-      citations  ->  cost + query_logs row (Giorno 15)
+      ->  extract_and_validate  ->  answer + valid
+      citations  ->  cost + query_logs row
 
 ``_prepare`` holds everything the two share, up to but not including the
 LLM call itself, so the pre-generation gate, the conflict check and their
@@ -16,14 +16,14 @@ shared tail -- computing `config_hash` and cost, then writing the
 If the top reranked chunk's score is below `settings.
 min_rerank_score_for_answer` (or nothing was retrieved at all), the LLM
 is never called: the answer is NICHT_GEFUNDEN and the event is logged as
-`abstained_pre_generation` -- the cost-saving path Giorno 13 asks for.
+`abstained_pre_generation` -- the cost-saving path.
 Past that gate, citation validation (`domain.citations.
 extract_and_validate`) drops any marker the model invented and turns an
 answer with claims but zero valid citations into an abstention -- never
 a failed request. **For the streaming path this runs only after the full
 answer has been assembled**, so the `token` events are a draft: the
 `done` event carries the validated `answer` and `citations`, and the
-client replaces the draft with them (Giorno 26 -- before that, a draft
+client replaces the draft with them (before that, a draft
 steered by an instruction hidden in a document stayed on screen; see
 docs/FAILURE-MODES.md). A
 retrieval whose sources disagree by version on the same requirement code
@@ -84,7 +84,7 @@ _SYSTEM = (
 
 # Appended to the system message only when find_version_conflicts finds
 # more than one version_label among the retrieved sources for the same
-# document (Giorno 13).
+# document.
 _CONFLICT_INSTRUCTION = (
     "Achtung: Einige Quellen stammen aus unterschiedlichen Versionen "
     "desselben Dokuments. Weise in der Antwort ausdruecklich auf die "
@@ -117,12 +117,12 @@ class AnswerResult:
 
 @dataclass(frozen=True, slots=True)
 class StreamEvent:
-    """One SSE event (plan, Giorno 14): `event: {event}\\ndata:
+    """One SSE event: `event: {event}\\ndata:
     {json.dumps(data)}\\n\\n`. `data` may hold plain JSON-ready values, or
     (for "sources"/"done") the domain `Source`/`Citation` objects
     themselves -- the API layer, not this pure service, turns those into
     their wire shape (`api.v1.chat.SourceOut`/`CitationOut`), same split
-    Day 11/12 already draw for the non-streaming response.
+    already drawn for the non-streaming response.
     """
 
     event: str
@@ -419,7 +419,7 @@ async def generate_answer_stream(
     request_id: str | None = None,
 ) -> AsyncGenerator[StreamEvent]:
     """`stage(retrieving)` -> `stage(reranking)` -> `sources` (BEFORE any
-    token -- the plan is explicit this is what makes the UI feel fast) ->
+    token -- this is what makes the UI feel fast) ->
     `stage(generating)` -> `token` (repeated) -> `done`, or `error` in
     place of whatever would have come next. Any exception -- a typed
     `NormeonError` from the LLM adapter or anything else -- becomes one
@@ -429,7 +429,7 @@ async def generate_answer_stream(
     stream that fails this way is not written to `query_logs` -- only a
     completed answer is, same as the non-streaming path.
 
-    `cost_usd` (Giorno 15) is real when the provider reports usage on
+    `cost_usd` is real when the provider reports usage on
     the stream (`Delta.prompt_tokens`/`completion_tokens`, e.g. an
     OpenAI-compatible server honouring `stream_options.include_usage`)
     and the resolved model is in `pricing.yaml`; otherwise `null`, same
@@ -527,7 +527,7 @@ async def generate_answer_stream(
         finally:
             # Cascades to a caller closing *this* generator early (a
             # client disconnect, api.v1.chat) down to the adapter's own
-            # network read -- "annulla il task LLM" from the plan.
+            # network read, so the model call stops too.
             await token_stream.aclose()
             generating.end()
         generation_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -579,7 +579,7 @@ async def generate_answer_stream(
                 # Invented markers are stripped, and an answer with no real
                 # citation becomes NICHT_GEFUNDEN -- the same rule as the
                 # non-streaming path, so an answer steered by an injected
-                # instruction is not left standing on screen (Giorno 26).
+                # instruction is not left standing on screen.
                 "answer": answer,
                 "citations": citations,
             },

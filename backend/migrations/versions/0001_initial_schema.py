@@ -107,7 +107,7 @@ def upgrade() -> None:
     )
 
     # German full-text search column, derived from content_norm (normalize_de
-    # lands on Day 7 — the column exists from day one so ingestion never
+    # came later — the column exists from day one so ingestion never
     # needs a later migration just to backfill it).
     op.execute(
         "ALTER TABLE chunks ADD COLUMN tsv tsvector "
@@ -130,7 +130,7 @@ def upgrade() -> None:
         sa.Column("vec", Vector(EMBEDDING_DIM), nullable=False),
     )
     # HNSW index is intentionally not created here — it belongs after the
-    # first bulk load (Day 5), not on an empty table.
+    # first bulk load, not on an empty table.
 
     op.create_table(
         "query_logs",

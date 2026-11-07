@@ -154,7 +154,7 @@ def test_result_items_are_str_float_pairs() -> None:
 def test_fusion_can_surface_a_chunk_that_leads_no_single_ranking() -> None:
     # `c` is #2 in every ranking and #1 in none; each branch leads with a
     # different item. Consensus lifts `c` to the top of the fused list --
-    # the property Day 8 is really after.
+    # the property fusion is really after.
     fused = rrf([["a", "c"], ["b", "c"], ["d", "c"]])
     assert _order(fused)[0] == "c"
 

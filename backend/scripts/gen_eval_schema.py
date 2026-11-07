@@ -1,5 +1,5 @@
 """Regenerate backend/eval/dataset/schema.json from the EvalQuestion
-Pydantic model (plan, Giorno 16). The model is the single source of
+Pydantic model. The model is the single source of
 truth; this file is the checked-in artefact, and
 tests/unit/test_eval_schema.py fails if the two drift.
 

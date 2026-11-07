@@ -9,7 +9,7 @@ tenant's documents, chunks or answers, and must not even learn that they
 exist: a question answered only by another tenant's documents has to come
 back as `NICHT_GEFUNDEN`, not as a 403.
 
-Until Giorno 25 the tenant was a request parameter (`tenant_id` in the body
+Before this decision the tenant was a request parameter (`tenant_id` in the body
 or the query string) and every query filtered on it. That has two
 weaknesses:
 - **The client chose the tenant.** Anyone could ask on behalf of any tenant.
