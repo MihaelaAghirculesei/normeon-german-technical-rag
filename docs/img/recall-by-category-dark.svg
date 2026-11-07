@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="472" viewBox="0 0 860 472" role="img" aria-labelledby="title desc">
+<title id="title">Recall@5 by question category, per configuration</title>
+<desc id="desc">Share of answerable questions with a gold source in the top five retrieved chunks, for 10 configurations of the ablation matrix.</desc>
+<rect width="860" height="472" fill="#1a1a19"/>
+<g font-family="-apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
+<text x="20" y="30" font-size="17" font-weight="600" fill="#f0efec">Recall@5 by question category</text>
+<text x="20" y="52" font-size="12.5" fill="#c3c2b7">Questions with a gold source in the top 5 retrieved chunks. 10 questions per category; brighter is higher.</text>
+<text x="326" y="96" font-size="12" text-anchor="middle" fill="#c3c2b7">All answerable</text>
+<text x="440" y="96" font-size="12" text-anchor="middle" fill="#c3c2b7">Requirement lookup</text>
+<text x="554" y="96" font-size="12" text-anchor="middle" fill="#c3c2b7">Cross-reference</text>
+<text x="668" y="96" font-size="12" text-anchor="middle" fill="#c3c2b7">Code lookup</text>
+<text x="782" y="96" font-size="12" text-anchor="middle" fill="#c3c2b7">Version conflict</text>
+<text x="258" y="127.5" font-size="13" text-anchor="end" fill="#f0efec" font-weight="600">Baseline (e5, reranker)</text>
+<g><title>Baseline (e5, reranker), All answerable: 37/40 (0.925)</title><rect x="270" y="108" width="112" height="30" rx="4" fill="#cde2fb"/><text x="326" y="127.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">37/40</text></g>
+<g><title>Baseline (e5, reranker), Requirement lookup: 9/10 (0.900)</title><rect x="384" y="108" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="440" y="127.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">9/10</text></g>
+<g><title>Baseline (e5, reranker), Cross-reference: 10/10 (1.000)</title><rect x="498" y="108" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="127.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">10/10</text></g>
+<g><title>Baseline (e5, reranker), Code lookup: 10/10 (1.000)</title><rect x="612" y="108" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="127.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">10/10</text></g>
+<g><title>Baseline (e5, reranker), Version conflict: 8/10 (0.800)</title><rect x="726" y="108" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="782" y="127.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">8/10</text></g>
+<text x="258" y="159.5" font-size="13" text-anchor="end" fill="#f0efec">E1 fixed 500-token chunks</text>
+<g><title>E1 fixed 500-token chunks, All answerable: 23/40 (0.575)</title><rect x="270" y="140" width="112" height="30" rx="4" fill="#6da7ec"/><text x="326" y="159.5" font-size="13" text-anchor="middle" fill="#0b0b0b">23/40</text></g>
+<g><title>E1 fixed 500-token chunks, Requirement lookup: 5/10 (0.500)</title><rect x="384" y="140" width="112" height="30" rx="4" fill="#5598e7"/><text x="440" y="159.5" font-size="13" text-anchor="middle" fill="#0b0b0b">5/10</text></g>
+<g><title>E1 fixed 500-token chunks, Cross-reference: 8/10 (0.800)</title><rect x="498" y="140" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="554" y="159.5" font-size="13" text-anchor="middle" fill="#0b0b0b">8/10</text></g>
+<g><title>E1 fixed 500-token chunks, Code lookup: 8/10 (0.800)</title><rect x="612" y="140" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="668" y="159.5" font-size="13" text-anchor="middle" fill="#0b0b0b">8/10</text></g>
+<g><title>E1 fixed 500-token chunks, Version conflict: 2/10 (0.200)</title><rect x="726" y="140" width="112" height="30" rx="4" fill="#1c5cab"/><text x="782" y="159.5" font-size="13" text-anchor="middle" fill="#ffffff">2/10</text></g>
+<text x="258" y="191.5" font-size="13" text-anchor="end" fill="#f0efec">E2 vector only</text>
+<g><title>E2 vector only, All answerable: 35/40 (0.875)</title><rect x="270" y="172" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="326" y="191.5" font-size="13" text-anchor="middle" fill="#0b0b0b">35/40</text></g>
+<g><title>E2 vector only, Requirement lookup: 9/10 (0.900)</title><rect x="384" y="172" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="440" y="191.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E2 vector only, Cross-reference: 9/10 (0.900)</title><rect x="498" y="172" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="554" y="191.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E2 vector only, Code lookup: 10/10 (1.000)</title><rect x="612" y="172" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="191.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E2 vector only, Version conflict: 7/10 (0.700)</title><rect x="726" y="172" width="112" height="30" rx="4" fill="#86b6ef"/><text x="782" y="191.5" font-size="13" text-anchor="middle" fill="#0b0b0b">7/10</text></g>
+<text x="258" y="223.5" font-size="13" text-anchor="end" fill="#f0efec">E3 full-text only</text>
+<g><title>E3 full-text only, All answerable: 6/40 (0.150)</title><rect x="270" y="204" width="112" height="30" rx="4" fill="#184f95"/><text x="326" y="223.5" font-size="13" text-anchor="middle" fill="#ffffff">6/40</text></g>
+<g><title>E3 full-text only, Requirement lookup: 0/10 (0.000)</title><rect x="384" y="204" width="112" height="30" rx="4" fill="#104281"/><text x="440" y="223.5" font-size="13" text-anchor="middle" fill="#ffffff">0/10</text></g>
+<g><title>E3 full-text only, Cross-reference: 1/10 (0.100)</title><rect x="498" y="204" width="112" height="30" rx="4" fill="#184f95"/><text x="554" y="223.5" font-size="13" text-anchor="middle" fill="#ffffff">1/10</text></g>
+<g><title>E3 full-text only, Code lookup: 0/10 (0.000)</title><rect x="612" y="204" width="112" height="30" rx="4" fill="#104281"/><text x="668" y="223.5" font-size="13" text-anchor="middle" fill="#ffffff">0/10</text></g>
+<g><title>E3 full-text only, Version conflict: 5/10 (0.500)</title><rect x="726" y="204" width="112" height="30" rx="4" fill="#5598e7"/><text x="782" y="223.5" font-size="13" text-anchor="middle" fill="#0b0b0b">5/10</text></g>
+<text x="258" y="255.5" font-size="13" text-anchor="end" fill="#f0efec">E4 no reranker</text>
+<g><title>E4 no reranker, All answerable: 34/40 (0.850)</title><rect x="270" y="236" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="326" y="255.5" font-size="13" text-anchor="middle" fill="#0b0b0b">34/40</text></g>
+<g><title>E4 no reranker, Requirement lookup: 9/10 (0.900)</title><rect x="384" y="236" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="440" y="255.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E4 no reranker, Cross-reference: 9/10 (0.900)</title><rect x="498" y="236" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="554" y="255.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E4 no reranker, Code lookup: 10/10 (1.000)</title><rect x="612" y="236" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="255.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E4 no reranker, Version conflict: 6/10 (0.600)</title><rect x="726" y="236" width="112" height="30" rx="4" fill="#6da7ec"/><text x="782" y="255.5" font-size="13" text-anchor="middle" fill="#0b0b0b">6/10</text></g>
+<text x="258" y="287.5" font-size="13" text-anchor="end" fill="#f0efec">E5 top-k 3</text>
+<g><title>E5 top-k 3, All answerable: 35/40 (0.875)</title><rect x="270" y="268" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="326" y="287.5" font-size="13" text-anchor="middle" fill="#0b0b0b">35/40</text></g>
+<g><title>E5 top-k 3, Requirement lookup: 8/10 (0.800)</title><rect x="384" y="268" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="440" y="287.5" font-size="13" text-anchor="middle" fill="#0b0b0b">8/10</text></g>
+<g><title>E5 top-k 3, Cross-reference: 10/10 (1.000)</title><rect x="498" y="268" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="287.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E5 top-k 3, Code lookup: 10/10 (1.000)</title><rect x="612" y="268" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="287.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E5 top-k 3, Version conflict: 7/10 (0.700)</title><rect x="726" y="268" width="112" height="30" rx="4" fill="#86b6ef"/><text x="782" y="287.5" font-size="13" text-anchor="middle" fill="#0b0b0b">7/10</text></g>
+<text x="258" y="319.5" font-size="13" text-anchor="end" fill="#f0efec">E6 top-k 10</text>
+<g><title>E6 top-k 10, All answerable: 38/40 (0.950)</title><rect x="270" y="300" width="112" height="30" rx="4" fill="#cde2fb"/><text x="326" y="319.5" font-size="13" text-anchor="middle" fill="#0b0b0b">38/40</text></g>
+<g><title>E6 top-k 10, Requirement lookup: 9/10 (0.900)</title><rect x="384" y="300" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="440" y="319.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E6 top-k 10, Cross-reference: 10/10 (1.000)</title><rect x="498" y="300" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="319.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E6 top-k 10, Code lookup: 10/10 (1.000)</title><rect x="612" y="300" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="319.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E6 top-k 10, Version conflict: 9/10 (0.900)</title><rect x="726" y="300" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="782" y="319.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<text x="258" y="351.5" font-size="13" text-anchor="end" fill="#f0efec">E7 Gemini embeddings</text>
+<g><title>E7 Gemini embeddings, All answerable: 38/40 (0.950)</title><rect x="270" y="332" width="112" height="30" rx="4" fill="#cde2fb"/><text x="326" y="351.5" font-size="13" text-anchor="middle" fill="#0b0b0b">38/40</text></g>
+<g><title>E7 Gemini embeddings, Requirement lookup: 10/10 (1.000)</title><rect x="384" y="332" width="112" height="30" rx="4" fill="#cde2fb"/><text x="440" y="351.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E7 Gemini embeddings, Cross-reference: 10/10 (1.000)</title><rect x="498" y="332" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="351.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E7 Gemini embeddings, Code lookup: 10/10 (1.000)</title><rect x="612" y="332" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="351.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E7 Gemini embeddings, Version conflict: 8/10 (0.800)</title><rect x="726" y="332" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="782" y="351.5" font-size="13" text-anchor="middle" fill="#0b0b0b">8/10</text></g>
+<text x="258" y="383.5" font-size="13" text-anchor="end" fill="#f0efec">E9 full-text, any term</text>
+<g><title>E9 full-text, any term, All answerable: 37/40 (0.925)</title><rect x="270" y="364" width="112" height="30" rx="4" fill="#cde2fb"/><text x="326" y="383.5" font-size="13" text-anchor="middle" fill="#0b0b0b">37/40</text></g>
+<g><title>E9 full-text, any term, Requirement lookup: 9/10 (0.900)</title><rect x="384" y="364" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="440" y="383.5" font-size="13" text-anchor="middle" fill="#0b0b0b">9/10</text></g>
+<g><title>E9 full-text, any term, Cross-reference: 10/10 (1.000)</title><rect x="498" y="364" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="383.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E9 full-text, any term, Code lookup: 10/10 (1.000)</title><rect x="612" y="364" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="383.5" font-size="13" text-anchor="middle" fill="#0b0b0b">10/10</text></g>
+<g><title>E9 full-text, any term, Version conflict: 8/10 (0.800)</title><rect x="726" y="364" width="112" height="30" rx="4" fill="#9ec5f4"/><text x="782" y="383.5" font-size="13" text-anchor="middle" fill="#0b0b0b">8/10</text></g>
+<text x="258" y="415.5" font-size="13" text-anchor="end" fill="#f0efec" font-weight="600">Deployed (Gemini, no reranker)</text>
+<g><title>Deployed (Gemini, no reranker), All answerable: 39/40 (0.975)</title><rect x="270" y="396" width="112" height="30" rx="4" fill="#cde2fb"/><text x="326" y="415.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">39/40</text></g>
+<g><title>Deployed (Gemini, no reranker), Requirement lookup: 10/10 (1.000)</title><rect x="384" y="396" width="112" height="30" rx="4" fill="#cde2fb"/><text x="440" y="415.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">10/10</text></g>
+<g><title>Deployed (Gemini, no reranker), Cross-reference: 10/10 (1.000)</title><rect x="498" y="396" width="112" height="30" rx="4" fill="#cde2fb"/><text x="554" y="415.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">10/10</text></g>
+<g><title>Deployed (Gemini, no reranker), Code lookup: 10/10 (1.000)</title><rect x="612" y="396" width="112" height="30" rx="4" fill="#cde2fb"/><text x="668" y="415.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">10/10</text></g>
+<g><title>Deployed (Gemini, no reranker), Version conflict: 9/10 (0.900)</title><rect x="726" y="396" width="112" height="30" rx="4" fill="#b7d3f6"/><text x="782" y="415.5" font-size="13" text-anchor="middle" fill="#0b0b0b" font-weight="600">9/10</text></g>
+<text x="20" y="454" font-size="11.5" fill="#898781">Ablation matrix, 40 answerable questions (docs/EVALUATION.md). E8 is left out: its run is incomplete.</text>
+</g>
+</svg>
