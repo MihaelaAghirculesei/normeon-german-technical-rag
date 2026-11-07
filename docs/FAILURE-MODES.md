@@ -2,7 +2,7 @@
 
 An honest catalogue of where this system is known to be weak, why, and
 what (if anything) compensates. Grows as each stage is built and measured;
-the evaluation in Week 4 will attach numbers to several of these.
+the evaluation sections attach numbers to several of these.
 
 ## Full-text search
 
@@ -31,7 +31,7 @@ and measuring the limit is worth more here than papering over it.
 **Mitigation.** The vector branch is not lexical and handles compound
 paraphrase well (verified in `scripts/try_fts_search.py`: "Wie hell
 müssen die Frontleuchten strahlen?" returns nothing from FTS but the
-right `§ 50` chunk from vector). Day 8's RRF fusion runs both branches so
+right `§ 50` chunk from vector). RRF fusion runs both branches so
 the vector side covers the FTS side's blind spot and vice versa.
 
 ### tsquery AND semantics punish paraphrased questions
@@ -41,12 +41,12 @@ the vector side covers the FTS side's blind spot and vice versa.
 verbatim ("Auto", "TÜV" vs. the statute's "Kraftfahrzeug",
 "Hauptuntersuchung"), and one missing term drops the whole match. FTS
 here is a keyword / code-reference tool, not a question-answering tool.
-Giorno 28 measured how far this goes: on the 50 evaluation questions the
-AND query matches nothing at all (finding 1 under "Evaluation findings
-(Giorno 28)").
+The ablation matrix measured how far this goes: on the 50 evaluation
+questions the AND query matches nothing at all (finding 1 under
+"Evaluation findings: ablation matrix").
 
-**Mitigation.** Same as above — the vector branch, and hybrid fusion on
-Day 8. `normalize_de` canonicalises requirement codes and norm references
+**Mitigation.** Same as above — the vector branch, and hybrid
+fusion. `normalize_de` canonicalises requirement codes and norm references
 (`LH-3.2.1`, `UN R79`) into single tokens precisely so the one thing FTS
 *should* be reliable at — exact reference lookup — is not defeated by
 tokenisation.
@@ -76,8 +76,8 @@ nothing relevant to say.
 **Mitigation / status.** `k` and the three branch weights
 (`rrf_k`, `rrf_weight_vector` / `_fts` / `_trgm` in `core/config.py`) are
 deliberately parameters, not constants. Their defaults (`k = 60`, equal
-weights) are placeholders; the Week 4 experiment matrix tunes them
-against the 50-question eval set, and the numbers land here.
+weights) are placeholders; the experiment matrix tunes them
+against the 50-question eval set.
 
 ## Reranking + context selection
 
@@ -93,7 +93,7 @@ ceiling — roughly 1,000+ subword tokens of German — is truncated before
 scoring, so its tail never influences its rerank score; the relevant
 sentence may be the part that got cut.
 
-Until Giorno 20 this paragraph described a cap the code did not apply:
+Until the first matrix run this paragraph described a cap the code did not apply:
 no `max_length` was passed, so sentence-transformers fell back to the
 tokenizer's own limit (8192 for `bge-reranker-v2-m3`) and every chunk was
 scored in full. That was more faithful but considerably slower — part of
@@ -118,10 +118,10 @@ generation day will need its own real-tokenizer check.
 `scripts/try_rerank.py` measured `bge-reranker-v2-m3` at **~10 s per
 `(query, chunk)` pair** on this CPU (xlm-roberta-large, fp32, a RAM-tight
 machine also running the DB). Over the 40 hybrid candidates that is ~7
-minutes per request — the plan's "~1.5 s for 40 pairs" assumes a smaller
-or GPU-served reranker. So on this hardware the practical config is
+minutes per request — the ~1.5 s for 40 pairs often quoted assumes a
+smaller or GPU-served reranker. So on this hardware the practical config is
 `reranker_provider = "noop"` (or a much smaller `hybrid_candidate_k`);
-`cross_encoder` stays the real implementation for the Week 4 matrix,
+`cross_encoder` stays the real implementation for the evaluation matrix,
 which will need a GPU or a served reranker. The pipeline itself is
 correct — `retrieve_context` and the adapters are covered by tests with
 a fast fake reranker, and the cross-encoder's *ranking* on real chunks
@@ -142,10 +142,10 @@ sentence in front of it is actually supported by `S1`'s content. A model
 can attach a correct-looking marker to a claim that chunk does not
 support (misattribution) or that is a subtly wrong paraphrase of it. The
 validator cannot see that; only a stricter grounding check (e.g. an
-LLM-judge pass in the Week 4 evaluation) can.
+LLM-judge pass in the evaluation) can.
 
 **Mitigation / status.** Out of scope for a marker-presence check by
-construction. The Week 4 evaluation suite's faithfulness judge is where
+construction. The evaluation suite's faithfulness judge is where
 this gets measured; `extract_and_validate` is the cheap, reliable first
 filter (catches every fabricated *reference*, i.e. a marker pointing at
 nothing) that a semantic check would sit behind, not replace.
@@ -162,7 +162,7 @@ context block between the prompt's `Quellen:` and `Frage:` markers
 (`adapters/llm/fake.py`); this is inherent coupling of a test double to
 the one prompt family it approximates, not a citation-validation gap.
 
-## Abstention and conflict detection (Day 13)
+## Abstention and conflict detection
 
 ### The confidence threshold's scale depends on the reranker
 
@@ -177,7 +177,7 @@ tuned for one is meaningless for the other -- with `noop` a real
 NICHT_GEFUNDEN case still clears any reasonable threshold above zero,
 because RRF never really says "not confident", only "not top-ranked".
 
-**Mitigation / status.** Same "Week 4 matrix variable" status as `rrf_k`
+**Mitigation / status.** Same "matrix variable" status as `rrf_k`
 and the rerank weights: `min_rerank_score_for_answer` needs per-reranker
 tuning against the eval set, not a single one-size value. The gate is
 correct in what it does (skip the LLM call below the configured number);
@@ -205,10 +205,10 @@ requirement without repeating its code, or two versions that use
 different code spellings normalisation doesn't unify. Fixing this
 properly needs an explicit "these Document rows are versions of one
 another" link in the schema (a `document_group`/`supersedes` field),
-which is out of scope for Day 13; revisit if the Week 4 conflict eval
+which is out of scope for now; revisit if the conflict eval
 case needs more recall than the code-matching heuristic gives it.
 
-## Streaming (Day 14)
+## Streaming
 
 `POST /api/v1/chat/stream` sends `token` events as the model produces
 them, and only runs citation validation once the whole answer has been
@@ -223,7 +223,7 @@ validated list -- it simply may not match everything the client already
 rendered from the raw token stream. The non-streaming `POST /api/v1/chat`
 does not have this problem: it validates before returning anything.
 
-**Mitigation / status.** Fixed on Day 26. The streamed tokens are now
+**Mitigation / status.** Fixed. The streamed tokens are now
 a draft: `done` carries the validated `answer` as well as the
 citations, and the chat page replaces the draft with it. The draft
 stays on screen only while the answer is being written. It mattered
@@ -236,11 +236,11 @@ before the text is the point of streaming.
 
 ### The LLM adapter's stream() does not retry
 
-`OpenAICompatibleClient.complete` retries transient failures (Day 13);
+`OpenAICompatibleClient.complete` retries transient failures;
 `stream` deliberately does not, because retrying after even one chunk
 has already reached the caller would either duplicate output or need
 "has anything been yielded yet" bookkeeping that was not judged worth
-the complexity for Day 14. A transient mid-stream failure becomes one
+the complexity. A transient mid-stream failure becomes one
 `error` SSE event instead of a retried attempt.
 
 ### A stream is bounded by its gaps, not its length
@@ -256,7 +256,7 @@ the adapter waits for the next delta, so a slow consumer does not
 use up the server's allowance. A model that thinks for longer than a
 minute before its first token needs a larger first-token setting.
 
-## Cost tracking (Day 15)
+## Cost tracking
 
 ### pricing.yaml is a snapshot, not a live feed
 
@@ -285,7 +285,7 @@ back empty, exactly like a `complete()` response from a server that
 doesn't report `usage` at all -- not a bug, just no signal to work
 with.
 
-## Robustness (Day 26)
+## Robustness
 
 ### Prompt injection is contained, not solved
 
@@ -302,15 +302,15 @@ What this does not cover:
 - **A document that lies.** "Die Lenkkraft betraegt 999 N" in an
   uploaded file is not an instruction; it is false content, and it will
   be cited like true content. No prompt can tell a wrong document from a
-  right one. The mitigation is who may upload: admins only (Day 25).
+  right one. The mitigation is who may upload: admins only.
 - **How often a real model obeys.** The tests prove containment, not
   resistance. How often the real model follows an injected instruction
   inside its rules (for example, answering in a different tone) has not
-  been measured. That needs real LLM calls; it belongs in the Day 28 run.
+  been measured. That needs real LLM calls; it belongs in an evaluation run.
 - **The eval numbers predate v2.** Every figure in `EVALUATION.md` was
   measured with `answer_de.v1`, which shows filenames and pages and has
   no data delimiters. v1 is kept, so those runs stay reproducible, but
-  the new default has to be measured again (Day 28).
+  the new default has to be measured again.
 
 ### Upload limits
 
@@ -346,7 +346,7 @@ What this does not cover:
   scanned page yields no text, as before.
 - **Images inside Word files are not read.**
 
-## Observability (Day 27)
+## Observability
 
 - **Metrics are per process.** Prometheus counters live in the worker
   that recorded them. A scraper sums the workers, but the "server since
@@ -365,18 +365,18 @@ What this does not cover:
 
 ## Parsing / chunking
 
-Carried over from earlier days, revisit if Week 4 eval shows they matter:
+Seen while building the parser and chunkers; revisit if the eval shows they matter:
 
 - The numbered-heading heuristic false-positives on numeric data inside
-  annex tables that `find_tables()` misses (Day 3 notes).
+  annex tables that `find_tables()` misses (seen on StVZO annex tables).
 - Cascading merges of tiny table-of-contents lines produce one large
   low-value chunk; a section just over the split threshold can leave a
-  sub-100-token runt piece (Day 4 notes).
+  sub-100-token runt piece.
 - No real character offsets into the source PDF yet (`char_start`/
   `char_end` are `0`/`len`), so highlight-in-original is not possible
   until that is tracked.
 
-## Evaluation findings (Giorno 20)
+## Evaluation findings: first matrix run
 
 The first full matrix run -- `{structural, fixed_500} x {hybrid, vector}`,
 cross-encoder reranker, 10 candidates, `top_k=5`, 50 questions -- is in
@@ -445,7 +445,7 @@ Conclusions about answer quality from this run are directional only.
   process idle. **Fixed** (issue #37): every attempt of `complete` runs
   under an overall deadline (`llm_call_deadline_s`, 120 s) and is
   retried like any timeout; streams are bounded by time to the first
-  token and by the gap between tokens ("Streaming (Day 14)").
+  token and by the gap between tokens ("Streaming").
 - **Free-tier quota is per day, not just per minute.** Retries and pacing
   handle the per-minute limit; Gemini's free tier also caps a model at
   500 requests a day, and one full matrix (200 answers + 200 judgements)
@@ -453,11 +453,11 @@ Conclusions about answer quality from this run are directional only.
   rather than switching models mid-experiment, which would make the
   before/after numbers incomparable.
 
-## Evaluation findings (Giorno 28)
+## Evaluation findings: ablation matrix
 
 The ablation matrix -- one knob at a time against structural / hybrid /
-cross-encoder / `top_k=5` -- is in `docs/EVALUATION.md` ("Ablation matrix
-(Giorno 28)").
+cross-encoder / `top_k=5` -- is in `docs/EVALUATION.md` ("Ablation
+matrix").
 
 ### 1. The full-text branch matches nothing on real questions
 
@@ -466,7 +466,7 @@ question written in full sentences always carries a term its gold chunk
 does not. On all 50 evaluation questions the AND query returns zero
 rows; the only lexical hits come from the trigram code branch, which
 fires on 9 questions that name a requirement code. Inside hybrid
-retrieval the full-text ranking has therefore been empty since Day 8:
+retrieval the full-text ranking has therefore been empty from the start:
 fusion ran on vector + trigram, and the "+8 points over vector-only" in
 the matrix is the trigram branch plus the different candidate mix, not
 full-text search. Full-text alone (E3) reaches recall@5 0.150.
@@ -489,7 +489,7 @@ the worst of the hybrid rows (0.720 vs 0.840, interval excludes zero).
 All 14 wrong answers are `NICHT_GEFUNDEN`, and 13 of them had a gold
 source in the context. Twice as many sources -- including both
 Lastenheft versions of most sections -- give the strict prompt more
-reasons to decline. This is Giorno 20 finding 2 again, under prompt v2:
+reasons to decline. This is first-run finding 2 again, under prompt v2:
 every wrong answer of the baseline (8 of 8) is an abstention with a gold
 source in the context.
 
@@ -502,14 +502,14 @@ passed, and then the model's daily free-tier quota -- far below the
 lite model's 500 -- ran out after 13 questions. The model comparison
 needs a paid key or several days, and is recorded as not done. Two
 adapter defects showed up on the way: the timeout bounds each read, not
-the call (Giorno 20 "Operational"), and an `LlmTimeoutError` carries an
+the call (first matrix run, "Operational"), and an `LlmTimeoutError` carries an
 empty message, so the report says a question failed but not why. Both
 are fixed (#37): every call attempt has an overall deadline, a stream
 is bounded by its first token and its idle gaps ("A stream is bounded
 by its gaps, not its length"), and an error without a message is named
 by its type.
 
-## Deployment (Giorno 29)
+## Deployment
 
 The free-tier deployment (ADR 0005) trades the local models for hosted
 ones and adds limits of its own.
@@ -540,7 +540,7 @@ With the cross-encoder, vector-only and hybrid retrieval return
 identical recall, MRR and precision on this set, and the contexts are
 the same question by question. On 33 of the 40 answerable questions the
 full-text and trigram branches find nothing (the AND full-text of
-Giorno 28), so RRF hands back the vector ranking unchanged. On the other
+the ablation matrix), so RRF hands back the vector ranking unchanged. On the other
 7 they swap one or two chunks into the ten candidates -- six times the
 same section -- and the cross-encoder scores every one of them
 near 0, far below the fifth place it keeps. Without a reranker hybrid
@@ -559,7 +559,7 @@ its scores; the deployed system ranks by fused RRF scores, which say
 where a chunk ranked, not how relevant it is, so there is nothing to
 calibrate. The evaluation shows the prompt abstains correctly on all 10
 unanswerable questions, and too often on answerable ones (9 of the
-deployed row's 10 wrong answers, as in Giorno 20, #38) -- but there is
+deployed row's 10 wrong answers, as in the first matrix run, #38) -- but there is
 no second line.
 
 ### Cold starts

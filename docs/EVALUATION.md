@@ -2,7 +2,7 @@
 
 This document tracks the 50-question evaluation set, the two-layer
 correctness metric, the judge-agreement check, the first matrix run
-(Giorno 20) and the ablation matrix (Giorno 28), whose conclusion is the
+and the ablation matrix, whose conclusion is the
 last section.
 
 **Progress: 50/50 questions written, all validated in CI** (`tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category`).
@@ -13,7 +13,7 @@ Blocker found and fixed before writing `conflict`: the two Lastenheft
 `.docx` were never ingested (no DOCX parser existed), so the conflict
 case would have been untestable. Added `adapters/parsing/docx.py` +
 wired `version_label`/`valid_from`/`valid_until` through ingestion (see
-git history on `day17-18/eval-question-set-and-judge`). Verified against
+the git history of `services/ingestion.py`). Verified against
 the real dev DB: a live retrieval query surfaces chunks from both
 Lastenheft versions and `find_version_conflicts` correctly flags both
 `LH-3.2.1` and `LH-6.2.1`.
@@ -44,7 +44,7 @@ And in `corpus/FZV.pdf`:
 | §9 | Zuteilung von Kennzeichen | 1 |
 | §10 | Besondere Kennzeichen | 2 |
 
-## The question set (Giorni 17-18)
+## The question set
 
 `backend/eval/dataset/questions.yaml` — 50 questions, hand-written by
 reading `corpus/StVZO.pdf`, `corpus/FZV.pdf`,
@@ -83,11 +83,11 @@ Validated against `EvalQuestion` (`src/app/eval/models.py`) via
 `load_questions`; the full-set shape test (50 entries, 10 per category)
 is `tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category`.
 
-## Correctness metric (Giorno 18)
+## Correctness metric
 
 **Done.** Run for real against the full 50-question set
-(`eval/reports/day18-merged-real-run.json` /
-`day18-merged-real-run.scored.json`, gitignored — regenerate from the
+(`eval/reports/full-set-run.json` /
+`full-set-run.scored.json`, gitignored — regenerate from the
 DB + `.env` if lost, don't recommit). See "Judge model note" below for
 the judge-quota issue hit and fixed along the way.
 
@@ -106,7 +106,7 @@ the judge-quota issue hit and fixed along the way.
   report JSON, writes `<hash>.scored.json` and a
   `<hash>.human_review.csv` worksheet (see below).
 
-## Judge agreement (Giorno 18)
+## Judge agreement
 
 **Done — all 15 pairs scored, percent agreement 1.0, Cohen's kappa
 1.0.**
@@ -126,7 +126,7 @@ the judge-quota issue hit and fixed along the way.
   (blinded during scoring, compared only afterwards).
 - **Result on all 15 pairs**: human and judge scores matched on all
   15 — **percent agreement 1.0, Cohen's kappa 1.0**
-  (`eval/reports/day18-final-human-review.csv`, reproducible with
+  (`eval/reports/human-review.csv`, reproducible with
   `scripts/measure_judge_agreement.py`). Unlike the earlier 7/15
   partial measurement, this now includes the categories most likely to
   disagree (all 3 `code_lookup`, all 3 `unanswerable`, both
@@ -164,7 +164,7 @@ Reproduce the final agreement number:
 
 ```
 cd backend
-.venv/Scripts/python scripts/measure_judge_agreement.py eval/reports/day18-final-human-review.csv
+.venv/Scripts/python scripts/measure_judge_agreement.py eval/reports/human-review.csv
 ```
 
 General commands for a fresh run against a different config:
@@ -179,7 +179,7 @@ DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
 .venv/Scripts/python scripts/measure_judge_agreement.py eval/reports/<hash>.human_review.csv
 ```
 
-## Retrieval and outcome metrics (Giorno 19)
+## Retrieval and outcome metrics
 
 **Done.** `src/app/eval/metrics.py` -- pure (no DB/LLM/network), takes
 an `EvalReport` + `ScoredReport` + the question set and returns one
@@ -220,13 +220,13 @@ matching `<hash>.scored.json` next to it and writes `<hash>.metrics.json`.
   bug -- see `services/pricing.calculate_cost`'s own docstring).
 
 **Real output, run against the full 50-question set**
-(`eval/reports/day18-merged-real-run.json` +
-`day18-merged-real-run.scored.json`), satisfying the plan's literal
-"Fatto quando" (a real JSON with every metric on a real configuration):
+(`eval/reports/full-set-run.json` +
+`full-set-run.scored.json`): a real JSON with every metric on a real
+configuration:
 
 ```json
 {
-  "config_hash": "day18-merged-real-run",
+  "config_hash": "full-set-run",
   "n_questions": 50,
   "n_errors": 0,
   "recall_at_k": 0.9,
@@ -244,36 +244,35 @@ matching `<hash>.scored.json` next to it and writes `<hash>.metrics.json`.
 ```
 
 **One caveat on this specific number, not on the metric itself:** the
-scored report this ran against (`day18-merged-real-run.scored.json`)
+scored report this ran against (`full-set-run.scored.json`)
 was scored on 2026-09-15, entirely before the judge-model swap to
 `gemini-flash-lite-latest` (see "Judge model note" above) -- every one
 of its 50 Layer 2 calls is a `JudgeError` from the 429 wall, so
 `answer_accuracy` above is really Layer 1's pass rate alone, with
 Layer 2's semantic fallback never engaging. Re-scoring the full 50 with
 the now-working judge model would sharpen this number but costs 50 real
-judge calls -- worth doing before Giorno 20's matrix run, not required
-for Giorno 19's own "Fatto quando". `false_abstention_rate = 0.2` is
+judge calls -- worth doing before the matrix run, not required
+for the metrics themselves. `false_abstention_rate = 0.2` is
 already a genuine, useful finding either way (independent of the judge):
 8 of 40 answerable questions wrongly abstained, more than the 2 seen in
 the 15-question human-review sample alone -- worth a look before
-Giorno 20 tunes `min_rerank_score_for_answer`.
+the matrix run tunes `min_rerank_score_for_answer`.
 
-## First matrix run (Giorno 20)
+## First matrix run
 
 > **Prompt version.** Every number in this section was measured with
-> `answer_de.v1`. Since Giorno 26 the default is `answer_de.v2`. It
-> passes sources as delimited, untrusted data without filenames or
-> pages, as a prompt-injection defence (`FAILURE-MODES.md`, "Robustness
-> (Day 26)"). v1 is kept, so this run stays reproducible
+> `answer_de.v1`. The default is now `answer_de.v2`: it passes sources
+> as delimited, untrusted data without filenames or pages, as a
+> prompt-injection defence (`FAILURE-MODES.md`, "Robustness"). v1 is kept, so this run stays reproducible
 > (`prompt_name="answer_de.v1"`). The default is measured again with v2
-> in the ablation matrix below ("Ablation matrix (Giorno 28)").
+> in the ablation matrix below ("Ablation matrix").
 
 `{structural, fixed_500} x {hybrid, vector}`, cross-encoder reranker
 (`bge-reranker-v2-m3`, max_length 512), 10 candidates, `top_k=5`, answers
 and judge on `gemini-flash-lite-latest`, 50 questions. Decision recorded
 in [ADR 0003](adr/0003-structural-chunking-as-default.md); the five
-failure modes it surfaced are in `FAILURE-MODES.md` ("Evaluation findings
-(Giorno 20)").
+failure modes it surfaced are in `FAILURE-MODES.md` ("Evaluation findings:
+first matrix run").
 
 ```bash
 cd backend
@@ -289,7 +288,7 @@ DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
   the reranker up to three branches' worth of candidates against vector's
   one, and "hybrid wins" could just mean "the reranker saw more". With it,
   the two modes differ only in *which* chunks fill the budget.
-- **Baseline = structural chunking + hybrid retrieval**, the plan's
+- **Baseline = structural chunking + hybrid retrieval**, the
   ablation baseline. Every other configuration is compared against it
   question by question.
 - **Uncertainty is reported, not implied.** 50 questions is a small
@@ -411,7 +410,7 @@ the main quality lever.
   every configuration in run 2 (9-10 in run 1), with no invented
   citations anywhere.
 
-## Ablation matrix (Giorno 28)
+## Ablation matrix
 
 One knob at a time against a fixed baseline: structural chunking, hybrid
 retrieval, cross-encoder over 10 candidates, `top_k=5`, prompt
@@ -423,7 +422,7 @@ configuration hash: a report measured with v1 is never reused for v2.
 ```bash
 cd backend
 DATABASE_URL=postgresql+asyncpg://normeon:normeon@localhost:5433/normeon \
-    .venv/Scripts/python scripts/run_matrix.py --reports-dir eval/reports/day28
+    .venv/Scripts/python scripts/run_matrix.py --reports-dir eval/reports/matrix
 ```
 
 | # | Change | recall@5 | MRR | answer_accuracy | 95% CI | false abstention | citation precision |
@@ -471,14 +470,14 @@ the generator more than *how many* gold chunks do. Full-text on its own
 is not a retriever at all (recall 0.150, accuracy 0.360, and that 0.360
 is mostly correct abstentions): the production query requires every term
 of the question, and on these 50 questions it matches nothing; the 0.150
-comes from the trigram code branch alone (`FAILURE-MODES.md`, Giorno 28
+comes from the trigram code branch alone (`FAILURE-MODES.md`, ablation
 finding 1). Letting full-text match any term (E9) gives that branch
 rows to rank, but not better answers: recall is unchanged, MRR rises 2
 points, and accuracy is 4 points lower (within noise), with one
 unanswerable question now answered. The extra lexical candidates share
 a word with the question and little else, so the default stays `all`.
 The reranker adds 8 points of accuracy and 7.5 of recall,
-both just short of resolvable. Structural chunking keeps its Giorno 20
+both just short of resolvable. Structural chunking keeps its first-run
 lead on recall (+35 points) while accuracy is level, so ADR 0003 stands.
 
 The surprise is `top_k`. Ten chunks give the best recall in the matrix
@@ -489,14 +488,14 @@ abstention, and with ten chunks 13 of the 14 abstentions had a gold
 source in the context. More context does not make the generator answer;
 it makes it decline more often. Five is the right default, and the next
 quality lever is still the generator's over-abstention
-(`FAILURE-MODES.md`, Giorno 20 finding 2) -- not retrieval, which already
+(`FAILURE-MODES.md`, first-run finding 2) -- not retrieval, which already
 puts a gold source in the top five for 37 of 40 answerable questions.
 
-Against Giorno 20 the baseline moved from 0.800 (`answer_de.v1`) to 0.840
+Against the first matrix run the baseline moved from 0.800 (`answer_de.v1`) to 0.840
 (`answer_de.v2`): the prompt-injection hardening costs no accuracy on
 this set (the difference is within noise in either direction).
 
-## Hosted embeddings (E7, Giorno 29)
+## Hosted embeddings (E7)
 
 The deployment cannot run e5-large or the cross-encoder (ADR 0005), so
 the demo embeds with `gemini-embedding-2` at 1024 dimensions. Its
@@ -508,7 +507,7 @@ questions, 10 candidates, top 5.
 
 ```bash
 cd backend
-EMBEDDING_PROVIDER=gemini EMBEDDING_MODEL=gemini-embedding-2 EMBEDDING_API_KEY=...     .venv/Scripts/python scripts/run_retrieval_eval.py --reports-dir eval/reports/day28     --strategy structural --reranker noop   # and --reranker cross_encoder
+EMBEDDING_PROVIDER=gemini EMBEDDING_MODEL=gemini-embedding-2 EMBEDDING_API_KEY=...     .venv/Scripts/python scripts/run_retrieval_eval.py --reports-dir eval/reports/matrix     --strategy structural --reranker noop   # and --reranker cross_encoder
 ```
 
 | Embeddings | Reranker | Mode | recall@5 | 95% CI | MRR | precision@5 |
@@ -524,7 +523,7 @@ EMBEDDING_PROVIDER=gemini EMBEDDING_MODEL=gemini-embedding-2 EMBEDDING_API_KEY=.
 Gemini embeddings retrieve at least as well as e5 (+2.5 points of
 recall with the same reranker, within noise), and without the reranker
 they do best: the cross-encoder lowers recall and MRR on top of them
-(`FAILURE-MODES.md`, Giorno 29). The deployed configuration -- Gemini
+(`FAILURE-MODES.md`, "Deployment"). The deployed configuration -- Gemini
 embeddings, hybrid, no reranker -- has the best retrieval measured on
 this set. Full-text alone is unchanged, as it should be: it uses no
 embeddings.
@@ -550,7 +549,7 @@ Neither answer-accuracy difference is one the sample supports. Swapping
 e5 for Gemini embeddings changes nothing measurable in the answers; the
 deployed configuration retrieves the gold source more often and cites
 more precisely, and answers about as well. Its wrong answers are the
-over-abstention of Giorno 20 (#38): 9 of its 10 are `NICHT_GEFUNDEN`,
+over-abstention of the first matrix run (#38): 9 of its 10 are `NICHT_GEFUNDEN`,
 8 of them with the gold source in the context. The confidence gate
 plays no part (its threshold is 0.0, so it only stops an empty
 retrieval, #17): every abstention is the model's own. Better retrieval does not lift accuracy past what the
