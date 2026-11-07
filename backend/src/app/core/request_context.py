@@ -1,4 +1,4 @@
-"""One request id per request, everywhere (Giorno 27).
+"""One request id per request, everywhere.
 
 The middleware takes the caller's `X-Request-ID` when it looks like an id
 (so a proxy's or the frontend's id carries through), or makes one. It

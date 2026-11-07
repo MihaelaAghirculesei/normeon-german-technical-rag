@@ -1,4 +1,4 @@
-# The deployed demo on Render's free plan (Giorno 29, ADR 0005): one Docker
+# The deployed demo on Render's free plan (ADR 0005): one Docker
 # web service serving the API and the built frontend. The database is
 # Postgres on Neon's free plan; embeddings and answers come from the
 # Gemini API's free tier. Secrets are never in this file: `sync: false`

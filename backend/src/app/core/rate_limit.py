@@ -1,4 +1,4 @@
-"""Per-IP rate limits on the endpoints that cost something (Giorno 29).
+"""Per-IP rate limits on the endpoints that cost something.
 
 A public demo link is an open door: every question spends free-tier
 Gemini quota, and the login endpoint invites password guessing. Each

@@ -1,8 +1,7 @@
 """Answer prompts are versioned files under ``backend/prompts/``, loaded
 by name. Kept as files (not inline strings) so a prompt change is a
 reviewable diff with its own history, and so the exact text -- by name
-*and* content hash -- can be logged with every answer it produced
-(plan, Giorno 11).
+*and* content hash -- can be logged with every answer it produced.
 
 The template carries the sources and ``{{QUESTION}}``, filled by
 :meth:`Prompt.render`. The sources go in as ``{{CONTEXT}}`` (v1: a plain
@@ -13,7 +12,7 @@ signs, which would blow up or silently mangle it.
 
 Substitution is one pass over the template, never chained replaces: a
 document that contains the text ``{{QUESTION}}`` must stay that text,
-not be rewritten into the user's question (Giorno 26).
+not be rewritten into the user's question.
 """
 
 from __future__ import annotations

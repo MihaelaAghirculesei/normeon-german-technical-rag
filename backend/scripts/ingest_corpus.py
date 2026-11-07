@@ -1,6 +1,6 @@
 """Ingest the demo corpus into the demo tenant: the two German traffic-law
 PDFs and the two synthetic Lastenheft DOCX (the eval suite's conflict
-case, plan Giorno 17-18, needs both versions actually retrievable).
+case needs both versions actually retrievable).
 
 Run with:
     cd backend

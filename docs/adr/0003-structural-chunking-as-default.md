@@ -12,7 +12,7 @@ Every document is ingested with two chunking strategies side by side:
   long ones split, the section breadcrumb prepended to the content.
 
 Retrieval, citations and the answer prompt all run over one of them; the
-Giorno 20 matrix measured both, crossed with vector-only and hybrid
+first matrix run measured both, crossed with vector-only and hybrid
 retrieval, on the 50-question eval set (10 per category).
 
 | Config | recall@5 | answer_accuracy | false abstention |
@@ -59,7 +59,7 @@ fix in the prompt and context, not by changing the chunker.
 - The generator's false-abstention rate (0.25 on the baseline) is the
   next quality lever: a prompt or context change, measured against this
   same matrix.
-- If the Giorno 28 ablation shows fixed_500
+- If the ablation matrix shows fixed_500
   ahead on accuracy with an interval clear of zero *after* the abstention
   fix, revisit this decision. The two strategies stay ingested side by
   side, so switching is a configuration change.

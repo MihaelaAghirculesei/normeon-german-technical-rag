@@ -1,4 +1,4 @@
-"""Load and validate an evaluation question set (plan, Giorno 16).
+"""Load and validate an evaluation question set.
 
 A YAML list of question mappings in, a list of validated `EvalQuestion`
 out. Validation is just Pydantic against `EvalQuestion` -- the same
@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from app.eval.models import EvalQuestion
 
-# backend/eval/dataset/ -- the plan's layout; not under src/app.
+# backend/eval/dataset/ -- data, not under src/app.
 DATASET_DIR = Path(__file__).parents[3] / "eval" / "dataset"
 SMOKE_QUESTIONS = DATASET_DIR / "questions.smoke.yaml"
 

@@ -1,6 +1,6 @@
-"""Ad-hoc check for Day 14: hit a *running* backend's streaming endpoint
+"""Ad-hoc check: hit a *running* backend's streaming endpoint
 and print each SSE event as it arrives, timestamped from the start of the
-request -- the scriptable cousin of the plan's `curl -N` acceptance
+request -- the scriptable cousin of a `curl -N`
 check (`docs/adr` aside, this project prefers a script over a shell
 one-liner so it survives as something re-runnable).
 
@@ -18,7 +18,7 @@ Run:
     .venv/Scripts/python scripts/try_chat_stream.py \\
         "Welche Vorschriften gelten fuer Scheinwerfer?"
 
-Fatto quando (plan, Giorno 14): the events print in order -- stage
+Expected: the events print in order -- stage
 (retrieving/reranking) -> sources -> stage(generating) -> token* -> done.
 Ctrl-C mid-stream and check the backend's own logs for a
 `client_disconnected` event (the other half of the acceptance bar; this

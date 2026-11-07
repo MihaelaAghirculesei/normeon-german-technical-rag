@@ -1,6 +1,6 @@
 """Unit tests for domain/citations.py -- pure, no DB/model involved.
 
-Covers the Day 12 "Fatto quando": an answer with an invented marker has
+Covers the acceptance criterion: an answer with an invented marker has
 it removed from the text and reported separately.
 """
 
@@ -37,7 +37,7 @@ def test_all_markers_valid_are_returned_as_citations_unchanged() -> None:
 
 
 def test_an_invented_marker_is_removed_from_the_answer_text() -> None:
-    """The literal Day 12 acceptance check: an invented [S7] disappears."""
+    """The acceptance check: an invented [S7] disappears."""
     sources = {"S1": _source("S1")}
 
     answer, citations, invented = extract_and_validate(

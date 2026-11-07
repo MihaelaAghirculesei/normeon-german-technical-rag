@@ -1,6 +1,6 @@
 # Three throwaway questions to exercise eval/runner.py end to end
-# (plan, Giorno 16 "Fatto quando"). These are NOT the real eval set --
-# the 50 hand-written, gold-verified questions are Giorni 17-18. The
+# (tests/integration/test_eval_runner.py). These are NOT the real eval set
+# -- the 50 hand-written, gold-verified questions are questions.yaml. The
 # gold_sources here are rough and unverified; do not read anything into
 # the numbers a run over this file produces.
 

@@ -1,4 +1,4 @@
-"""A scanned page through the whole pipeline (Giorno 26): ingestion reads
+"""A scanned page through the whole pipeline: ingestion reads
 it by OCR, the chunks built from it are flagged `ocr` in the database, and
 retrieval hands the flag on -- which is what lets the UI say so."""
 

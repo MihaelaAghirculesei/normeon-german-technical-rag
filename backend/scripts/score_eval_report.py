@@ -1,5 +1,5 @@
 """Score an existing eval report's answers with the two-layer
-correctness metric (plan, Giorno 18) and export a 15-question worksheet
+correctness metric and export a 15-question worksheet
 for human review.
 
     cd backend

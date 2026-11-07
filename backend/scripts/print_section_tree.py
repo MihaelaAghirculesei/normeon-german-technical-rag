@@ -2,7 +2,7 @@
 
 Run with: .venv/Scripts/python scripts/print_section_tree.py <path-to-pdf>
 
-This is the Day 3 acceptance check made repeatable: the printed section
+This is the parser's acceptance check made repeatable: the printed section
 tree should match the PDF's own table of contents for at least 85% of
 titles. Verified against corpus/StVZO.pdf and corpus/FZV.pdf (100% of
 bold "§ NN" headings matched, independently of the parser's own logic).

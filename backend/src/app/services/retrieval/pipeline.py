@@ -83,7 +83,7 @@ async def retrieve_context(
           -> token-budget context selection      (`_select_context`)
 
     Per-phase wall-clock timings travel back in `RetrievalResult.timing`.
-    `retrieval_mode` (Giorno 20's matrix variable) picks the first phase:
+    `retrieval_mode` (matrix variable) picks the first phase:
     `"hybrid"` (default, unchanged behaviour) fuses vector + full-text +
     trigram via RRF; `"vector"` skips fusion entirely and ranks purely on
     cosine similarity, so the matrix can isolate hybrid's actual lift;

@@ -1,4 +1,4 @@
-"""Day 16 "Fatto quando": eval/runner.run_evaluation runs end to end on
+"""eval/runner.run_evaluation runs end to end on
 three questions against a real pgvector database (real ingestion +
 retrieval, deterministic hashing embedder + passthrough reranker +
 FakeLlmClient) and produces a valid EvalReport.
@@ -71,7 +71,7 @@ def _build_pdf(path: Path) -> bytes:
     for page_no, (title, body) in enumerate(sections, start=1):
         page = doc.new_page()
         # A per-page vertical offset so the titles don't land at the same
-        # bbox on every page -- the Day 3 parser filters repeated-bbox
+        # bbox on every page -- the parser filters repeated-bbox
         # blocks as headers/footers.
         offset = page_no * 20
         page.insert_text((50, 40), "Technische Norm - Entwurf", fontsize=8, fontname="helv")

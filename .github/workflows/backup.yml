@@ -1,6 +1,6 @@
 name: backup
 
-# A daily pg_dump of the demo database (Giorno 29). The free web service has
+# A daily pg_dump of the demo database. The free web service has
 # no persistent disk, so the dump is kept as a workflow artifact for seven
 # days instead of on a volume (ADR 0005). The repository is public and any
 # signed-in GitHub user can download its artifacts, so the dump is encrypted

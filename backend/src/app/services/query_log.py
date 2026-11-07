@@ -1,6 +1,6 @@
-"""Persist one `query_logs` row per answer (plan, Giorno 15) -- tokens
+"""Persist one `query_logs` row per answer -- tokens
 in/out, cost, per-phase latency, `config_hash`, retrieved chunk ids.
-This is the write side only: the row is the audit trail the Week 4
+This is the write side only: the row is the audit trail the
 experiment matrix reads back later, nothing in this repo reads it yet.
 """
 

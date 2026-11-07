@@ -22,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# OCR for scanned PDF pages (Giorno 26): tesseract with German language data.
+# OCR for scanned PDF pages: tesseract with German language data.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu \
     && rm -rf /var/lib/apt/lists/*

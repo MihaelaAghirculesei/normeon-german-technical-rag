@@ -17,7 +17,7 @@ class LocalE5Embedder:
         self._model_name = model_name
         self._model: SentenceTransformer | None = None
         # `embed_query`/`embed_passages` run off-thread (`asyncio.to_
-        # thread`), and Giorno 17-18's eval runner drives several
+        # thread`), and the eval runner drives several
         # questions concurrently (its own semaphore, default 4) -- with
         # no lock here, two threads could both see `_model is None` and
         # each start constructing a SentenceTransformer at the same

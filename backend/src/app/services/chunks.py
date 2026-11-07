@@ -1,4 +1,4 @@
-"""A cited chunk with the text around it (Giorno 23): what the citation
+"""A cited chunk with the text around it: what the citation
 panel shows when a reader clicks `[S1]` -- the chunk itself, highlighted,
 between its neighbours, so a sentence cut off at a chunk boundary can
 still be read in full.

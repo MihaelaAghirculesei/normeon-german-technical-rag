@@ -1,4 +1,4 @@
-"""GET /api/v1/chunks/{chunk_id}/context (Giorno 23): the chunk behind a
+"""GET /api/v1/chunks/{chunk_id}/context: the chunk behind a
 citation, with its neighbours, for the citation panel."""
 
 from typing import Annotated

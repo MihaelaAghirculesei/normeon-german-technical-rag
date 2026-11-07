@@ -68,7 +68,7 @@ def test_local_embedder_does_not_load_model_until_first_use() -> None:
 def test_local_embedder_loads_the_model_only_once_under_concurrent_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression test: the eval runner (Giorno 17-18) drives several
+    """Regression test: the eval runner drives several
     questions concurrently, each calling `embed_query`/`embed_passages`
     off-thread. An unlocked lazy-load let multiple threads race to
     construct a SentenceTransformer at once, surfacing as PyTorch's

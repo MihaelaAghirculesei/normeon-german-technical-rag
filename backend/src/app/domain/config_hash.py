@@ -1,9 +1,9 @@
 """A stable fingerprint of the retrieval/rerank/generation configuration
-that produced one answer (plan, Giorno 15's `query_logs.config_hash`).
+that produced one answer (`query_logs.config_hash`).
 
 Two answers produced under the exact same configuration get the same
 hash; anything that changed (a different reranker, a retuned `rrf_k`, a
-different model) changes it. That is what lets the Week 4 experiment
+different model) changes it. That is what lets the experiment
 matrix group and compare `query_logs` rows by "which run was this."
 
 Pure: takes plain values, no I/O, no `settings` import -- the caller

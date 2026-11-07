@@ -1,13 +1,12 @@
-"""Retrieval, citation and outcome metrics computed over a real eval run
-(plan, Giorno 19).
+"""Retrieval, citation and outcome metrics computed over a real eval run.
 
-Pure: takes an already-produced `EvalReport` (Giorno 16), an already-
-produced `ScoredReport` (Giorno 18) and the question set that drove
+Pure: takes an already-produced `EvalReport`, an already-
+produced `ScoredReport` and the question set that drove
 both, and returns one `EvalMetrics`. No I/O, no DB, no LLM -- everything
 here is a re-read of data those two earlier stages already collected.
 
 Gold-source matching (`recall_at_k`/`mrr`/`precision_at_k`/
-`citation_precision`) is deliberately tolerant, per the plan's own
+`citation_precision`) is deliberately tolerant, by this
 operational definition: same `document`, and *either* a section-string
 overlap *or* the page within +/-1 -- not an exact match on both, since
 chunk boundaries rarely land on the same page/section split a human

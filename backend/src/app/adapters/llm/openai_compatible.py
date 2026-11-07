@@ -1,8 +1,8 @@
 """An ``LlmClient`` for any server that speaks the OpenAI
 ``/chat/completions`` wire format -- OpenAI itself, but also vLLM, TGI,
 llama.cpp's server, LiteLLM, OpenRouter and most hosted gateways. One
-wire format reaches every model the Week 4 matrix needs; committing to
-specific provider SDKs is deferred to Day 15.
+wire format reaches every model the evaluation matrix needs, without
+committing to provider SDKs.
 
 ``complete``'s transient failures (a timeout, a dropped connection, a
 5xx, a 429 rate limit) are retried with `tenacity`, up to `max_retries`
@@ -20,7 +20,7 @@ Whatever finally fails is re-raised as one of the typed
 generic error handler always returns a coherent JSON body instead of a
 bare 500.
 
-``stream`` (Day 14, widened Day 15) sets `"stream": true` plus
+``stream`` sets `"stream": true` plus
 `"stream_options": {"include_usage": true}` and reads the same wire
 format's `data: {...}` / `data: [DONE]` Server-Sent-Events lines,
 yielding one `Delta` per line that carries a `choices[0].delta.content`

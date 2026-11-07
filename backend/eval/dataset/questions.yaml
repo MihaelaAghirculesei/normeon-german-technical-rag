@@ -1,7 +1,7 @@
-# The real evaluation set (plan, Giorni 17-18). 50 questions, hand-written
+# The real evaluation set. 50 questions, hand-written
 # by reading the corpus PDFs/DOCX -- NOT LLM-generated (that would produce
-# questions the system solves by construction, per the plan's explicit
-# warning). Gold sources verified by opening each source document.
+# questions the system solves by construction). Gold sources verified by
+# opening each source document.
 #
 # 5 categories x 10 questions each -- see docs/EVALUATION.md for the full
 # authoring checklist and the rules recap for each category:
@@ -14,8 +14,7 @@
 #
 # Complete: 50/50 written, validated by
 # tests/unit/test_eval_schema.py::test_full_question_set_has_fifty_entries_ten_per_category
-# (schema validation + exact 10-per-category shape, the plan's Giorno
-# 17-18 "Fatto quando" criterion).
+# (schema validation + exact 10-per-category shape).
 #
 # StVZO.pdf/FZV.pdf gold_sources cite `section` in the exact form the real
 # parser assigns it (e.g. "§41", not "41" -- confirmed via
