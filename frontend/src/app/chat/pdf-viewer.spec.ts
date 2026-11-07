@@ -95,6 +95,26 @@ describe('PdfViewer', () => {
     expect(mark.style.height).toBe(`${20 * scale}px`);
   });
 
+  it('scrolls the highlight into view once the page is shown', async () => {
+    const scrolled: { shown: boolean }[] = [];
+    const scrollIntoView = vi.fn(function (this: HTMLElement) {
+      scrolled.push({ shown: !this.closest('.sheet')?.classList.contains('hidden') });
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      value: scrollIntoView,
+      configurable: true,
+    });
+    try {
+      open();
+      http.expectOne(URL).flush(new ArrayBuffer(4));
+      await settle(fixture);
+    } finally {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+
+    expect(scrolled).toEqual([{ shown: true }]);
+  });
+
   it('moves between the cited pages', async () => {
     open();
     http.expectOne(URL).flush(new ArrayBuffer(4));
