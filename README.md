@@ -7,7 +7,7 @@ checked, and says `NICHT_GEFUNDEN` instead of guessing.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-<!-- Demo GIF: question → sources → streamed answer → citation → PDF page. -->
+![A question about minimum tyre tread depth: the answer cites StVZO § 36, and the citation opens the original PDF page with the passage highlighted.](docs/img/demo.gif)
 
 ## Live demo
 
