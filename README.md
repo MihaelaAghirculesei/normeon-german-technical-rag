@@ -22,7 +22,7 @@ shows the cited text rather than the original PDF. The corpus is two
 public German traffic regulations (StVZO, FZV) and two synthetic
 Lastenheft versions that contradict each other on purpose. Try
 *„Welche Lenkkraft fordert das Lastenheft?“* or
-*„Wie breit darf ein Pkw nach StVZO sein?“*.
+*„Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?“*.
 
 ## Results
 
