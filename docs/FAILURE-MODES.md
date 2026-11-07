@@ -572,7 +572,7 @@ repository was private (Actions minutes); now that it is public, the
 minutes are free, and an always-on instance (about 744 hours a month)
 would fit Render's 750 free hours. Not set up yet.
 
-## Known limits (Giorno 30)
+## Known limits
 
 ### A table that continues on the next page becomes two tables
 
