@@ -36,6 +36,10 @@ hours, and a run that dies must not start over:
 
 Just run the same command again after a crash.
 
+`--only LABEL` (repeatable) runs a subset of the rows -- e.g. the demo's
+configuration against the same with another prompt, without loading the
+local models -- and compares them against the first one given.
+
 **Controlled comparison**: `--candidates` is how many chunks reach the
 reranker in *both* retrieval modes (hybrid keeps that many after fusion),
 so vector vs. hybrid differ only in which chunks fill the budget, not in
@@ -95,9 +99,13 @@ class Experiment:
     model: Literal["B"] | None = None
     fts_match: FtsMatch = "all"
     embedding: Literal["gemini"] | None = None  # None: the configured embedder
+    prompt: str | None = None  # None: the configured answer prompt
 
 
 GEMINI_EMBEDDING_MODEL = "gemini-embedding-2"
+# Answers what the sources cover and says what they leave open, instead
+# of declining the whole question (#38).
+PARTIAL_ANSWER_PROMPT = "answer_de.v3"
 # The first row is the baseline; every other row is compared against it
 # question by question.
 BASELINE = "baseline"
@@ -112,11 +120,18 @@ EXPERIMENTS = [
     Experiment("E7 Gemini embeddings", embedding="gemini"),
     Experiment("E8 model B", model="B"),
     Experiment("E9 full-text on any term", fts_match="any"),
+    Experiment("E10 partial-answer prompt", prompt=PARTIAL_ANSWER_PROMPT),
 ]
 # Rows that change more than one knob: shown for reference, not as an
 # ablation (a difference from the baseline has several causes).
 REFERENCES = [
     Experiment("deployed: Gemini embeddings, no reranker", rerank=False, embedding="gemini"),
+    Experiment(
+        "deployed with the partial-answer prompt",
+        rerank=False,
+        embedding="gemini",
+        prompt=PARTIAL_ANSWER_PROMPT,
+    ),
 ]
 
 
@@ -225,7 +240,7 @@ async def _run_one(
         rerank_candidates=args.candidates,
         # the cross-encoder's input cap; meaningless without it
         reranker_max_length=args.max_length if experiment.rerank else None,
-        prompt_name=settings.answer_prompt_name,
+        prompt_name=experiment.prompt or settings.answer_prompt_name,
         embedding_provider=experiment.embedding or settings.embedding_provider,
         llm_provider=settings.llm_provider,
         llm_model=model,
@@ -261,6 +276,18 @@ async def _run_one(
     return MatrixRow(label=label, config=config, metrics=metrics)
 
 
+def _select(labels: list[str] | None) -> list[Experiment]:
+    """Every row, or the named ones in the order given."""
+    rows = [*EXPERIMENTS, *REFERENCES]
+    if not labels:
+        return rows
+    by_label = {e.label: e for e in rows}
+    unknown = [label for label in labels if label not in by_label]
+    if unknown:
+        raise SystemExit(f"unknown row(s): {unknown}; known: {list(by_label)}")
+    return [by_label[label] for label in labels]
+
+
 async def _run(args: argparse.Namespace) -> None:
     questions = load_questions(Path(args.questions))
     reports_dir = Path(args.reports_dir)
@@ -280,13 +307,23 @@ async def _run(args: argparse.Namespace) -> None:
         namespace=f"{settings.reranker_model}|max_length={args.max_length}",
     )
     judge = build_llm_client()
+    selected = _select(args.only)
     try:
         rows = [
             await _run_one(e, questions=questions, reranker=reranker, judge=judge, args=args)
-            for e in [*EXPERIMENTS, *REFERENCES]
+            for e in selected
         ]
     finally:
         reranker.close()
+    if args.only:
+        # A subset is compared against its own first row and written next to
+        # the full matrix, never over it.
+        md_path, html_path = write_matrix_report(
+            rows, reports_dir / "subset", baseline_label=selected[0].label
+        )
+        print(f"\nsubset report -> {md_path}")
+        print(f"subset report -> {html_path}")
+        return
 
     notes = [
         f"Every row changes one knob of the baseline: structural chunking, hybrid "
@@ -301,6 +338,9 @@ async def _run(args: argparse.Namespace) -> None:
         f"E7 embeds with {GEMINI_EMBEDDING_MODEL} in place of "
         f"{settings.embedding_model}. `deployed` is the demo's configuration "
         "(Gemini embeddings, no reranker): two knobs changed, a reference row.",
+        f"E10 answers with {PARTIAL_ANSWER_PROMPT}, which answers the part of a "
+        "question the sources cover; the last reference row is the demo's "
+        "configuration with that prompt.",
     ]
     if args.rerank_cache:
         notes.append(
@@ -377,6 +417,15 @@ def main() -> int:
             "questions in flight at once (default: 1). The cross-encoder is "
             "CPU-bound, so more only helps when the LLM, not the reranker, is "
             "the bottleneck -- and it multiplies memory pressure on a small box."
+        ),
+    )
+    parser.add_argument(
+        "--only",
+        action="append",
+        metavar="LABEL",
+        help=(
+            "run only this row (repeatable); the first one given is the comparison "
+            "baseline, and the report goes to <reports-dir>/subset/"
         ),
     )
     asyncio.run(_run(parser.parse_args()))
