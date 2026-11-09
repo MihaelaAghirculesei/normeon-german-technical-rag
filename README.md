@@ -11,10 +11,11 @@ checked, and says `NICHT_GEFUNDEN` instead of guessing.
 
 ## Live demo
 
-<https://normeon.onrender.com> — sign in as `anna@demo.normeon.dev`
-(admin of the demo tenant, which holds the corpus) or
-`ben@zulieferer.normeon.dev` (a second tenant that sees none of it), both
-with the password `normeon-demo`.
+<https://normeon.onrender.com> — click **Als Gast ansehen** on the sign-in
+page: a read-only account of the demo tenant, which holds the corpus. To
+see tenant isolation, sign in as `ben@zulieferer.normeon.dev` with the
+password `normeon-demo`: a second tenant that sees none of it. Uploading
+documents is left to the tenant admin, whose password is not public.
 
 It runs on free tiers: the first request after an idle period waits for a
 cold start (30-60 s), and without a persistent disk the citation panel
