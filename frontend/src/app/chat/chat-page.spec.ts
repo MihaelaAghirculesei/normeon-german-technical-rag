@@ -83,6 +83,29 @@ describe('ChatPage', () => {
     expect(answer.querySelector('button.cite')?.textContent?.trim()).toBe('S1');
   });
 
+  it('shows bullet lines as a list and bold markup as bold, without the asterisks', async () => {
+    await ask('Welche Lenkkraft?');
+    fake.push(
+      { event: 'sources', data: { sources: [SOURCE_S1] } },
+      {
+        event: 'token',
+        data: { text: 'Abweichung:\n* In **v1.2** 300 N\n* In **v2.0** 250 N [S1]' },
+      },
+    );
+    await render();
+
+    const answer = el.querySelector('.text')!;
+    expect([...answer.querySelectorAll('li')].map((li) => li.textContent?.trim())).toEqual([
+      'In v1.2 300 N',
+      'In v2.0 250 N  S1',
+    ]);
+    expect([...answer.querySelectorAll('strong')].map((b) => b.textContent)).toEqual([
+      'v1.2',
+      'v2.0',
+    ]);
+    expect(answer.textContent).not.toContain('*');
+  });
+
   it('Abbrechen really aborts the request', async () => {
     await ask('Welche Lenkkraft?');
     fake.push({ event: 'stage', data: { stage: 'generating' } });
