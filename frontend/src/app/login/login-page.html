@@ -32,4 +32,11 @@
   <button type="submit" [disabled]="busy() || !email().trim() || !password()">
     {{ busy() ? 'Anmeldung läuft…' : 'Anmelden' }}
   </button>
+
+  <div class="guest">
+    <p class="muted">Ohne Konto ausprobieren: Fragen an den Demo-Korpus, nur lesend.</p>
+    <button type="button" class="secondary" [disabled]="busy()" (click)="signInAsGuest()">
+      Als Gast ansehen
+    </button>
+  </div>
 </form>

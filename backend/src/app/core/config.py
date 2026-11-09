@@ -146,8 +146,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-insecure-secret-change-me"
     jwt_issuer: str = "normeon"
     jwt_ttl_minutes: int = 8 * 60
-    # Password for the two demo users `python -m app.db.seed` creates.
-    demo_user_password: str = "normeon-demo"
+    # Passwords for the demo users `python -m app.db.seed` creates. The
+    # readers (the guest and the second tenant's user) are public; the admin
+    # can upload documents, so a public deployment sets her password to a
+    # secret value.
+    demo_admin_password: str = "normeon-demo"
+    demo_reader_password: str = "normeon-demo"
 
     # Upload limits. A body over `max_upload_mb` is refused
     # before it is read; a file is opened and checked (encryption, page
