@@ -559,3 +559,50 @@ The first attempt used up the free tier's 1000 embedding requests for
 the day after 23 of the 50 E7 questions; the run resumed after the reset
 and reran only those.
 
+## Partial-answer prompt (#38)
+
+The answer prompt `answer_de.v2` declines a question the sources answer
+"nicht oder nur unvollstaendig" -- incompletely counts as not at all.
+`answer_de.v3` changes only that rule: answer what the sources support,
+say in one sentence what they leave open, and decline only when no
+source answers any part of the question. Everything else (untrusted
+sources, citation markers, no outside knowledge) is v2's word for word,
+and an answer without a valid citation still becomes `NICHT_GEFUNDEN`.
+
+Measured on the demo's configuration (Gemini embeddings, hybrid, no
+reranker), the only change being the prompt -- no local models needed:
+
+```bash
+cd backend
+EMBEDDING_API_KEY=... .venv/Scripts/python scripts/run_matrix.py     --reports-dir eval/reports/matrix --question-interval 8 --judge-interval 8     --only "deployed: Gemini embeddings, no reranker"     --only "deployed with the partial-answer prompt"
+```
+
+| Prompt | answer_accuracy | 95% CI | false abstention | strict abstention on unanswerable | citation precision |
+| --- | --- | --- | --- | --- | --- |
+| v2 (deployed) | 0.800 | [0.680, 0.900] | 0.225 | 10 / 10 | **0.640** |
+| v3 | 0.800 | [0.680, 0.900] | **0.200** | 7 / 10 | 0.500 |
+
+Paired, question by question: Δ answer_accuracy +0.000, 95% CI
+[-0.100, +0.100]. Seven questions change outcome:
+
+- three abstentions become correct answers (Q001 and Q003, both
+  version conflicts, and the cross-reference Q028);
+- two correct answers become abstentions (Q004, Q005, also version
+  conflicts) -- the same kind of question flips in both directions;
+- two answers lose a point (Q010, Q030), each stating less than v2 did.
+
+On three unanswerable questions v3 no longer answers with the bare
+`NICHT_GEFUNDEN` but says the sources hold no such figure and cites
+what they do say (e.g. that a breach of § 53d is an administrative
+offence, not the fine). The judge counts these as correct declines, so
+accuracy on unanswerable questions stays 10 / 10, but the citations
+point at text that does not answer the question, which is why citation
+precision drops.
+
+**Decision: v2 stays the default.** The rule change moves which
+questions are declined without declining fewer of them in a way this
+sample can see, and it costs citation precision and the clean
+`NICHT_GEFUNDEN` signal the UI and the abstention metrics rely on. The
+other lever named in #38 -- adding the neighbouring chunk to the context
+-- is not measured; `FAILURE-MODES.md` keeps it as the open hypothesis.
+

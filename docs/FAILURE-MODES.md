@@ -408,6 +408,12 @@ surrounding text a single structural chunk doesn't carry, and the strict
 not retrieval -- the lever is the prompt and the context window (e.g.
 adding the neighbouring chunk), not the chunker.
 
+The prompt half is measured: a prompt that answers the covered part of
+a question (`answer_de.v3`) leaves accuracy unchanged on the deployed
+configuration -- it answers three declined questions and declines two
+it used to answer (`EVALUATION.md`, "Partial-answer prompt"). The
+neighbouring-chunk half is not measured yet.
+
 ### 3. Fixed windows carry the wrong section label
 
 A fixed 500-token window spans several sections but is stored with the
