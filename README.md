@@ -7,7 +7,7 @@ checked, and says `NICHT_GEFUNDEN` instead of guessing.
 [![CI](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/MihaelaAghirculesei/normeon-german-technical-rag/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-<!-- Demo GIF: question → sources → streamed answer → citation → PDF page. -->
+![A question about minimum tyre tread depth: the answer cites StVZO § 36, and the citation opens the original PDF page with the passage highlighted.](docs/img/demo.gif)
 
 ## Live demo
 
@@ -22,7 +22,7 @@ shows the cited text rather than the original PDF. The corpus is two
 public German traffic regulations (StVZO, FZV) and two synthetic
 Lastenheft versions that contradict each other on purpose. Try
 *„Welche Lenkkraft fordert das Lastenheft?“* or
-*„Wie breit darf ein Pkw nach StVZO sein?“*.
+*„Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?“*.
 
 ## Results
 
