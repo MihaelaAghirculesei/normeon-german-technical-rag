@@ -46,8 +46,8 @@ GitHub as well (a password manager): a secret cannot be read back.
 
    `--no-owner` makes the restoring role own every object, which is what
    the app expects; ownership in Neon cannot be assigned to another role
-   anyway.
-
+   anyway.
+
    Outside Neon (a local container, another provider) the last two
    entries of the dump fail: they set default privileges for
    `cloud_admin` and `neon_superuser`, roles only Neon has. Everything
@@ -72,6 +72,32 @@ GitHub as well (a password manager): a secret cannot be read back.
 Without a usable dump, a fresh database is rebuilt by starting the app
 against it (migrations + seed create the schema, role and demo users) and
 loading the demo corpus again: see "Load the demo corpus" below.
+
+## The nightly backup stopped running
+
+GitHub disables scheduled workflows in a repository with no activity for
+60 days, and an artifact only lives seven days -- so a quiet repository
+ends up with no backup at all. Check that the last run is recent:
+
+```bash
+gh run list --workflow backup --limit 1
+```
+
+If the workflow is disabled, turn it back on and take a backup at once:
+
+```bash
+gh workflow enable backup
+gh workflow run backup
+```
+
+## Change the demo admin password
+
+The guest and the second tenant's reader share the public password from
+the README; the demo admin, who can upload documents, uses
+`DEMO_ADMIN_PASSWORD`. Render generates it on the first deploy, and the
+dashboard shows it under Environment. To change it, edit that variable
+and redeploy: the start script runs the seed, which brings every stored
+password in line with the settings.
 
 ## Original files for the PDF viewer
 
