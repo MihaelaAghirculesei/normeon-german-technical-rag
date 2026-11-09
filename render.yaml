@@ -23,6 +23,10 @@ services:
         generateValue: true
       - key: METRICS_TOKEN
         generateValue: true
+      # The demo admin can upload documents; the guest and the second
+      # tenant's reader keep the public password from the README.
+      - key: DEMO_ADMIN_PASSWORD
+        generateValue: true
       # One Gemini API key serves both embeddings and answers.
       - key: EMBEDDING_API_KEY
         sync: false
