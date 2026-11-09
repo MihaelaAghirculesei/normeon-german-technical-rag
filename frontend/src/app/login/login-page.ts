@@ -5,6 +5,10 @@ import { Router } from '@angular/router';
 import { AuthService } from '../core/auth';
 import { Notice } from '../shared/notice';
 
+/** The public read-only account of the demo tenant (seeded by the backend).
+ * It can ask questions and open citations, but not upload documents. */
+export const GUEST = { email: 'gast@demo.normeon.dev', password: 'normeon-demo' } as const;
+
 @Component({
   selector: 'app-login-page',
   imports: [Notice],
@@ -23,13 +27,21 @@ export class LoginPage {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected async submit(event: Event): Promise<void> {
+  protected submit(event: Event): Promise<void> {
     event.preventDefault();
+    return this.signIn(this.email().trim(), this.password());
+  }
+
+  protected signInAsGuest(): Promise<void> {
+    return this.signIn(GUEST.email, GUEST.password);
+  }
+
+  private async signIn(email: string, password: string): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.auth.login(this.email().trim(), this.password());
+      await this.auth.login(email, password);
       await this.router.navigateByUrl(safeTarget(this.weiter()));
     } catch (error) {
       this.error.set(
