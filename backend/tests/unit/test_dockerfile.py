@@ -181,8 +181,15 @@ def test_the_render_blueprint_builds_the_deploy_image_and_holds_no_secret() -> N
     assert service["plan"] == "free"
     assert (ROOT / service["dockerfilePath"]).resolve() == DOCKERFILES["deploy"].resolve()
     assert service["healthCheckPath"] == "/health"
-    secrets = ("DATABASE_URL", "JWT_SECRET", "METRICS_TOKEN", "EMBEDDING_API_KEY", "LLM_API_KEY")
+    secrets = (
+        "DATABASE_URL",
+        "JWT_SECRET",
+        "METRICS_TOKEN",
+        "DEMO_ADMIN_PASSWORD",
+        "EMBEDDING_API_KEY",
+        "LLM_API_KEY",
+    )
     for secret in secrets:
         assert "value" not in env[secret], f"{secret} must not be written in render.yaml"
-    for generated in ("JWT_SECRET", "METRICS_TOKEN"):
+    for generated in ("JWT_SECRET", "METRICS_TOKEN", "DEMO_ADMIN_PASSWORD"):
         assert env[generated].get("generateValue") is True

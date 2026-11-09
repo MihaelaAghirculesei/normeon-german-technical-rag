@@ -5,7 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 
 import { signedOut } from '../core/testing';
 import { ANNA } from '../core/testing';
-import { LoginPage } from './login-page';
+import { GUEST, LoginPage } from './login-page';
 
 describe('LoginPage', () => {
   let fixture: ComponentFixture<LoginPage>;
@@ -67,5 +67,22 @@ describe('LoginPage', () => {
     expect(el.querySelector('[role=alert]')?.textContent).toContain(
       'E-Mail oder Passwort ist falsch.',
     );
+  });
+
+  it('signs in as the read-only guest with one click', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+
+    el.querySelector<HTMLButtonElement>('.guest button')!.click();
+    const request = http.expectOne('/api/v1/auth/login');
+    expect(request.request.body).toEqual({ email: GUEST.email, password: GUEST.password });
+    request.flush({
+      access_token: 'abc',
+      token_type: 'bearer',
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+      user: { ...ANNA, email: GUEST.email, role: 'reader' },
+    });
+    await fixture.whenStable();
+
+    expect(navigate).toHaveBeenCalledWith('/dokumente');
   });
 });
