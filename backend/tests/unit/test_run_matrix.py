@@ -44,3 +44,27 @@ def test_experiment_labels_are_unique() -> None:
     labels = [e.label for e in [*matrix.EXPERIMENTS, *matrix.REFERENCES]]
 
     assert len(labels) == len(set(labels))
+
+
+def test_every_prompt_a_row_names_is_shipped() -> None:
+    from app.services.prompts import load_prompt
+
+    matrix = _load()
+    for experiment in [*matrix.EXPERIMENTS, *matrix.REFERENCES]:
+        if experiment.prompt is not None:
+            assert load_prompt(experiment.prompt).untrusted_context, experiment.label
+
+
+def test_only_selects_rows_in_the_order_given() -> None:
+    matrix = _load()
+    deployed, with_v3 = (r.label for r in matrix.REFERENCES)
+
+    assert [e.label for e in matrix._select([with_v3, deployed])] == [with_v3, deployed]
+    assert matrix._select(None) == [*matrix.EXPERIMENTS, *matrix.REFERENCES]
+
+
+def test_only_rejects_an_unknown_row() -> None:
+    import pytest
+
+    with pytest.raises(SystemExit, match="unknown row"):
+        _load()._select(["no such row"])
