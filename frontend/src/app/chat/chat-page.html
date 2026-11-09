@@ -39,26 +39,29 @@
             beantwortet.
           </app-notice>
         } @else if (chat.answer()) {
-          <p class="text">
-            @for (segment of segments(); track $index) {
-              @if (segment.kind === 'citation') {
-                <button
-                  type="button"
-                  class="cite"
-                  [class.selected]="selectedMarker() === segment.marker"
-                  [attr.aria-pressed]="selectedMarker() === segment.marker"
-                  [attr.aria-label]="'Quelle ' + segment.marker + ' anzeigen'"
-                  (click)="select(segment.marker)"
-                >
-                  {{ segment.marker }}
-                </button>
+          <div class="text">
+            @for (block of blocks(); track $index) {
+              @if (block.kind === 'list') {
+                <ul>
+                  @for (item of block.items; track $index) {
+                    <li>
+                      <ng-container
+                        [ngTemplateOutlet]="inlineContent"
+                        [ngTemplateOutletContext]="{ $implicit: item }"
+                      />
+                    </li>
+                  }
+                </ul>
               } @else {
-                <!-- In its own span: only the model's text keeps its line
-                     breaks, not the template's indentation around it. -->
-                <span class="segment">{{ segment.text }}</span>
+                <p>
+                  <ng-container
+                    [ngTemplateOutlet]="inlineContent"
+                    [ngTemplateOutletContext]="{ $implicit: block.inlines }"
+                  />
+                </p>
               }
             }
-          </p>
+          </div>
         }
 
         @if (chat.status() === 'cancelled') {
@@ -111,3 +114,26 @@
     </div>
   </section>
 }
+
+<ng-template #inlineContent let-inlines>
+  @for (segment of asInlines(inlines); track $index) {
+    @if (segment.kind === 'citation') {
+      <button
+        type="button"
+        class="cite"
+        [class.selected]="selectedMarker() === segment.marker"
+        [attr.aria-pressed]="selectedMarker() === segment.marker"
+        [attr.aria-label]="'Quelle ' + segment.marker + ' anzeigen'"
+        (click)="select(segment.marker)"
+      >
+        {{ segment.marker }}
+      </button>
+    } @else if (segment.kind === 'strong') {
+      <strong class="segment">{{ segment.text }}</strong>
+    } @else {
+      <!-- In its own span: only the model's text keeps its line
+           breaks, not the template's indentation around it. -->
+      <span class="segment">{{ segment.text }}</span>
+    }
+  }
+</ng-template>
