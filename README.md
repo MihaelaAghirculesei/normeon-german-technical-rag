@@ -9,9 +9,10 @@ checked, and says `NICHT_GEFUNDEN` instead of guessing.
 
 ![A question about minimum tyre tread depth: the answer cites StVZO § 36, and the citation opens the original PDF page with the passage highlighted.](docs/img/demo.gif)
 
-▶ [Watch the 2-minute walkthrough](docs/video/normeon-demo.mp4) — guest sign-in,
+▶ [Watch the 2-minute walkthrough](https://cdn.jsdelivr.net/gh/MihaelaAghirculesei/normeon-german-technical-rag@main/docs/video/normeon-demo.mp4) — guest sign-in,
 a cited answer with its PDF page, a version conflict, a declined question
-and tenant isolation (captions, no audio).
+and tenant isolation (captions, no audio; the file is
+[`docs/video/normeon-demo.mp4`](docs/video/normeon-demo.mp4)).
 
 ## Live demo
 
