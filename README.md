@@ -47,7 +47,9 @@ conflict), with one knob changed per configuration:
 What the numbers say:
 - **Retrieval is not the bottleneck.** Nine of the deployed demo's ten
   wrong answers are abstentions, eight of them with the gold source in
-  the context. The model declines more than it should (#38).
+  the context. The model declines more than it should (#38); a prompt
+  that allows partial answers changes which questions are declined,
+  with no measurable gain.
 - **Hybrid earns its place.** Vector-only retrieval costs 8 points of
   answer accuracy, the one single-component difference the sample
   resolves; full-text alone finds a gold source for 6 of 40 questions.
@@ -135,7 +137,8 @@ types (`npm run gen:api`); CI checks both.
 
 Measured where it could be, in [`docs/FAILURE-MODES.md`](docs/FAILURE-MODES.md):
 - The model over-abstains: most wrong answers decline although the
-  answer is in the context (#38).
+  answer is in the context (#38). Loosening the prompt did not help;
+  wider context is the untested lever.
 - German compound nouns are not split by the full-text stemmer
   (*Fahrzeugzulassung* does not match *Zulassung*); the vector branch
   covers part of it.
