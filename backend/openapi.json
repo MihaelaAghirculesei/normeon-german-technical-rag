@@ -718,6 +718,11 @@
               }
             ],
             "title": "Cost Usd"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -1203,6 +1208,11 @@
             },
             "type": "array",
             "title": "Citations"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
           }
         },
         "type": "object",

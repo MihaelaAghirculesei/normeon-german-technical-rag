@@ -25,6 +25,7 @@ const DONE: Extract<ChatStreamEvent, { event: 'done' }> = {
         snippet: 'Lenkkraft max. 250 N',
       },
     ],
+    truncated: false,
   },
 };
 
