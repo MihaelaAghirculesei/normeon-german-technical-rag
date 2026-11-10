@@ -1,4 +1,8 @@
-/** A question known to get a cited answer from one of the demo documents. */
+/** A question known to get a cited answer from one of the demo documents.
+ * Each was asked five times on the deployed configuration and answered every time;
+ * questions about the Lastenheft were left out on purpose: with two
+ * versions of it in the corpus the model declines some of them part of
+ * the time (#38), which would make the example look broken. */
 export interface ExampleQuestion {
   question: string;
   /** Shown only when the tenant has a ready document whose name starts with this. */
@@ -7,7 +11,7 @@ export interface ExampleQuestion {
 
 export const EXAMPLE_QUESTIONS: readonly ExampleQuestion[] = [
   { question: 'Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?', document: 'StVZO' },
-  { question: 'Welche Lenkkraft fordert das Lastenheft?', document: 'Lastenheft' },
+  { question: 'Was gilt für Nebelschlussleuchten?', document: 'StVZO' },
   {
     question: 'Welcher Buchstabe kennzeichnet ein Elektrofahrzeug auf dem Kennzeichen?',
     document: 'FZV',
