@@ -4,7 +4,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 
 import { STREAM_CHAT } from '../api/chat';
 import { ChatPage } from './chat-page';
-import { FakeStream, SOURCE_S1, SOURCE_S2, settle } from './testing';
+import { FakeStream, SOURCE_S1, SOURCE_S2, doc, settle } from './testing';
 
 describe('ChatPage', () => {
   let fake: FakeStream;
@@ -23,6 +23,11 @@ describe('ChatPage', () => {
     });
     fixture = TestBed.createComponent(ChatPage);
     el = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    // The intro lists the tenant's documents; answer that request up front.
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/documents')
+      .flush([doc('StVZO.pdf')]);
     await fixture.whenStable();
   });
 
@@ -59,6 +64,22 @@ describe('ChatPage', () => {
     fake.push({ event: 'stage', data: { stage: 'generating' } });
     await render();
     expect(activeStep()).toContain('Antwort erstellen…');
+  });
+
+  it('explains what it answers until the first question, and asks a clicked example', async () => {
+    await render();
+    expect(el.querySelector('app-chat-intro')).not.toBeNull();
+
+    el.querySelector<HTMLButtonElement>('button.example')!.click();
+    await render();
+
+    expect(fake.requests.map((r) => r.question)).toEqual([
+      'Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?',
+    ]);
+    expect(el.querySelector('textarea')!.value).toBe(
+      'Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?',
+    );
+    expect(el.querySelector('app-chat-intro')).toBeNull();
   });
 
   it('shows the sources before any answer text arrives', async () => {
