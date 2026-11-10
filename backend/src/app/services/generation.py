@@ -51,7 +51,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.embedding.base import EmbeddingAdapter
-from app.adapters.llm.base import LlmClient
+from app.adapters.llm.base import LlmClient, is_truncated
 from app.adapters.reranker.base import Reranker
 from app.core.config import settings
 from app.core.errors import NormeonError
@@ -60,6 +60,7 @@ from app.core.metrics import (
     CITATIONS_TOTAL,
     LLM_COST_USD_TOTAL,
     LLM_ERRORS_TOTAL,
+    LLM_TRUNCATED_TOTAL,
     hallucinated_citation_total,
 )
 from app.core.observability import PhaseTimer, phase
@@ -99,6 +100,25 @@ def _count_llm_error(code: str) -> None:
         LLM_ERRORS_TOTAL.labels(provider=settings.llm_provider, code=code).inc()
 
 
+def _check_truncated(
+    finish_reason: str | None, *, model: str, completion_tokens: int | None
+) -> bool:
+    """Count and log a reply the model stopped before finishing (token
+    limit, content filter); the caller tells the user it is incomplete."""
+    if not is_truncated(finish_reason):
+        return False
+    reason = str(finish_reason).lower()
+    LLM_TRUNCATED_TOTAL.labels(reason=reason).inc()
+    _log.warning(
+        "answer.truncated",
+        finish_reason=reason,
+        model=model,
+        completion_tokens=completion_tokens,
+        max_tokens=settings.llm_max_tokens,
+    )
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class AnswerResult:
     answer: str
@@ -113,6 +133,9 @@ class AnswerResult:
     completion_tokens: int | None
     cost_usd: float | None
     invented_citations: int
+    # The model stopped before finishing (token limit, content filter):
+    # the answer is shown, marked as incomplete.
+    truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +382,11 @@ async def generate_answer(
         _count_llm_error(exc.code)
         raise
     generation_ms = round((time.perf_counter() - started) * 1000, 1)
+    truncated = _check_truncated(
+        completion.finish_reason,
+        model=completion.model,
+        completion_tokens=completion.completion_tokens,
+    )
 
     answer, citations, invented_markers = extract_and_validate(completion.text, prep.sources)
     CITATIONS_TOTAL.inc(len(citations))
@@ -403,6 +431,7 @@ async def generate_answer(
         completion_tokens=completion.completion_tokens,
         cost_usd=cost,
         invented_citations=len(invented_markers),
+        truncated=truncated and answer != ABSTENTION_TEXT,
     )
 
 
@@ -506,6 +535,7 @@ async def generate_answer_stream(
         resolved_model = llm.name
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+        finish_reason: str | None = None
         token_stream = llm.stream(
             system=prep.system,
             user=prep.user_message,
@@ -521,6 +551,8 @@ async def generate_answer_stream(
                     prompt_tokens = delta.prompt_tokens
                 if delta.completion_tokens is not None:
                     completion_tokens = delta.completion_tokens
+                if delta.finish_reason:
+                    finish_reason = delta.finish_reason
                 if delta.text:
                     parts.append(delta.text)
                     yield StreamEvent("token", {"text": delta.text})
@@ -531,6 +563,9 @@ async def generate_answer_stream(
             await token_stream.aclose()
             generating.end()
         generation_ms = round((time.perf_counter() - started) * 1000, 1)
+        truncated = _check_truncated(
+            finish_reason, model=resolved_model, completion_tokens=completion_tokens
+        )
 
         answer_text = "".join(parts)
         answer, citations, invented_markers = extract_and_validate(answer_text, prep.sources)
@@ -582,6 +617,7 @@ async def generate_answer_stream(
                 # instruction is not left standing on screen.
                 "answer": answer,
                 "citations": citations,
+                "truncated": truncated and answer != ABSTENTION_TEXT,
             },
         )
     except Exception as exc:  # deliberately broad: an SSE client must

@@ -38,6 +38,10 @@ class LlmResponse:
     model: str
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    # Why the model stopped: "stop" for a finished reply; anything else
+    # ("length", "content_filter", ...) means the text was cut short.
+    # None when the server does not say.
+    finish_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,7 @@ class Delta:
     model: str | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    finish_reason: str | None = None
 
 
 class LlmClient(Protocol):
@@ -65,3 +70,10 @@ class LlmClient(Protocol):
     def stream(
         self, *, system: str, user: str, temperature: float, max_tokens: int
     ) -> AsyncGenerator[Delta]: ...
+
+
+def is_truncated(finish_reason: str | None) -> bool:
+    """True when the server says the reply stopped before the model
+    finished it -- the token limit, a content filter, or anything else
+    that is not a normal stop. An unreported reason counts as finished."""
+    return finish_reason is not None and finish_reason.lower() != "stop"

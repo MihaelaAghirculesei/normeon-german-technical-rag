@@ -178,13 +178,14 @@ class OpenAICompatibleClient:
             raise LlmUnavailableError(_describe(exc)) from exc
 
         payload: dict[str, Any] = response.json()
-        content = payload["choices"][0]["message"]["content"]
+        choice = payload["choices"][0]
         usage = payload.get("usage") or {}
         return LlmResponse(
-            text=str(content).strip(),
+            text=str(choice["message"]["content"]).strip(),
             model=str(payload.get("model", self._model)),
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
+            finish_reason=choice.get("finish_reason"),
         )
 
     async def stream(
@@ -218,14 +219,16 @@ class OpenAICompatibleClient:
                     chunk = json.loads(raw)
                     choices = chunk.get("choices") or []
                     content = choices[0].get("delta", {}).get("content") if choices else None
+                    finish_reason = choices[0].get("finish_reason") if choices else None
                     usage = chunk.get("usage") or {}
-                    if not content and not usage:
+                    if not content and not usage and not finish_reason:
                         continue
                     yield Delta(
                         text=content or "",
                         model=chunk.get("model"),
                         prompt_tokens=usage.get("prompt_tokens"),
                         completion_tokens=usage.get("completion_tokens"),
+                        finish_reason=finish_reason,
                     )
                     # Measured from when the next delta is awaited, so the
                     # caller's time between deltas is not the server's.
