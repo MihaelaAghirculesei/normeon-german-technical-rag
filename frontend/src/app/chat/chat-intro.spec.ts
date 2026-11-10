@@ -10,7 +10,10 @@ describe('examplesFor', () => {
     expect(examplesFor(['FZV.pdf'])).toEqual([
       'Welcher Buchstabe kennzeichnet ein Elektrofahrzeug auf dem Kennzeichen?',
     ]);
-    expect(examplesFor(['Lastenheft-EPS-v1.2.docx', 'StVZO.pdf'])).toHaveLength(2);
+    expect(examplesFor(['Lastenheft-EPS-v1.2.docx', 'StVZO.pdf'])).toEqual([
+      'Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?',
+      'Was gilt für Nebelschlussleuchten?',
+    ]);
     expect(examplesFor(['Betriebsanleitung.pdf'])).toEqual([]);
   });
 });
@@ -41,7 +44,7 @@ describe('ChatIntro', () => {
     ]);
     expect([...el.querySelectorAll('button.example')].map((b) => b.textContent?.trim())).toEqual([
       'Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?',
-      'Welche Lenkkraft fordert das Lastenheft?',
+      'Was gilt für Nebelschlussleuchten?',
     ]);
   });
 
