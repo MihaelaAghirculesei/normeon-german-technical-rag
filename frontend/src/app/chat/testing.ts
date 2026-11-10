@@ -1,4 +1,5 @@
 import type { ChatRequest, ChatStreamEvent, Source, StreamChat } from '../api/chat';
+import type { DocumentSummary } from '../api/api-types';
 
 export const SOURCE_S1: Source = {
   marker: 'S1',
@@ -76,4 +77,22 @@ export class FakeStream {
 /** Let the session's `for await` loop drain what has been pushed. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await Promise.resolve();
+}
+
+/** A ready document of the tenant, as the document list returns it. */
+export function doc(filename: string, extra: Partial<DocumentSummary> = {}): DocumentSummary {
+  return {
+    document_id: `id-${filename}`,
+    filename,
+    doc_type: 'norm',
+    version_label: null,
+    valid_from: null,
+    valid_until: null,
+    page_count: 1,
+    status: 'ready',
+    error_code: null,
+    created_at: '2026-11-01T00:00:00Z',
+    chunk_counts: {},
+    ...extra,
+  };
 }

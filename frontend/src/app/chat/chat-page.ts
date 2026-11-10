@@ -1,16 +1,26 @@
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 
+import { documentsResource } from '../api/documents';
 import { Notice } from '../shared/notice';
 import { PageHeader } from '../shared/page-header';
 import { formatAnswer, type Inline } from './answer-format';
+import { ChatIntro } from './chat-intro';
 import { CitationPanel } from './citation-panel';
 import { ChatSession } from './chat-session';
 import { StageProgress } from './stage-progress';
 
 @Component({
   selector: 'app-chat-page',
-  imports: [CitationPanel, DecimalPipe, NgTemplateOutlet, Notice, PageHeader, StageProgress],
+  imports: [
+    ChatIntro,
+    CitationPanel,
+    DecimalPipe,
+    NgTemplateOutlet,
+    Notice,
+    PageHeader,
+    StageProgress,
+  ],
   providers: [ChatSession],
   templateUrl: './chat-page.html',
   styleUrl: './chat-page.css',
@@ -19,6 +29,8 @@ export class ChatPage {
   protected readonly chat = inject(ChatSession);
   protected readonly draft = signal('');
   protected readonly selectedMarker = signal<string | null>(null);
+  /** For the intro: which documents the questions are answered from. */
+  protected readonly documents = documentsResource();
 
   private readonly sourceMarkers = computed(
     () => new Set(this.chat.sources().map((s) => s.marker)),
@@ -41,6 +53,12 @@ export class ChatPage {
     if (!question || this.chat.streaming()) return;
     this.selectedMarker.set(null);
     void this.chat.ask(question);
+  }
+
+  /** An example from the intro: shown in the box, then asked. */
+  protected askExample(question: string): void {
+    this.draft.set(question);
+    this.submit();
   }
 
   /** Enter sends, Shift+Enter starts a new line. */

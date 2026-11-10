@@ -1,0 +1,75 @@
+:host {
+  display: block;
+  margin-top: var(--space-6);
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+h3 {
+  margin: var(--space-2) 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.documents li {
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.documents .muted {
+  margin-left: var(--space-1);
+}
+
+.examples {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.example {
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  color: var(--accent);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.example:hover,
+.example:focus-visible {
+  color: var(--surface);
+  background: var(--accent);
+}
