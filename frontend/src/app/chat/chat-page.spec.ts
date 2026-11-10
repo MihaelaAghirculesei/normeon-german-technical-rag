@@ -127,6 +127,51 @@ describe('ChatPage', () => {
     expect(answer.textContent).not.toContain('*');
   });
 
+  it('says so when the model stopped before finishing the answer', async () => {
+    await ask('Was gilt für Nebelschlussleuchten?');
+    fake.push(
+      { event: 'sources', data: { sources: [SOURCE_S1] } },
+      { event: 'token', data: { text: 'Regeln [S1]: * **Anbringung und' } },
+      {
+        event: 'done',
+        data: {
+          latency_ms: { retrieval_ms: 400, generation_ms: 2000, total_ms: 2400 },
+          cost_usd: null,
+          answer: 'Regeln [S1]: * **Anbringung und',
+          citations: [],
+          truncated: true,
+        },
+      },
+    );
+    await render();
+
+    expect(el.querySelector('.answer app-notice')?.textContent).toContain(
+      'Die Antwort wurde vorzeitig abgebrochen',
+    );
+  });
+
+  it('shows no such notice for a finished answer', async () => {
+    await ask('Welche Lenkkraft?');
+    fake.push(
+      { event: 'sources', data: { sources: [SOURCE_S1] } },
+      { event: 'token', data: { text: 'Höchstens 250 N [S1].' } },
+      {
+        event: 'done',
+        data: {
+          latency_ms: { retrieval_ms: 400, generation_ms: 2000, total_ms: 2400 },
+          cost_usd: null,
+          answer: 'Höchstens 250 N [S1].',
+          citations: [],
+          truncated: false,
+        },
+      },
+    );
+    await render();
+
+    expect(el.querySelector('.meta')).not.toBeNull();
+    expect(el.textContent).not.toContain('vorzeitig abgebrochen');
+  });
+
   it('Abbrechen really aborts the request', async () => {
     await ask('Welche Lenkkraft?');
     fake.push({ event: 'stage', data: { stage: 'generating' } });
