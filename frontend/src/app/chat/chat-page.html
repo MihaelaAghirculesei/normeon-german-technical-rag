@@ -8,7 +8,7 @@
   <textarea
     id="question"
     rows="3"
-    placeholder="z. B. Welche Lenkkraft schreibt das Lastenheft v2.0 vor?"
+    placeholder="z. B. Welche Mindestprofiltiefe müssen die Reifen eines Pkw haben?"
     [value]="draft()"
     (input)="draft.set($any($event.target).value)"
     (keydown)="onKeydown($event)"
@@ -22,6 +22,14 @@
     }
   </div>
 </form>
+
+@if (chat.status() === 'idle') {
+  <app-chat-intro
+    [documents]="documents.value()"
+    [loaded]="!documents.isLoading() && !documents.error()"
+    (ask)="askExample($event)"
+  />
+}
 
 @if (chat.status() !== 'idle') {
   <section class="exchange" aria-label="Antwort">
