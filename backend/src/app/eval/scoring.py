@@ -125,8 +125,8 @@ async def score_layer2(
     # reliably truncated mid-string ('{"score": 2, "rationale": "Die'),
     # which _parse_judge_response correctly reported as a JudgeError but
     # for the wrong reason (truncation, not a genuinely malformed
-    # response). 800 matches core.config.Settings.llm_max_tokens, the
-    # same budget the answer-generation path already uses.
+    # response). 800 leaves room for that pass and the one-line JSON;
+    # it is the judge's own budget, separate from llm_max_tokens.
     max_tokens: int = 800,
 ) -> JudgeResult | JudgeError:
     user = render_judge_prompt(question, answer)

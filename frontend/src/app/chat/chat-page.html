@@ -72,6 +72,13 @@
           </div>
         }
 
+        @if (chat.truncated()) {
+          <app-notice>
+            Die Antwort wurde vorzeitig abgebrochen und ist unvollständig. Bitte stellen Sie die
+            Frage enger gefasst erneut.
+          </app-notice>
+        }
+
         @if (chat.status() === 'cancelled') {
           <p class="muted state">Abgebrochen.</p>
         }

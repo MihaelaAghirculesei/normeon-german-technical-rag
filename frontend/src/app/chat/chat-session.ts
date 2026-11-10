@@ -49,6 +49,8 @@ export class ChatSession {
   readonly citations = signal<Citation[]>([]);
   readonly latency = signal<Latency | null>(null);
   readonly costUsd = signal<number | null>(null);
+  /** The model stopped before finishing: the answer is incomplete. */
+  readonly truncated = signal(false);
   readonly error = signal<string | null>(null);
 
   readonly streaming = computed(() => this.status() === 'streaming');
@@ -70,6 +72,7 @@ export class ChatSession {
     this.citations.set([]);
     this.latency.set(null);
     this.costUsd.set(null);
+    this.truncated.set(false);
     this.error.set(null);
     this.status.set('streaming');
 
@@ -95,6 +98,7 @@ export class ChatSession {
             this.citations.set(event.data.citations);
             this.latency.set(event.data.latency_ms);
             this.costUsd.set(event.data.cost_usd);
+            this.truncated.set(event.data.truncated);
             this.finish('done');
             return;
           case 'error':
