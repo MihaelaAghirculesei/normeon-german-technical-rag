@@ -113,7 +113,9 @@ class Settings(BaseSettings):
     llm_api_base_url: str | None = None
     llm_api_key: str | None = None
     llm_temperature: float = 0.0
-    llm_max_tokens: int = 800
+    # Room for a long cited answer (lists of rules run to ~700 tokens); a
+    # reply that still hits it is shown marked as incomplete.
+    llm_max_tokens: int = 1500
     llm_timeout_s: float = 30.0
     llm_call_deadline_s: float = 120.0
     llm_stream_first_token_s: float = 60.0
