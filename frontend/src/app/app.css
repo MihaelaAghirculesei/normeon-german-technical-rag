@@ -73,3 +73,27 @@ nav a.active {
   border-radius: var(--radius);
   cursor: pointer;
 }
+
+/* Phones: the bar wraps instead of pushing the page sideways; the account
+   moves to its own row so who is signed in stays visible. */
+@media (max-width: 640px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-4);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .account {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .who {
+    align-items: flex-start;
+  }
+
+  .content {
+    padding: var(--space-6) var(--space-4);
+  }
+}
