@@ -23,6 +23,14 @@
   </div>
 </form>
 
+@if (chat.status() === 'idle') {
+  <app-chat-intro
+    [documents]="documents.value()"
+    [loaded]="!documents.isLoading() && !documents.error()"
+    (ask)="askExample($event)"
+  />
+}
+
 @if (chat.status() !== 'idle') {
   <section class="exchange" aria-label="Antwort">
     <p class="asked">{{ chat.question() }}</p>

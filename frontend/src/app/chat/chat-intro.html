@@ -1,0 +1,41 @@
+<section class="intro" aria-labelledby="intro-heading">
+  <h2 id="intro-heading">Fragen an Ihre technischen Dokumente</h2>
+  <p>
+    Normeon antwortet nur aus den Dokumenten Ihres Mandanten – mit Quellenangabe. Steht etwas nicht
+    darin, sagt es das, statt zu raten. Allgemeine Fragen beantwortet es nicht.
+  </p>
+
+  @if (loaded()) {
+    @if (ready().length === 0) {
+      <app-notice>
+        Für Ihren Mandanten sind noch keine Dokumente hinterlegt. Sobald ein Admin Dokumente
+        hochlädt, können Sie hier Fragen dazu stellen.
+      </app-notice>
+    } @else {
+      <h3>Durchsucht werden</h3>
+      <ul class="documents">
+        @for (doc of ready(); track doc.document_id) {
+          <li>
+            {{ doc.filename }}
+            @if (doc.version_label) {
+              <span class="muted">{{ doc.version_label }}</span>
+            }
+          </li>
+        }
+      </ul>
+
+      @if (examples().length) {
+        <h3>Probieren Sie zum Beispiel</h3>
+        <ul class="examples">
+          @for (question of examples(); track question) {
+            <li>
+              <button type="button" class="example" (click)="ask.emit(question)">
+                {{ question }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>
