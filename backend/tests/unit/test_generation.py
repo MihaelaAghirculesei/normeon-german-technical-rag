@@ -482,7 +482,8 @@ async def test_stream_emits_events_in_the_documented_order(monkeypatch: Any) -> 
     assert "[S1]" in full_text
 
     done = events[-1]
-    assert set(done.data.keys()) == {"latency_ms", "cost_usd", "answer", "citations"}
+    assert set(done.data.keys()) == {"latency_ms", "cost_usd", "answer", "citations", "truncated"}
+    assert done.data["truncated"] is False
     assert done.data["cost_usd"] is None
     assert [c.marker for c in done.data["citations"]] == ["S1", "S2"]
     assert done.data["latency_ms"]["retrieval_ms"] == 16.0
@@ -917,3 +918,68 @@ async def test_fts_match_is_forwarded_to_retrieval_resolved_against_settings(
         object(), object(), object(), FakeLlmClient(), fts_match="any", **kwargs
     )
     assert seen["fts_match"] == "any"
+
+
+class _TruncatingLlm:
+    """Writes half an answer, then stops with the given finish reason --
+    the token limit, or a provider's content filter."""
+
+    name = "truncating"
+
+    def __init__(self, finish_reason: str) -> None:
+        self._finish_reason = finish_reason
+
+    async def complete(self, **_: Any) -> LlmResponse:
+        return LlmResponse(
+            text="Nebelschlussleuchten [S1]: * **Anbringung und",
+            model=self.name,
+            finish_reason=self._finish_reason,
+        )
+
+    async def stream(self, **_: Any) -> AsyncGenerator[Delta]:
+        yield Delta(text="Nebelschlussleuchten [S1]: ", model=self.name)
+        yield Delta(text="* **Anbringung und", model=self.name)
+        yield Delta(finish_reason=self._finish_reason)
+
+
+async def test_a_reply_cut_short_by_the_model_is_marked_and_counted(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("49a")])
+    before = sample("normeon_llm_truncated_total", {"reason": "length"})
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _TruncatingLlm("length"),
+        tenant_id=TENANT, question="Was gilt für Nebelschlussleuchten?",
+    )
+
+    assert result.truncated is True
+    assert result.answer.startswith("Nebelschlussleuchten")
+    assert sample("normeon_llm_truncated_total", {"reason": "length"}) == before + 1
+
+
+async def test_a_streamed_reply_cut_short_is_marked_in_the_done_event(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("49a")])
+    before = sample("normeon_llm_truncated_total", {"reason": "content_filter"})
+
+    events = [
+        event
+        async for event in generation.generate_answer_stream(
+            object(), object(), object(), _TruncatingLlm("content_filter"),
+            tenant_id=TENANT, question="Was gilt für Nebelschlussleuchten?",
+        )
+    ]
+
+    done = events[-1]
+    assert done.event == "done"
+    assert done.data["truncated"] is True
+    assert sample("normeon_llm_truncated_total", {"reason": "content_filter"}) == before + 1
+
+
+async def test_a_normal_stop_is_not_marked(monkeypatch: Any) -> None:
+    _stub_retrieval(monkeypatch, [_chunk("49a")])
+
+    result = await generation.generate_answer(
+        object(), object(), object(), _TruncatingLlm("stop"),
+        tenant_id=TENANT, question="Was gilt für Nebelschlussleuchten?",
+    )
+
+    assert result.truncated is False

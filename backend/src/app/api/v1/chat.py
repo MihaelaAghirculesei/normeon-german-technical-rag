@@ -102,6 +102,8 @@ class ChatResponse(BaseModel):
     retrieval_timing: RetrievalTimingOut
     generation_ms: float
     cost_usd: float | None
+    # The model stopped before finishing (token limit, content filter).
+    truncated: bool = False
 
 
 def _sources_out(sources: list[Source]) -> list[SourceOut]:
@@ -165,6 +167,7 @@ async def chat(
         retrieval_timing=RetrievalTimingOut(**asdict(result.retrieval_timing)),
         generation_ms=result.generation_ms,
         cost_usd=result.cost_usd,
+        truncated=result.truncated,
     )
 
 
@@ -198,6 +201,8 @@ class DoneData(BaseModel):
     # The validated answer; it replaces the text streamed as `token`s.
     answer: str
     citations: list[CitationOut]
+    # The model stopped before finishing: the answer is incomplete.
+    truncated: bool = False
 
 
 class ErrorData(BaseModel):
@@ -266,6 +271,7 @@ def _event_payload(event: StreamEvent) -> BaseModel:
             cost_usd=event.data["cost_usd"],
             answer=event.data["answer"],
             citations=_citations_out(event.data["citations"]),
+            truncated=event.data.get("truncated", False),
         )
     return ErrorData(**event.data)
 
