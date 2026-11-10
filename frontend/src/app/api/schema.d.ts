@@ -257,6 +257,11 @@ export interface components {
             generation_ms: number;
             /** Cost Usd */
             cost_usd: number | null;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /**
          * ChatStreamEvent
@@ -424,6 +429,11 @@ export interface components {
             answer: string;
             /** Citations */
             citations: components["schemas"]["CitationOut"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** DoneEvent */
         DoneEvent: {

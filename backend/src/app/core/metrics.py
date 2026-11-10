@@ -41,6 +41,11 @@ hallucinated_citation_total = Counter(
     "normeon_hallucinated_citations_total",
     "Citation markers the model invented (no such source); dropped from answers.",
 )
+LLM_TRUNCATED_TOTAL = Counter(
+    "normeon_llm_truncated_total",
+    "Answers the model stopped before finishing, by finish reason.",
+    ["reason"],
+)
 LLM_ERRORS_TOTAL = Counter(
     "normeon_llm_errors_total",
     "LLM calls that failed, by provider and error code.",
