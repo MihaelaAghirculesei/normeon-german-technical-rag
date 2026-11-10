@@ -77,6 +77,21 @@ async def test_parses_content_model_and_usage() -> None:
     assert (resp.prompt_tokens, resp.completion_tokens) == (42, 7)
 
 
+async def test_reports_why_the_model_stopped() -> None:
+    body = _ok_body()
+    body["choices"][0]["finish_reason"] = "length"
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_transport([], body=body),
+    )
+
+    resp = await client.complete(system="s", user="u", temperature=0.0, max_tokens=10)
+
+    assert resp.finish_reason == "length"
+
+
 async def test_missing_usage_block_yields_none_token_counts() -> None:
     body = {"choices": [{"message": {"content": "x"}}]}
     client = OpenAICompatibleClient(
@@ -565,3 +580,18 @@ def test_wait_honours_retry_after_up_to_the_cap() -> None:
 def test_wait_falls_back_to_backoff_without_retry_after() -> None:
     assert _wait(_state_after(httpx.Response(429))) <= 4
     assert _wait(_state_after(httpx.Response(503, headers={"Retry-After": "600"}))) <= 4
+
+
+async def test_stream_reports_the_finish_reason_even_on_a_chunk_without_text() -> None:
+    stop_chunk = {"model": "m", "choices": [{"delta": {}, "finish_reason": "content_filter"}]}
+    client = OpenAICompatibleClient(
+        base_url="https://llm.example/v1",
+        api_key=None,
+        model="m",
+        transport=_sse_transport(_sse_body(_content_chunk("Die Anbringung und"), stop_chunk)),
+    )
+
+    deltas = [d async for d in client.stream(system="s", user="u", temperature=0.0, max_tokens=10)]
+
+    assert "".join(d.text for d in deltas) == "Die Anbringung und"
+    assert [d.finish_reason for d in deltas] == [None, "content_filter"]

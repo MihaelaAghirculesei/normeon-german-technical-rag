@@ -578,6 +578,23 @@ repository was private (Actions minutes); now that it is public, the
 minutes are free, and an always-on instance (about 744 hours a month)
 would fit Render's 750 free hours. Not set up yet.
 
+### A reply cut short looked complete (fixed)
+
+The adapter ignored `finish_reason`, so a reply the model stopped early
+was shown as a finished answer. On the live demo, one of three runs of
+"Was gilt für Nebelschlussleuchten?" ended mid-list ("**Anbringung und")
+while the other two ran to about 2,600 characters. Two causes fit: the
+800-token limit (that answer takes 600-660 completion tokens locally),
+and Gemini's own stop on long verbatim passages, which statute text
+invites. The production log was not read, so which one it was is open.
+
+The adapter now carries `finish_reason` and treats anything but `stop` as
+cut short. The answer is still shown, but `truncated` is set on the
+response and the `done` event, the page says the answer is incomplete,
+and `normeon_llm_truncated_total{reason}` counts it. The limit is now
+1,500 tokens. A reply that ends without stating a reason counts as
+finished.
+
 ## Known limits
 
 ### A table that continues on the next page becomes two tables
