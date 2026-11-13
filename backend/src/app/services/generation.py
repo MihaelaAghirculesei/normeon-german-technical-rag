@@ -13,9 +13,9 @@ log events exist in exactly one place; ``_log_query`` holds the other
 shared tail -- computing `config_hash` and cost, then writing the
 `query_logs` row -- for the same reason.
 
-If the top reranked chunk's score is below `settings.
-min_rerank_score_for_answer` (or nothing was retrieved at all), the LLM
-is never called: the answer is NICHT_GEFUNDEN and the event is logged as
+If nothing was retrieved at all -- or the reranker scores relevance and
+the top chunk's score is below `settings.min_rerank_score_for_answer` --
+the LLM is never called: the answer is NICHT_GEFUNDEN and the event is logged as
 `abstained_pre_generation` -- the cost-saving path.
 Past that gate, citation validation (`domain.citations.
 extract_and_validate`) drops any marker the model invented and turns an
@@ -204,7 +204,12 @@ async def _prepare(
     )
 
     top_score = retrieval.reranked[0].score if retrieval.reranked else None
-    if top_score is None or top_score < settings.min_rerank_score_for_answer:
+    below_threshold = (
+        retrieval.scores_relevance
+        and top_score is not None
+        and top_score < settings.min_rerank_score_for_answer
+    )
+    if top_score is None or below_threshold:
         _log.info(
             "abstained_pre_generation",
             top_score=top_score,

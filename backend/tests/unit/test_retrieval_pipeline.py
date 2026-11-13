@@ -115,6 +115,7 @@ class _RecordingReranker:
     name = "recording"
 
     def __init__(self) -> None:
+        self.scores_relevance = False
         self.seen: tuple[str, int] | None = None
 
     def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int) -> list[RetrievedChunk]:
@@ -149,6 +150,18 @@ async def test_retrieve_context_runs_hybrid_then_rerank_then_select(
     # reranker reversed [alpha, beta, gamma] and kept 2 -> [gamma, beta]
     assert [c.content for c in result.reranked] == ["gamma", "beta"]
     assert [c.content for c in result.context] == ["gamma", "beta"]
+
+
+@pytest.mark.parametrize("scores_relevance", [True, False])
+async def test_retrieve_context_carries_the_rerankers_relevance_flag(
+    stub_hybrid: list[RetrievedChunk], scores_relevance: bool
+) -> None:
+    reranker = _RecordingReranker()
+    reranker.scores_relevance = scores_relevance
+
+    result = await retrieve_context(object(), object(), reranker, tenant_id=TENANT, question="Q")
+
+    assert result.scores_relevance is scores_relevance
 
 
 async def test_retrieve_context_signals_the_rerank_hand_off(

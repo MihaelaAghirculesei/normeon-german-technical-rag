@@ -10,6 +10,7 @@ from typing import Any
 
 from app.adapters.llm.base import Delta, LlmResponse
 from app.adapters.llm.fake import FakeLlmClient
+from app.core.config import settings
 from app.core.errors import LlmTimeoutError
 from app.core.metrics import sample
 from app.domain.models import PipelineTiming, RetrievalResult, RetrievedChunk
@@ -39,7 +40,9 @@ def _chunk(
     )
 
 
-def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str, Any]:
+def _stub_retrieval(
+    monkeypatch: Any, chunks: list[RetrievedChunk], *, scores_relevance: bool = False
+) -> dict[str, Any]:
     seen: dict[str, Any] = {}
 
     async def fake_retrieve_context(
@@ -66,7 +69,9 @@ def _stub_retrieval(monkeypatch: Any, chunks: list[RetrievedChunk]) -> dict[str,
         seen["candidate_k"] = candidate_k
         seen["fts_match"] = fts_match
         timing = PipelineTiming(hybrid_ms=10.0, rerank_ms=5.0, select_ms=1.0, total_ms=16.0)
-        return RetrievalResult(context=chunks, reranked=chunks, timing=timing)
+        return RetrievalResult(
+            context=chunks, reranked=chunks, timing=timing, scores_relevance=scores_relevance
+        )
 
     monkeypatch.setattr(generation, "retrieve_context", fake_retrieve_context)
     monkeypatch.setattr(generation, "record_query_log", _noop_record_query_log)
@@ -220,7 +225,8 @@ async def test_empty_retrieval_abstains_pre_generation_without_calling_the_llm(
 async def test_a_low_rerank_score_abstains_pre_generation_without_calling_the_llm(
     monkeypatch: Any,
 ) -> None:
-    _stub_retrieval(monkeypatch, [_chunk("5.1", score=-3.0)])
+    monkeypatch.setattr(settings, "min_rerank_score_for_answer", 0.3)
+    _stub_retrieval(monkeypatch, [_chunk("5.1", score=0.05)], scores_relevance=True)
 
     result = await generation.generate_answer(
         object(),
@@ -239,7 +245,29 @@ async def test_a_low_rerank_score_abstains_pre_generation_without_calling_the_ll
 async def test_a_rerank_score_at_or_above_the_threshold_still_calls_the_llm(
     monkeypatch: Any,
 ) -> None:
-    _stub_retrieval(monkeypatch, [_chunk("5.1", score=0.0)])
+    monkeypatch.setattr(settings, "min_rerank_score_for_answer", 0.3)
+    _stub_retrieval(monkeypatch, [_chunk("5.1", score=0.3)], scores_relevance=True)
+
+    result = await generation.generate_answer(
+        object(),
+        object(),
+        object(),
+        FakeLlmClient(),
+        tenant_id=TENANT,
+        question="Frage?",
+    )
+
+    assert result.answer != "NICHT_GEFUNDEN"
+    assert result.sources != []
+
+
+async def test_scores_that_do_not_measure_relevance_never_trip_the_gate(
+    monkeypatch: Any,
+) -> None:
+    # A fused RRF score (here 1/61) sits below any useful threshold by
+    # construction; it says where the chunk ranked, not how relevant it is.
+    monkeypatch.setattr(settings, "min_rerank_score_for_answer", 0.3)
+    _stub_retrieval(monkeypatch, [_chunk("5.1", score=1 / 61)], scores_relevance=False)
 
     result = await generation.generate_answer(
         object(),

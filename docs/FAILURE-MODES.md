@@ -164,24 +164,26 @@ the one prompt family it approximates, not a citation-validation gap.
 
 ## Abstention and conflict detection
 
-### The confidence threshold's scale depends on the reranker
+### The confidence threshold's scale depends on the reranker (fixed)
 
 `min_rerank_score_for_answer` compares against `retrieve_context`'s top
-reranked chunk score, but that score's scale is whatever the configured
-`reranker_provider` produces: `cross_encoder`'s raw logits are an
-unbounded real number (roughly -10..10 for `bge-reranker-v2-m3`,
-uncalibrated), while `noop` just passes through the hybrid stage's
-RRF-fused score, which is *always* a small positive number regardless of
-true relevance (`w / (k + rank)`, see the RRF entry above). A threshold
-tuned for one is meaningless for the other -- with `noop` a real
-NICHT_GEFUNDEN case still clears any reasonable threshold above zero,
-because RRF never really says "not confident", only "not top-ranked".
+reranked chunk score, but that score's scale is whatever the reranker
+produces: the cross-encoder returns a relevance probability in [0, 1]
+(sentence-transformers applies a sigmoid to a one-label model -- an
+earlier version of this entry wrongly called them raw logits), while
+`noop` passes on the hybrid stage's RRF-fused score, `w / (k + rank)`,
+which says where a chunk ranked, never how relevant it is. One number
+cannot mean the same for both, and with a 0.0 threshold the gate never
+fired for either.
 
-**Mitigation / status.** Same "matrix variable" status as `rrf_k`
-and the rerank weights: `min_rerank_score_for_answer` needs per-reranker
-tuning against the eval set, not a single one-size value. The gate is
-correct in what it does (skip the LLM call below the configured number);
-what number is meaningful is a `reranker_provider`-specific question.
+**Fix.** A reranker declares whether its scores measure relevance
+(`Reranker.scores_relevance`); the gate applies the threshold only then,
+and otherwise stops only an empty retrieval. The threshold, 0.3, comes
+from replaying the gate over the cross-encoder eval runs (#17,
+`docs/EVALUATION.md`): it skips the LLM on a few hopeless questions
+without losing a correct answer. It does not make abstention better --
+the top score separates unanswerable questions poorly (AUC 0.76) --
+so the prompt stays the main line.
 
 ### Version-conflict detection is keyed on the requirement code, not the document
 
@@ -558,12 +560,12 @@ it. The lexical branches only pay off where nothing re-ranks after them
 
 ### The confidence gate cannot be calibrated without the cross-encoder
 
-`min_rerank_score_for_answer` is 0.0: it stops only an empty retrieval,
-in every configuration evaluated so far, and abstention rests on the
-prompt (#17). With the cross-encoder a real threshold could be tuned on
-its scores; the deployed system ranks by fused RRF scores, which say
-where a chunk ranked, not how relevant it is, so there is nothing to
-calibrate. The evaluation shows the prompt abstains correctly on all 10
+The deployed system has no reranker, so its scores are fused RRF ranks,
+which say where a chunk ranked, not how relevant it is: there is nothing
+to calibrate, and the gate stops only an empty retrieval. With the
+cross-encoder the threshold is tuned (0.3, #17), but even there it only
+saves LLM calls -- it does not separate unanswerable questions well
+enough to decline more of them, so abstention rests on the prompt. The evaluation shows the prompt abstains correctly on all 10
 unanswerable questions, and too often on answerable ones (9 of the
 deployed row's 10 wrong answers, as in the first matrix run, #38) -- but there is
 no second line.

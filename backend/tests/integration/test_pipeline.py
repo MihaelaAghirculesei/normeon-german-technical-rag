@@ -50,6 +50,7 @@ class _ReverseReranker:
     `top_k`, so the test can tell rerank actually ran without a model."""
 
     name = "reverse"
+    scores_relevance = False
 
     def rerank(
         self, query: str, chunks: list[RetrievedChunk], top_k: int
