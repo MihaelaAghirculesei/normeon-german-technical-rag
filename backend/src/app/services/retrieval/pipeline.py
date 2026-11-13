@@ -153,6 +153,7 @@ async def retrieve_context(
     return RetrievalResult(
         context=context,
         reranked=reranked,
+        scores_relevance=reranker.scores_relevance,
         timing=PipelineTiming(
             hybrid_ms=round((after_hybrid - started) * 1000, 1),
             rerank_ms=round((after_rerank - after_hybrid) * 1000, 1),

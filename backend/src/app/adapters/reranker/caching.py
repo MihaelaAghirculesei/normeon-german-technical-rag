@@ -39,6 +39,7 @@ class CachingReranker:
         self._inner = inner
         self._namespace = namespace
         self.name = inner.name
+        self.scores_relevance = inner.scores_relevance
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         # `rerank` runs off the event loop via `asyncio.to_thread`, so
         # the connection is shared across worker threads behind a lock.

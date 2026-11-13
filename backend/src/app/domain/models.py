@@ -58,8 +58,11 @@ class RetrievalResult:
     `context` is the final token-budgeted selection, best-first.
     `reranked` is everything the reranker returned before budget
     selection -- kept for inspection and offline evaluation.
+    `scores_relevance` is the reranker's own flag: whether the scores in
+    `reranked` measure relevance, so a confidence threshold applies.
     """
 
     context: list[RetrievedChunk]
     reranked: list[RetrievedChunk]
     timing: PipelineTiming
+    scores_relevance: bool = False

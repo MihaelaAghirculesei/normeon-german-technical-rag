@@ -16,9 +16,14 @@ class CrossEncoderReranker:
     is truncated before scoring. `None` leaves the tokenizer's own limit
     in place (8192 for bge-reranker-v2-m3), which scores every chunk in
     full at a cost that grows with its length.
+
+    Scores are the model's sigmoid output, a relevance probability in
+    [0, 1] (sentence-transformers' default activation for a one-label
+    cross-encoder), not a raw logit.
     """
 
     name = "cross_encoder"
+    scores_relevance = True
 
     def __init__(self, model_name: str, max_length: int | None = None) -> None:
         self._model_name = model_name
