@@ -76,9 +76,9 @@ selection") -- at 0.1 CPU it would take minutes per question.
   citation precision (0.640 vs 0.500). Better retrieval does not reach
   the answers because the model over-abstains: 9 of its 10 wrong answers
   are `NICHT_GEFUNDEN`, 8 with the gold source in the context (#38).
-- **The confidence gate stays uncalibrated.** `min_rerank_score_for_answer`
-  is 0.0 and stops only an empty retrieval (#17); a real threshold would
-  need cross-encoder scores, and fused RRF scores rank rather than
+- **The confidence gate stops only an empty retrieval.** The threshold
+  (0.3, tuned on cross-encoder scores, #17) applies only to a reranker
+  whose scores measure relevance; fused RRF scores rank rather than
   measure relevance. The deployed system abstains through the prompt
   only.
 - **The embedding quota is the binding limit.** The free tier allows
