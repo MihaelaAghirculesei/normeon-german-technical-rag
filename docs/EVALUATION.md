@@ -606,3 +606,53 @@ sample can see, and it costs citation precision and the clean
 other lever named in #38 -- adding the neighbouring chunk to the context
 -- is not measured; `FAILURE-MODES.md` keeps it as the open hypothesis.
 
+
+## Confidence gate threshold (#17)
+
+`generate_answer` skips the LLM when the top reranked chunk scores below
+`min_rerank_score_for_answer`. Until now the threshold was 0.0, set on
+the assumption that the cross-encoder returns raw logits around -10..10.
+It does not: sentence-transformers applies a sigmoid to a one-label
+cross-encoder, so `bge-reranker-v2-m3` scores are probabilities in
+[0, 1] and a 0.0 threshold never fired. Every run so far was therefore
+ungated, which makes the gate replayable offline: below a threshold a
+question becomes `NICHT_GEFUNDEN` (correct exactly when it is
+unanswerable), above it the recorded outcome stands. The top scores come
+back from the matrix's rerank cache, so the sweep costs no LLM call:
+
+```bash
+cd backend
+.venv/Scripts/python scripts/sweep_confidence_gate.py \
+    --reports-dir eval/reports/matrix <hash> [<hash> ...]
+```
+
+Baseline (e5, hybrid, cross-encoder, top-k 5) and E7 (Gemini
+embeddings, cross-encoder), 50 questions each:
+
+| threshold | baseline accuracy | baseline LLM calls saved | E7 accuracy | E7 LLM calls saved |
+| --- | --- | --- | --- | --- |
+| 0.0 (old default) | 0.840 | 0 | 0.840 | 0 |
+| 0.3 (new default) | 0.840 | 3 | 0.840 | 2 |
+| 0.5 | 0.840 | 6 | 0.840 | 4 |
+| 0.6 | 0.820 | 7 | 0.820 | 6 |
+| 0.7 | 0.780 | 9 | 0.740 | 10 |
+| 0.9 | 0.680 | 20 | 0.640 | 21 |
+
+The other cross-encoder rows (E2, E5, E6, E9) give the same picture:
+no correct answer is lost up to 0.5, and accuracy falls from 0.6 on.
+
+- **The gate saves calls, it does not improve answers.** The model
+  already declines 9-10 of the 10 unanswerable questions, and the top
+  score barely tells them apart from answerable ones (AUC 0.75-0.76):
+  the unanswerable questions sit next to real topics (fees next to
+  registration, fines next to § 53d), so the best chunk looks relevant.
+  A threshold high enough to catch them throws away correct answers.
+- **0.3, not 0.5.** Up to 0.5 the gate only stops questions the model
+  would have declined anyway, but the lowest-scoring correct answer is at
+  0.529 (E7) -- too close to tune to on fifty questions. 0.3 keeps a
+  margin and still skips the LLM on 2-3 hopeless questions in fifty.
+- **The demo is unaffected.** The gate now applies only to a reranker
+  whose scores measure relevance (`Reranker.scores_relevance`). Without
+  a reranker the scores are fused RRF ranks, which say where a chunk
+  ranked, not how relevant it is; there the gate stops only an empty
+  retrieval, as before, and abstention rests on the prompt.

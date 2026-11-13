@@ -160,7 +160,9 @@ def hallucinated_citation_rate(results: list[QuestionRun]) -> float | None:
     return sum(r.invented_citations for r in answered) / len(answered)
 
 
-def _is_correct(scored: ScoredQuestionRun) -> bool:
+def is_correct(scored: ScoredQuestionRun) -> bool:
+    """`answer_accuracy`'s rule for one question: Layer 1 passed, or the
+    judge gave the full score."""
     return scored.layer1.all_present or (
         isinstance(scored.layer2, JudgeResult) and scored.layer2.score == 2
     )
@@ -169,7 +171,7 @@ def _is_correct(scored: ScoredQuestionRun) -> bool:
 def answer_accuracy(scored_results: list[ScoredQuestionRun]) -> float:
     if not scored_results:
         raise ValueError("need at least one scored question")
-    return sum(_is_correct(r) for r in scored_results) / len(scored_results)
+    return sum(is_correct(r) for r in scored_results) / len(scored_results)
 
 
 def correct_abstention_rate(
@@ -278,7 +280,7 @@ def question_outcomes(
             QuestionOutcome(
                 question_id=question.id,
                 category=question.category,
-                answer_correct=_is_correct(scored_run),
+                answer_correct=is_correct(scored_run),
                 gold_hit=gold_hit,
             )
         )

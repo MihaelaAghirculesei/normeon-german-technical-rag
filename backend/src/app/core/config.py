@@ -127,18 +127,21 @@ class Settings(BaseSettings):
     # is below this, `generate_answer` answers NICHT_GEFUNDEN without
     # calling the LLM at all -- the cost-saving "abstained_pre_generation"
     # path. NOTE: the raw score's scale depends on `reranker_provider` --
-    # a cross-encoder logit and an RRF-fused score are not comparable, so
-    # this threshold only means something once tuned per reranker (see
-    # docs/FAILURE-MODES.md); 0.0 is a placeholder that only ever screens
-    # out a genuinely negative cross-encoder score or an empty result,
-    # same "needs eval-driven tuning" status as `rrf_k` and the rerank
-    # weights. `llm_max_retries` bounds the OpenAI-compatible adapter's
+    # `min_rerank_score_for_answer` applies only to a reranker whose scores
+    # measure relevance (`Reranker.scores_relevance`): the cross-encoder's
+    # are probabilities in [0, 1]; the no-op reranker passes on fused RRF
+    # ranks, which the gate ignores -- there only an empty retrieval stops
+    # the LLM. 0.3 comes from replaying the gate over the cross-encoder eval
+    # runs (scripts/sweep_confidence_gate.py, docs/EVALUATION.md): up to 0.5
+    # it costs no correct answer, the lowest correct one scored 0.529, so
+    # 0.3 keeps a margin and still skips the LLM on a few hopeless
+    # questions. `llm_max_retries` bounds the OpenAI-compatible adapter's
     # `tenacity` retry budget for transient failures (timeouts, connection
     # errors, 5xx) -- a 4xx is never retried. `llm_timeout_s` bounds each
     # network read, `llm_call_deadline_s` a whole attempt; a stream has no
     # total cap, only `llm_stream_first_token_s` to its first delta and
     # `llm_stream_idle_s` between deltas.
-    min_rerank_score_for_answer: float = 0.0
+    min_rerank_score_for_answer: float = 0.3
 
     # Auth. The default secret only exists so a fresh clone runs;
     # outside `environment = "development"` / "test" startup refuses it (see
