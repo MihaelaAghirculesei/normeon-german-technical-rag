@@ -155,3 +155,8 @@ def test_cross_encoder_passes_max_length_to_the_model(
     _ = CrossEncoderReranker("bge", max_length=512)._loaded_model
 
     assert seen == {"model_name": "bge", "max_length": 512}
+
+
+def test_only_the_cross_encoder_scores_relevance() -> None:
+    assert NoopReranker.scores_relevance is False
+    assert CrossEncoderReranker.scores_relevance is True

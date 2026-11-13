@@ -46,6 +46,7 @@ class _HashingEmbedder:
 
 class _PassthroughReranker:
     name = "passthrough"
+    scores_relevance = False
 
     def rerank(
         self, query: str, chunks: list[RetrievedChunk], top_k: int

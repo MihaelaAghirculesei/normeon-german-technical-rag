@@ -8,6 +8,7 @@ class NoopReranker:
     """
 
     name = "noop"
+    scores_relevance = False
 
     def rerank(
         self, query: str, chunks: list[RetrievedChunk], top_k: int

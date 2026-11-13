@@ -331,8 +331,8 @@ async def _run(args: argparse.Namespace) -> None:
         f"{args.top_k}, answers from {settings.llm_model}, prompt "
         f"{settings.answer_prompt_name}. E8 answers with {args.model_b}; every row "
         f"is judged by {settings.llm_model}.",
-        "E4 keeps the fused order and its scores, so the confidence gate -- set "
-        "for cross-encoder logits -- does not fire there.",
+        "E4 keeps the fused order and its scores, which rank rather than measure "
+        "relevance, so the confidence gate does not apply there.",
         "E3 uses the production full-text query, which needs every term of the "
         "question; E9 keeps hybrid retrieval and lets full-text match any term.",
         f"E7 embeds with {GEMINI_EMBEDDING_MODEL} in place of "

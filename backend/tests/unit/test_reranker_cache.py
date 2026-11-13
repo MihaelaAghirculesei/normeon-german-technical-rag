@@ -29,6 +29,7 @@ class _CountingReranker:
     every (query, content) pair it was asked to score."""
 
     name = "cross_encoder"
+    scores_relevance = True
 
     def __init__(self, scores: dict[str, float]) -> None:
         self._scores = scores
@@ -54,6 +55,7 @@ def test_matches_the_inner_reranker_on_a_cold_cache(tmp_path: Path) -> None:
     assert [c.score for c in out] == [0.9, 0.5]
     assert [c.chunk_id for c in out] == [chunks[1].chunk_id, chunks[2].chunk_id]
     assert cached.name == "cross_encoder"
+    assert cached.scores_relevance is True
 
 
 def test_only_unseen_pairs_reach_the_inner_reranker(tmp_path: Path) -> None:
