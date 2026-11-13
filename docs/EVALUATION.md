@@ -604,7 +604,52 @@ questions are declined without declining fewer of them in a way this
 sample can see, and it costs citation precision and the clean
 `NICHT_GEFUNDEN` signal the UI and the abstention metrics rely on. The
 other lever named in #38 -- adding the neighbouring chunk to the context
--- is not measured; `FAILURE-MODES.md` keeps it as the open hypothesis.
+-- is bounded in the next section.
+
+## Neighbouring chunks (#38)
+
+The hypothesis behind #38: a structural chunk lacks a sentence of
+surrounding text the answer needs, so the model declines. Adding each
+chunk's neighbours (`ordinal` +-1) can only fix a false abstention
+whose missing answer point sits in a neighbour, so the upper bound comes
+from the finished runs and the database, without an answer run:
+
+```bash
+cd backend
+.venv/Scripts/python scripts/check_neighbour_coverage.py     --reports-dir eval/reports/matrix <hash> [<hash> ...]
+```
+
+Each expected answer point of each false abstention, located with
+Layer 1's matching rule:
+
+| Configuration | false abstentions | all points already in the context | neighbours complete the context | a point in neither |
+| --- | --- | --- | --- | --- |
+| deployed (Gemini embeddings, no reranker) | 9 | **7** | 2 (Q019, Q032) | 0 |
+| baseline (e5, cross-encoder) | 8 | 1 | 4 (Q019, Q023, Q032, Q035) | 3 |
+| E7 (Gemini embeddings, cross-encoder) | 8 | 3 | 3 (Q019, Q032, Q035) | 2 |
+
+- **In the deployed configuration the model had the answer.** Seven of
+  its nine false abstentions decline a question whose every answer
+  point was in the context -- three of them the version conflicts
+  (Q001, Q003, Q009), where both values were there. Wider context cannot
+  change those.
+- **The upper bound is below what fifty questions can resolve.** Even
+  if every neighbour-completed question were then answered, the deployed
+  row would gain two questions, +0.04 -- inside the paired interval of
+  roughly +-0.10 that every comparison in this file shows. With the
+  cross-encoder the bound is +0.06 to +0.08, for a configuration that is
+  not deployed. An answer run (about 100 LLM calls on the free tier)
+  could not show the effect, so it was not made.
+- **What is left is the model.** The remaining false abstentions are a
+  generation limit of `gemini-flash-lite-latest` under a strict prompt.
+  A loosened prompt moves them around (v3 above); a larger model is the
+  lever, and does not fit the free tier (E8).
+
+The match is literal, so it errs both ways: a short point such as "85"
+can match text that does not answer the question, and a paraphrased
+point counts as missing. Neither changes the conclusion -- the bound is
+small, and the deployed row's declines are dominated by points that are
+present verbatim.
 
 
 ## Confidence gate threshold (#17)
