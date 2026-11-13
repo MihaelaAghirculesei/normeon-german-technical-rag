@@ -414,7 +414,14 @@ The prompt half is measured: a prompt that answers the covered part of
 a question (`answer_de.v3`) leaves accuracy unchanged on the deployed
 configuration -- it answers three declined questions and declines two
 it used to answer (`EVALUATION.md`, "Partial-answer prompt"). The
-neighbouring-chunk half is not measured yet.
+neighbouring-chunk half is bounded: in the deployed configuration seven
+of nine false abstentions had every answer point in the context
+already, and neighbours would complete the context for only two
+questions -- at most +0.04, below what fifty questions resolve
+(`EVALUATION.md`, "Neighbouring chunks"). The hypothesis does not hold
+for the deployed system: the model declines with the answer in front of
+it. What remains is a generation limit; a larger model is the lever,
+and does not fit the free tier.
 
 ### 3. Fixed windows carry the wrong section label
 

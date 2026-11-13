@@ -142,8 +142,9 @@ types (`npm run gen:api`); CI checks both.
 
 Measured where it could be, in [`docs/FAILURE-MODES.md`](docs/FAILURE-MODES.md):
 - The model over-abstains: most wrong answers decline although the
-  answer is in the context (#38). Loosening the prompt did not help;
-  wider context is the untested lever.
+  answer is in the context (#38). Loosening the prompt did not help,
+  and wider context could fix at most 2 of 50 questions; the lever left
+  is a larger model, beyond the free tier.
 - German compound nouns are not split by the full-text stemmer
   (*Fahrzeugzulassung* does not match *Zulassung*); the vector branch
   covers part of it.

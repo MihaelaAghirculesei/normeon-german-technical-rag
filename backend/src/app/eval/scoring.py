@@ -65,15 +65,17 @@ class JudgeError(BaseModel):
     error: str
 
 
-def _normalize(text: str) -> str:
+def normalize_for_match(text: str) -> str:
+    """Layer 1's matching form: lower case, decimal comma as dot,
+    whitespace collapsed -- so "1,6 mm" and "1.6  mm" match."""
     normalized = text.lower().replace(" ", " ")
     normalized = re.sub(r"(?<=\d),(?=\d)", ".", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 
 
 def score_layer1(expected_answer_points: list[str], answer: str) -> Layer1Result:
-    normalized_answer = _normalize(answer)
-    found = [p for p in expected_answer_points if _normalize(p) in normalized_answer]
+    normalized_answer = normalize_for_match(answer)
+    found = [p for p in expected_answer_points if normalize_for_match(p) in normalized_answer]
     found_set = set(found)
     missing = [p for p in expected_answer_points if p not in found_set]
     return Layer1Result(points_found=found, points_missing=missing)
