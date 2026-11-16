@@ -64,13 +64,14 @@ async def _run(strategy: str | None, batch_size: int, interval_s: float) -> None
                 await asyncio.sleep(interval_s)
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--strategy", choices=["structural", "fixed_500"], default=None)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--interval", type=float, default=30.0, help="seconds between batches")
     args = parser.parse_args()
     asyncio.run(_run(args.strategy, args.batch_size, args.interval))
+    return 0
 
 
 if __name__ == "__main__":
