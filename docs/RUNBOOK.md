@@ -77,7 +77,9 @@ loading the demo corpus again: see "Load the demo corpus" below.
 
 GitHub disables scheduled workflows in a repository with no activity for
 60 days, and an artifact only lives seven days -- so a quiet repository
-ends up with no backup at all. Check that the last run is recent:
+ends up with no backup at all. Each run re-enables the workflow through the
+API to reset that timer, but a run that never starts cannot. Check that the
+last run is recent:
 
 ```bash
 gh run list --workflow backup --limit 1

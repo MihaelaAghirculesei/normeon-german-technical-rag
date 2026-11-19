@@ -6,7 +6,9 @@ name: backup
 # signed-in GitHub user can download its artifacts, so the dump is encrypted
 # first. Needs two repository secrets: DEMO_DATABASE_URL, the database's
 # direct (unpooled) connection string, and BACKUP_PASSPHRASE, which
-# docs/RUNBOOK.md uses to decrypt it.
+# docs/RUNBOOK.md uses to decrypt it. Every run also re-enables the
+# workflow through the API, which resets GitHub's 60-day inactivity timer
+# for scheduled workflows in a quiet public repository.
 
 on:
   schedule:
@@ -15,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   dump:
@@ -46,3 +49,9 @@ jobs:
           path: normeon.dump.gpg
           retention-days: 7
           if-no-files-found: error
+
+      - name: Keep the schedule enabled
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/backup.yml/enable"
